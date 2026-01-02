@@ -1,0 +1,227 @@
+# Upstream Version Check
+#
+# Checks for new tasker-core releases and notifies/creates PRs when updates are available.
+# Runs faster than dependabot with more control over the update process.
+#
+# Features:
+# - Checks crates.io for Rust crates
+# - Checks PyPI for Python packages
+# - Checks RubyGems for Ruby gems
+# - Checks npm for TypeScript packages
+# - Creates tracking issues and optional PRs
+
+name: Upstream Version Check
+
+on:
+  # Daily check
+  schedule:
+    - cron: '0 6 * * *'  # 6 AM UTC daily
+  
+  # Manual trigger
+  workflow_dispatch:
+
+jobs:
+  check-versions:
+    name: Check Upstream Versions
+    runs-on: ubuntu-latest
+    
+    outputs:
+      updates-available: ${{ steps.check.outputs.updates-available }}
+      update-summary: ${{ steps.check.outputs.summary }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for updates
+        id: check
+        run: |
+          # Version tracking file
+          VERSION_FILE=".github/upstream-versions.json"
+          
+          # Initialize or load current versions
+          if [ -f "$VERSION_FILE" ]; then
+            CURRENT_VERSIONS=$(cat "$VERSION_FILE")
+          else
+            CURRENT_VERSIONS='{}'
+          fi
+          
+          UPDATES_AVAILABLE="false"
+          SUMMARY=""
+          
+          # =================================================================
+          # Check crates.io for Rust packages
+          # =================================================================
+          check_crate() {
+            local crate=$1
+            local current=$(echo "$CURRENT_VERSIONS" | jq -r ".rust.\"$crate\" // \"0.0.0\"")
+            local latest=$(curl -s "https://crates.io/api/v1/crates/$crate" | jq -r '.crate.max_version')
+            
+            if [ "$latest" != "null" ] && [ "$latest" != "$current" ]; then
+              echo "  $crate: $current -> $latest"
+              SUMMARY="$SUMMARY\n- **$crate** (Rust): $current → $latest"
+              UPDATES_AVAILABLE="true"
+            fi
+          }
+          
+          echo "Checking Rust crates..."
+          check_crate "tasker-worker" || true
+          check_crate "tasker-orchestration" || true
+          check_crate "tasker-cli" || true
+          check_crate "pgmq-notify" || true
+          
+          # =================================================================
+          # Check PyPI for Python packages
+          # =================================================================
+          check_pypi() {
+            local package=$1
+            local current=$(echo "$CURRENT_VERSIONS" | jq -r ".python.\"$package\" // \"0.0.0\"")
+            local latest=$(curl -s "https://pypi.org/pypi/$package/json" 2>/dev/null | jq -r '.info.version // "not-found"')
+            
+            if [ "$latest" != "not-found" ] && [ "$latest" != "$current" ]; then
+              echo "  $package: $current -> $latest"
+              SUMMARY="$SUMMARY\n- **$package** (Python): $current → $latest"
+              UPDATES_AVAILABLE="true"
+            fi
+          }
+          
+          echo "Checking Python packages..."
+          check_pypi "tasker-core-py" || true
+          
+          # =================================================================
+          # Check RubyGems for Ruby gems
+          # =================================================================
+          check_gem() {
+            local gem=$1
+            local current=$(echo "$CURRENT_VERSIONS" | jq -r ".ruby.\"$gem\" // \"0.0.0\"")
+            local latest=$(curl -s "https://rubygems.org/api/v1/gems/$gem.json" 2>/dev/null | jq -r '.version // "not-found"')
+            
+            if [ "$latest" != "not-found" ] && [ "$latest" != "$current" ]; then
+              echo "  $gem: $current -> $latest"
+              SUMMARY="$SUMMARY\n- **$gem** (Ruby): $current → $latest"
+              UPDATES_AVAILABLE="true"
+            fi
+          }
+          
+          echo "Checking Ruby gems..."
+          check_gem "tasker-core-rb" || true
+          
+          # =================================================================
+          # Check npm for TypeScript packages
+          # =================================================================
+          check_npm() {
+            local package=$1
+            local current=$(echo "$CURRENT_VERSIONS" | jq -r ".typescript.\"$package\" // \"0.0.0\"")
+            local latest=$(curl -s "https://registry.npmjs.org/$package/latest" 2>/dev/null | jq -r '.version // "not-found"')
+            
+            if [ "$latest" != "not-found" ] && [ "$latest" != "$current" ]; then
+              echo "  $package: $current -> $latest"
+              SUMMARY="$SUMMARY\n- **$package** (TypeScript): $current → $latest"
+              UPDATES_AVAILABLE="true"
+            fi
+          }
+          
+          echo "Checking npm packages..."
+          check_npm "tasker-core-ts" || true
+          
+          # =================================================================
+          # Output results
+          # =================================================================
+          echo "updates-available=$UPDATES_AVAILABLE" >> $GITHUB_OUTPUT
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+  
+  create-update-issue:
+    name: Create Update Issue
+    needs: check-versions
+    if: needs.check-versions.outputs.updates-available == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for existing issue
+        id: existing
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'upstream-update'
+            });
+            return issues.data.length > 0;
+          result-encoding: string
+      
+      - name: Create or update issue
+        if: steps.existing.outputs.result != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = `${{ needs.check-versions.outputs.update-summary }}`;
+            
+            const body = `
+            ## Upstream Updates Available
+            
+            New versions of tasker-core packages are available:
+            
+            ${summary}
+            
+            ### Action Required
+            
+            1. Review the changelog for breaking changes
+            2. Update version constraints in:
+               - \`rails/tasker-contrib-rails/tasker-contrib-rails.gemspec\`
+               - \`python/tasker-contrib-fastapi/pyproject.toml\`
+               - \`typescript/tasker-contrib-bun/package.json\`
+            3. Run tests against new versions
+            4. Update \`.github/upstream-versions.json\`
+            
+            ### Deprecation Policy
+            
+            - **Patch updates**: Should be safe, update at convenience
+            - **Minor updates**: Review changelog, update within 2 weeks
+            - **Major updates**: May require migration, plan accordingly
+            
+            ---
+            *This issue was automatically created by the upstream version check workflow.*
+            `;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Upstream tasker-core updates available',
+              body: body,
+              labels: ['upstream-update', 'automated', 'dependencies']
+            });
+
+  # ==========================================================================
+  # Deprecation Check
+  # ==========================================================================
+  deprecation-check:
+    name: Check for Deprecations
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check version lag
+        id: lag
+        run: |
+          # This would check how far behind we are from latest
+          # and flag warnings for significant lag
+          
+          VERSION_FILE=".github/upstream-versions.json"
+          WARNINGS=""
+          
+          # Example: Check if we're more than 2 minor versions behind
+          # This would be expanded based on actual version tracking
+          
+          echo "Checking for version lag..."
+          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
+      
+      - name: Add deprecation warning to README
+        if: steps.lag.outputs.warnings != ''
+        run: |
+          echo "::warning::Deprecation warnings detected. Consider updating dependencies."

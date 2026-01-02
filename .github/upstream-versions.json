@@ -1,0 +1,19 @@
+{
+  "_comment": "Tracks pinned upstream tasker-core versions for tasker-contrib packages",
+  "_updated": "2025-01-02",
+  "rust": {
+    "tasker-worker": "0.0.0",
+    "tasker-orchestration": "0.0.0", 
+    "tasker-cli": "0.0.0",
+    "pgmq-notify": "0.0.0"
+  },
+  "ruby": {
+    "tasker-core-rb": "0.0.0"
+  },
+  "python": {
+    "tasker-core-py": "0.0.0"
+  },
+  "typescript": {
+    "tasker-core-ts": "0.0.0"
+  }
+}

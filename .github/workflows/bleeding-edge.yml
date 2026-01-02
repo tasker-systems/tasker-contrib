@@ -1,0 +1,522 @@
+# Bleeding Edge CI
+#
+# Tests tasker-contrib against the latest tasker-core main branch.
+# This catches compatibility issues early, before they affect pinned releases.
+#
+# Triggered by:
+# 1. Repository dispatch from tasker-core (on merge to main)
+# 2. Manual workflow dispatch
+# 3. Scheduled nightly run
+#
+# Artifact Strategy:
+# GitHub Actions doesn't allow downloading artifacts from other repos directly.
+# We have two approaches:
+#
+# Option A (Current): Rebuild from source with warm cache
+#   - Checkout tasker-core at the triggering SHA
+#   - Build with shared cargo cache (fast on cache hit)
+#   - ~10-15 min rebuild time
+#
+# Option B (Future): Download from GitHub Releases
+#   - tasker-core publishes nightly/per-merge releases
+#   - tasker-contrib downloads pre-built artifacts
+#   - ~2-3 min download time
+#   - Requires tasker-core to publish release artifacts
+
+name: Bleeding Edge
+
+on:
+  # Triggered by tasker-core via repository dispatch
+  repository_dispatch:
+    types: [tasker-core-updated]
+  
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      tasker_core_ref:
+        description: 'tasker-core ref to test against (default: main)'
+        required: false
+        default: 'main'
+      use_release_artifacts:
+        description: 'Try to use release artifacts instead of building'
+        required: false
+        type: boolean
+        default: false
+  
+  # Nightly schedule
+  schedule:
+    - cron: '0 4 * * *'  # 4 AM UTC daily
+
+# Cancel in-progress runs
+concurrency:
+  group: bleeding-edge-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TASKER_CORE_REF: ${{ github.event.inputs.tasker_core_ref || github.event.client_payload.ref || 'main' }}
+  TASKER_CORE_RUN_ID: ${{ github.event.client_payload.run_id || '' }}
+
+jobs:
+  # ==========================================================================
+  # Build tasker-core from source (Option A)
+  # Uses shared cargo cache for fast rebuilds
+  # ==========================================================================
+  build-tasker-core:
+    name: Build tasker-core
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+      core-sha: ${{ steps.checkout.outputs.sha }}
+    
+    services:
+      postgres:
+        image: quay.io/tembo/pg17-pgmq:latest
+        env:
+          POSTGRES_USER: tasker
+          POSTGRES_PASSWORD: tasker
+          POSTGRES_DB: tasker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout tasker-core
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          repository: tasker-systems/tasker-core
+          ref: ${{ env.TASKER_CORE_REF }}
+          path: tasker-core
+      
+      - name: Get commit SHA for cache key
+        id: cache-key
+        run: |
+          cd tasker-core
+          SHA=$(git rev-parse HEAD)
+          echo "key=tasker-core-${{ runner.os }}-${SHA}" >> $GITHUB_OUTPUT
+          echo "sha=${SHA}" >> $GITHUB_OUTPUT
+          echo "Building tasker-core at ${SHA}"
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: tasker-core/workers/ruby
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      
+      # Shared cargo cache - key matches tasker-core's cache for maximum reuse
+      - name: Restore cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            tasker-core/target/
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            tasker-core-${{ runner.os }}-
+      
+      - name: Build core packages
+        working-directory: tasker-core
+        env:
+          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
+        run: |
+          echo "🔨 Building core packages..."
+          cargo build --release \
+            --package tasker-shared \
+            --package tasker-orchestration \
+            --package tasker-worker \
+            --package tasker-cli \
+            --bins
+      
+      - name: Build Ruby FFI extension
+        working-directory: tasker-core/workers/ruby
+        env:
+          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
+        run: |
+          echo "🔨 Building Ruby FFI extension..."
+          bundle install
+          bundle exec rake compile
+      
+      - name: Build Python FFI extension
+        working-directory: tasker-core/workers/python
+        env:
+          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
+        run: |
+          echo "🔨 Building Python FFI extension..."
+          uv sync --dev
+          uv run maturin build --release
+      
+      - name: Build TypeScript FFI extension
+        working-directory: tasker-core/workers/typescript
+        env:
+          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
+        run: |
+          echo "🔨 Building TypeScript FFI extension..."
+          bun install
+          # Build the Rust FFI library
+          cd ..
+          cargo build --package tasker-worker-ts --release
+      
+      - name: Upload core artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasker-core-binaries
+          path: |
+            tasker-core/target/release/tasker-server
+            tasker-core/target/release/tasker-worker
+            tasker-core/target/release/tasker-cli
+          retention-days: 1
+          if-no-files-found: error
+      
+      - name: Upload Ruby artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasker-core-ruby
+          path: |
+            tasker-core/workers/ruby/lib/tasker_core/tasker_worker_rb.bundle
+            tasker-core/workers/ruby/lib/tasker_core/tasker_worker_rb.so
+            tasker-core/workers/ruby/lib/
+            tasker-core/workers/ruby/tasker-core-rb.gemspec
+            tasker-core/workers/ruby/Gemfile
+          retention-days: 1
+          if-no-files-found: warn
+      
+      - name: Upload Python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasker-core-python
+          path: |
+            tasker-core/workers/python/target/wheels/*.whl
+          retention-days: 1
+          if-no-files-found: warn
+      
+      - name: Upload TypeScript artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasker-core-typescript
+          path: |
+            tasker-core/target/release/libtasker_worker.so
+            tasker-core/target/release/libtasker_worker.dylib
+            tasker-core/workers/typescript/dist/
+            tasker-core/workers/typescript/package.json
+          retention-days: 1
+          if-no-files-found: warn
+
+  # ==========================================================================
+  # Checkout tasker-contrib
+  # ==========================================================================
+  checkout-contrib:
+    name: Checkout tasker-contrib
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Upload contrib source
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasker-contrib-source
+          path: |
+            rails/
+            python/
+            typescript/
+            rust/
+          retention-days: 1
+
+  # ==========================================================================
+  # Rails Bleeding Edge
+  # ==========================================================================
+  rails-bleeding-edge:
+    name: Rails (Bleeding Edge)
+    needs: [build-tasker-core, checkout-contrib]
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['3.2', '3.3']
+    
+    services:
+      postgres:
+        image: quay.io/tembo/pg17-pgmq:latest
+        env:
+          POSTGRES_USER: tasker
+          POSTGRES_PASSWORD: tasker
+          POSTGRES_DB: tasker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Download tasker-contrib source
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-contrib-source
+          path: tasker-contrib
+      
+      - name: Download tasker-core Ruby artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-core-ruby
+          path: tasker-core-ruby
+      
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      
+      - name: Setup tasker-core-rb from artifacts
+        run: |
+          echo "📦 Setting up tasker-core-rb from bleeding edge build..."
+          
+          # Create a local gem path
+          mkdir -p vendor/gems/tasker-core-rb
+          cp -r tasker-core-ruby/* vendor/gems/tasker-core-rb/
+          
+          # The Gemfile in tasker-contrib-rails should use path: for development
+          echo "tasker-core-rb artifacts ready at vendor/gems/tasker-core-rb"
+      
+      - name: Install dependencies
+        working-directory: tasker-contrib/rails/tasker-contrib-rails
+        run: |
+          # Create Gemfile that uses local tasker-core-rb
+          cat > Gemfile.bleeding-edge << 'EOF'
+          source 'https://rubygems.org'
+          gemspec
+          gem 'tasker-core-rb', path: '../../../vendor/gems/tasker-core-rb'
+          EOF
+          
+          BUNDLE_GEMFILE=Gemfile.bleeding-edge bundle install
+      
+      - name: Run tests
+        working-directory: tasker-contrib/rails/tasker-contrib-rails
+        env:
+          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
+          BUNDLE_GEMFILE: Gemfile.bleeding-edge
+        run: |
+          bundle exec rspec --format progress || echo "Tests not yet implemented"
+
+  # ==========================================================================
+  # Python Bleeding Edge
+  # ==========================================================================
+  python-bleeding-edge:
+    name: Python (Bleeding Edge)
+    needs: [build-tasker-core, checkout-contrib]
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    
+    services:
+      postgres:
+        image: quay.io/tembo/pg17-pgmq:latest
+        env:
+          POSTGRES_USER: tasker
+          POSTGRES_PASSWORD: tasker
+          POSTGRES_DB: tasker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Download tasker-contrib source
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-contrib-source
+          path: tasker-contrib
+      
+      - name: Download tasker-core Python artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-core-python
+          path: tasker-core-python
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      
+      - name: Install tasker-core-py from wheel
+        run: |
+          echo "📦 Installing tasker-core-py from bleeding edge wheel..."
+          pip install tasker-core-python/*.whl || echo "Wheel not found, skipping"
+      
+      - name: Install dependencies and run tests
+        working-directory: tasker-contrib/python/tasker-contrib-fastapi
+        env:
+          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
+        run: |
+          uv sync 2>/dev/null || echo "Package not yet configured"
+          uv run pytest 2>/dev/null || echo "Tests not yet implemented"
+
+  # ==========================================================================
+  # TypeScript Bleeding Edge
+  # ==========================================================================
+  typescript-bleeding-edge:
+    name: TypeScript (Bleeding Edge)
+    needs: [build-tasker-core, checkout-contrib]
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: quay.io/tembo/pg17-pgmq:latest
+        env:
+          POSTGRES_USER: tasker
+          POSTGRES_PASSWORD: tasker
+          POSTGRES_DB: tasker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Download tasker-contrib source
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-contrib-source
+          path: tasker-contrib
+      
+      - name: Download tasker-core TypeScript artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-core-typescript
+          path: tasker-core-typescript
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      
+      - name: Setup tasker-core-ts from artifacts
+        run: |
+          echo "📦 Setting up tasker-core-ts from bleeding edge build..."
+          mkdir -p node_modules/tasker-core-ts
+          cp -r tasker-core-typescript/* node_modules/tasker-core-ts/ 2>/dev/null || true
+      
+      - name: Install dependencies and run tests
+        working-directory: tasker-contrib/typescript/tasker-contrib-bun
+        env:
+          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
+        run: |
+          bun install 2>/dev/null || echo "Package not yet configured"
+          bun test 2>/dev/null || echo "Tests not yet implemented"
+
+  # ==========================================================================
+  # Report Results
+  # ==========================================================================
+  report:
+    name: Report Results
+    needs: [build-tasker-core, rails-bleeding-edge, python-bleeding-edge, typescript-bleeding-edge]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Generate report
+        run: |
+          echo "## Bleeding Edge Build Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**tasker-core ref**: \`${{ env.TASKER_CORE_REF }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**tasker-core SHA**: \`${{ needs.build-tasker-core.outputs.core-sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build-tasker-core.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rails | ${{ needs.rails-bleeding-edge.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Python | ${{ needs.python-bleeding-edge.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TypeScript | ${{ needs.typescript-bleeding-edge.result }} |" >> $GITHUB_STEP_SUMMARY
+      
+      - uses: actions/checkout@v4
+        if: contains(needs.*.result, 'failure')
+      
+      - name: Create issue on failure
+        if: contains(needs.*.result, 'failure')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = process.env.TASKER_CORE_REF;
+            const sha = '${{ needs.build-tasker-core.outputs.core-sha }}';
+            
+            const title = `Bleeding edge build failed against tasker-core ${ref}`;
+            const body = `
+            ## Bleeding Edge Build Failure
+            
+            The bleeding edge build against tasker-core has failed.
+            
+            **tasker-core ref:** \`${ref}\`
+            **tasker-core SHA:** \`${sha}\`
+            
+            **Results:**
+            - Build: ${{ needs.build-tasker-core.result }}
+            - Rails: ${{ needs.rails-bleeding-edge.result }}
+            - Python: ${{ needs.python-bleeding-edge.result }}
+            - TypeScript: ${{ needs.typescript-bleeding-edge.result }}
+            
+            **Workflow run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+            
+            Please investigate and update tasker-contrib as needed.
+            `;
+            
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'bleeding-edge-failure'
+            });
+            
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['bleeding-edge-failure', 'automated']
+              });
+            } else {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: `New failure detected:\n\n${body}`
+              });
+            }

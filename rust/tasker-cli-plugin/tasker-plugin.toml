@@ -1,0 +1,12 @@
+# Tasker CLI Plugin Manifest
+
+[plugin]
+name = "tasker-contrib-rust"
+version = "0.1.0"
+description = "Rust templates for Tasker CLI"
+languages = ["rust"]
+frameworks = ["axum"]
+
+[templates]
+step-handler = { path = "templates/step_handler", languages = ["rust"] }
+task-template = { path = "templates/task_template", languages = ["rust"] }

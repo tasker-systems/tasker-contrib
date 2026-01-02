@@ -1,0 +1,20 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^https://linear.app"
+    },
+    {
+      "pattern": "^https://github.com/tasker-systems/tasker-core"
+    },
+    {
+      "pattern": "^https://github.com/tasker-systems/tasker-engine"
+    }
+  ],
+  "replacementPatterns": [],
+  "httpHeaders": [],
+  "timeout": "10s",
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackRetryDelay": "30s",
+  "aliveStatusCodes": [200, 206]
+}

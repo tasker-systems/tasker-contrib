@@ -1,0 +1,15 @@
+# Tasker CLI Plugin Manifest
+
+[plugin]
+name = "tasker-contrib-typescript"
+version = "0.1.0"
+description = "TypeScript templates for Tasker CLI"
+languages = ["typescript"]
+frameworks = ["bun"]
+
+[templates]
+step-handler = { path = "templates/step_handler", languages = ["typescript"] }
+step-handler-api = { path = "templates/step_handler_api", languages = ["typescript"] }
+step-handler-decision = { path = "templates/step_handler_decision", languages = ["typescript"] }
+step-handler-batchable = { path = "templates/step_handler_batchable", languages = ["typescript"] }
+task-template = { path = "templates/task_template", languages = ["typescript"] }

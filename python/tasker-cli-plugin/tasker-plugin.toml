@@ -1,0 +1,15 @@
+# Tasker CLI Plugin Manifest
+
+[plugin]
+name = "tasker-contrib-python"
+version = "0.1.0"
+description = "Python templates for Tasker CLI"
+languages = ["python"]
+frameworks = ["fastapi", "django"]
+
+[templates]
+step-handler = { path = "templates/step_handler", languages = ["python"] }
+step-handler-api = { path = "templates/step_handler_api", languages = ["python"] }
+step-handler-decision = { path = "templates/step_handler_decision", languages = ["python"] }
+step-handler-batchable = { path = "templates/step_handler_batchable", languages = ["python"] }
+task-template = { path = "templates/task_template", languages = ["python"] }
