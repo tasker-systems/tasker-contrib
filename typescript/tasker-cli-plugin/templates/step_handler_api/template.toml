@@ -1,0 +1,28 @@
+name = "step_handler_api"
+description = "Generate an API step handler with fetch client and vitest test"
+
+[[parameters]]
+name = "name"
+description = "Handler name (e.g., FetchUser)"
+required = true
+
+[[parameters]]
+name = "module_name"
+description = "Module path for the handler"
+required = false
+default = "handlers"
+
+[[parameters]]
+name = "base_url"
+description = "Base URL for API calls"
+required = false
+default = "https://api.example.com"
+
+[[outputs]]
+template = "handler.ts.tera"
+filename = "{{ name | snake_case }}-handler.ts"
+
+[[outputs]]
+template = "handler.test.ts.tera"
+filename = "{{ name | snake_case }}-handler.test.ts"
+subdir = "__tests__"

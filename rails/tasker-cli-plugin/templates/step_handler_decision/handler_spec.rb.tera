@@ -1,0 +1,64 @@
+# frozen_string_literal: true
+
+require 'spec_helper'
+require_relative '../{{ name | snake_case }}_handler'
+
+RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
+  subject(:handler) { described_class.new }
+
+  let(:base_context) do
+    instance_double(
+      TaskerCore::Types::StepContext,
+      task_uuid: SecureRandom.uuid,
+      step_uuid: SecureRandom.uuid,
+      step_config: {},
+      retry_count: 0,
+      max_retries: 3
+    )
+  end
+
+  describe '#call' do
+    context 'when route_key is fast_track' do
+      let(:context) do
+        allow(base_context).to receive(:input_data).and_return({ 'route_key' => 'fast_track' })
+        base_context
+      end
+
+      it 'routes to fast_track_processing' do
+        result = handler.call(context)
+
+        expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
+        expect(result.result[:decision_point_outcome]).to include(
+          steps: ['fast_track_processing']
+        )
+      end
+    end
+
+    context 'when route_key is review_required' do
+      let(:context) do
+        allow(base_context).to receive(:input_data).and_return({ 'route_key' => 'review_required' })
+        base_context
+      end
+
+      it 'routes to manual_review and approval_gate' do
+        result = handler.call(context)
+
+        expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
+        expect(result.result[:decision_point_outcome][:steps]).to include('manual_review', 'approval_gate')
+      end
+    end
+
+    context 'when route_key is default' do
+      let(:context) do
+        allow(base_context).to receive(:input_data).and_return({})
+        base_context
+      end
+
+      it 'routes to standard_processing' do
+        result = handler.call(context)
+
+        expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
+      end
+    end
+  end
+end

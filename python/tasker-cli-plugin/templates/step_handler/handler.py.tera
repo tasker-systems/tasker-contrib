@@ -1,0 +1,46 @@
+"""{{ name | pascal_case }} step handler for Tasker workflow processing."""
+
+from tasker_core import StepHandler, StepContext, StepHandlerResult
+
+
+class {{ name | pascal_case }}Handler(StepHandler):
+    """{{ name | pascal_case }} step handler.
+
+    Implements the cross-language StepHandler contract:
+      - Receives a StepContext with task data, dependencies, and configuration
+      - Returns success/failure results via class methods
+
+    Register this handler in your task definition YAML:
+        handler:
+            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | pascal_case }}Handler
+    """
+
+    handler_name = "{{ name | snake_case }}"
+    handler_version = "1.0.0"
+
+    def call(self, context: StepContext) -> StepHandlerResult:
+        """Execute the step handler logic.
+
+        Args:
+            context: Step execution context with input data, dependencies,
+                     and configuration.
+
+        Returns:
+            StepHandlerResult indicating success or failure.
+        """
+        # Access input data from the task context
+        input_data = context.input_data
+
+        # Access results from upstream dependency steps
+        # prev_result = context.get_dependency_result("previous_step_name")
+
+        # Access handler configuration from step definition
+        # config_value = context.step_config.get("some_setting")
+
+        # TODO: Implement your business logic here
+        result = {
+            "processed": True,
+            "handler": "{{ name | snake_case }}",
+        }
+
+        return StepHandlerResult.success(result=result)

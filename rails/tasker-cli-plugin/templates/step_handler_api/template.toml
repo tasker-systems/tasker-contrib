@@ -1,0 +1,28 @@
+name = "step_handler_api"
+description = "Generate an API step handler with HTTP client and RSpec test"
+
+[[parameters]]
+name = "name"
+description = "Handler name (e.g., FetchUser)"
+required = true
+
+[[parameters]]
+name = "module_name"
+description = "Module namespace for the handler"
+required = false
+default = "Handlers"
+
+[[parameters]]
+name = "base_url"
+description = "Base URL for API calls"
+required = false
+default = "https://api.example.com"
+
+[[outputs]]
+template = "handler.rb.tera"
+filename = "{{ name | snake_case }}_handler.rb"
+
+[[outputs]]
+template = "handler_spec.rb.tera"
+filename = "{{ name | snake_case }}_handler_spec.rb"
+subdir = "spec"

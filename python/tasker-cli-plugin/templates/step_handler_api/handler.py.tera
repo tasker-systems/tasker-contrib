@@ -1,0 +1,72 @@
+"""{{ name | pascal_case }} API step handler for Tasker workflow processing."""
+
+import httpx
+
+from tasker_core import StepHandler, StepContext, StepHandlerResult, ErrorType
+
+
+class {{ name | pascal_case }}Handler(StepHandler):
+    """{{ name | pascal_case }} API step handler.
+
+    Makes HTTP requests to external services as part of a Tasker workflow.
+    Uses httpx for async HTTP client functionality.
+
+    Register this handler in your task definition YAML:
+        handler:
+            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | pascal_case }}Handler
+            initialization:
+                base_url: "{{ base_url }}"
+    """
+
+    handler_name = "{{ name | snake_case }}"
+    handler_version = "1.0.0"
+
+    async def call(self, context: StepContext) -> StepHandlerResult:
+        """Execute an API request based on step context.
+
+        Args:
+            context: Step execution context with endpoint and configuration.
+
+        Returns:
+            StepHandlerResult with the API response data.
+        """
+        base_url = context.step_config.get("base_url", "{{ base_url }}")
+        endpoint = context.input_data.get("endpoint", "/resource")
+        url = f"{base_url}{endpoint}"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+
+            if response.is_success:
+                return StepHandlerResult.success(
+                    result=response.json(),
+                    metadata={
+                        "status_code": response.status_code,
+                        "endpoint": endpoint,
+                    },
+                )
+            else:
+                retryable = response.status_code >= 500
+                return StepHandlerResult.failure(
+                    message=f"API request failed: HTTP {response.status_code}",
+                    error_type=ErrorType.RETRYABLE_ERROR if retryable else ErrorType.PERMANENT_ERROR,
+                    retryable=retryable,
+                    metadata={
+                        "status_code": response.status_code,
+                        "endpoint": endpoint,
+                    },
+                )
+
+        except httpx.TimeoutException as exc:
+            return StepHandlerResult.failure(
+                message=f"API timeout: {exc}",
+                error_type=ErrorType.TIMEOUT,
+                retryable=True,
+            )
+        except httpx.ConnectError as exc:
+            return StepHandlerResult.failure(
+                message=f"API connection failed: {exc}",
+                error_type=ErrorType.RETRYABLE_ERROR,
+                retryable=True,
+            )

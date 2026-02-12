@@ -1,0 +1,51 @@
+"""{{ name | pascal_case }} decision step handler for Tasker workflow routing."""
+
+from tasker_core import DecisionHandler, StepContext, StepHandlerResult
+
+
+class {{ name | pascal_case }}Handler(DecisionHandler):
+    """{{ name | pascal_case }} decision step handler.
+
+    Evaluates conditions and routes the workflow to different downstream
+    steps based on the decision outcome. Extends DecisionHandler for
+    standardized decision result formatting.
+
+    Register this handler in your task definition YAML:
+        handler:
+            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | pascal_case }}Handler
+    """
+
+    handler_name = "{{ name | snake_case }}"
+    handler_version = "1.0.0"
+
+    def call(self, context: StepContext) -> StepHandlerResult:
+        """Evaluate routing conditions and return a decision.
+
+        Args:
+            context: Step execution context with input data for decision.
+
+        Returns:
+            StepHandlerResult with decision_point_outcome indicating
+            which downstream steps should execute.
+        """
+        input_data = context.input_data
+
+        # TODO: Implement your routing logic here
+        # Example: route based on a field value
+        route_key = input_data.get("route_key", "default")
+
+        if route_key == "fast_track":
+            return self.decision_success(
+                steps=["fast_track_processing"],
+                result_data={"route": "fast_track", "reason": "Meets fast-track criteria"},
+            )
+        elif route_key == "review_required":
+            return self.decision_success(
+                steps=["manual_review", "approval_gate"],
+                result_data={"route": "review", "reason": "Review required"},
+            )
+        else:
+            return self.decision_success(
+                steps=["standard_processing"],
+                result_data={"route": "standard", "reason": "Default routing"},
+            )

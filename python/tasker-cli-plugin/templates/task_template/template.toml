@@ -1,0 +1,22 @@
+name = "task_template"
+description = "Generate a Tasker task definition YAML with step DAG"
+
+[[parameters]]
+name = "name"
+description = "Task name (e.g., ProcessOrder)"
+required = true
+
+[[parameters]]
+name = "namespace"
+description = "Task namespace"
+required = false
+default = "default"
+
+[[parameters]]
+name = "handler_callable"
+description = "Fully qualified handler (e.g., handlers.process_order_handler.ProcessOrderHandler)"
+required = true
+
+[[outputs]]
+template = "task.yaml.tera"
+filename = "{{ name | snake_case }}.yaml"

@@ -1,0 +1,49 @@
+import {
+  DecisionHandler,
+  type StepContext,
+  type StepHandlerResult,
+} from '@tasker-systems/tasker';
+
+/**
+ * {{ name | pascal_case }} decision step handler.
+ *
+ * Evaluates conditions and routes the workflow to different downstream
+ * steps based on the decision outcome. Extends DecisionHandler for
+ * standardized decision result formatting.
+ *
+ * Register this handler in your task definition YAML:
+ *   handler:
+ *     callable: {{ name | pascal_case }}Handler
+ */
+export class {{ name | pascal_case }}Handler extends DecisionHandler {
+  static handlerName = '{{ name | snake_case }}';
+  static handlerVersion = '1.0.0';
+
+  async call(context: StepContext): Promise<StepHandlerResult> {
+    const inputData = context.inputData;
+
+    // TODO: Implement your routing logic here
+    // Example: route based on a field value
+    const routeKey = (inputData['route_key'] as string) || 'default';
+
+    switch (routeKey) {
+      case 'fast_track':
+        return this.decisionSuccess(
+          ['fast_track_processing'],
+          { route: 'fast_track', reason: 'Meets fast-track criteria' },
+        );
+
+      case 'review_required':
+        return this.decisionSuccess(
+          ['manual_review', 'approval_gate'],
+          { route: 'review', reason: 'Review required' },
+        );
+
+      default:
+        return this.decisionSuccess(
+          ['standard_processing'],
+          { route: 'standard', reason: 'Default routing' },
+        );
+    }
+  }
+}

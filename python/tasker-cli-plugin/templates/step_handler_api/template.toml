@@ -1,0 +1,28 @@
+name = "step_handler_api"
+description = "Generate an API step handler with HTTP client and pytest test"
+
+[[parameters]]
+name = "name"
+description = "Handler name (e.g., FetchUser)"
+required = true
+
+[[parameters]]
+name = "module_name"
+description = "Python module path for the handler"
+required = false
+default = "handlers"
+
+[[parameters]]
+name = "base_url"
+description = "Base URL for API calls"
+required = false
+default = "https://api.example.com"
+
+[[outputs]]
+template = "handler.py.tera"
+filename = "{{ name | snake_case }}_handler.py"
+
+[[outputs]]
+template = "test_handler.py.tera"
+filename = "test_{{ name | snake_case }}_handler.py"
+subdir = "tests"

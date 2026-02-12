@@ -1,0 +1,49 @@
+import {
+  StepHandler,
+  type StepContext,
+  type StepHandlerResult,
+  ErrorType,
+} from '@tasker-systems/tasker';
+
+/**
+ * {{ name | pascal_case }} step handler for Tasker workflow processing.
+ *
+ * Implements the cross-language StepHandler contract:
+ *   - Receives a StepContext with task data, dependencies, and configuration
+ *   - Returns success/failure results via helper methods
+ *
+ * Register this handler in your task definition YAML:
+ *   handler:
+ *     callable: {{ name | pascal_case }}Handler
+ */
+export class {{ name | pascal_case }}Handler extends StepHandler {
+  static handlerName = '{{ name | snake_case }}';
+  static handlerVersion = '1.0.0';
+
+  async call(context: StepContext): Promise<StepHandlerResult> {
+    try {
+      // Access input data from the task context
+      const inputData = context.inputData;
+
+      // Access results from upstream dependency steps
+      // const prevResult = context.getDependencyResult('previous_step_name');
+
+      // Access handler configuration from step definition
+      // const configValue = context.stepConfig['some_setting'];
+
+      // TODO: Implement your business logic here
+      const result = {
+        processed: true,
+        handler: '{{ name | snake_case }}',
+      };
+
+      return this.success(result);
+    } catch (error) {
+      return this.failure(
+        error instanceof Error ? error.message : String(error),
+        ErrorType.RETRYABLE_ERROR,
+        true,
+      );
+    }
+  }
+}

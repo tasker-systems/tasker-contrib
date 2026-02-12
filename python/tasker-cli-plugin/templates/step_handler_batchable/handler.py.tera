@@ -1,0 +1,103 @@
+"""{{ name | pascal_case }} batchable step handler for parallel processing."""
+
+from datetime import datetime, timezone
+
+from tasker_core import StepHandler, StepContext, StepHandlerResult, ErrorType
+
+
+class {{ name | pascal_case }}Handler(StepHandler):
+    """{{ name | pascal_case }} batchable step handler.
+
+    Implements batch processing for parallel work distribution.
+    Can serve as both an analyzer (creating batch configs) and
+    a worker (processing individual batches).
+
+    Workflow pattern:
+        1. Analyzer step: creates cursor configs dividing work into batches
+        2. Worker steps: process individual batches in parallel
+        3. Aggregator step: combines results from all workers
+
+    Register this handler in your task definition YAML:
+        handler:
+            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | pascal_case }}Handler
+    """
+
+    handler_name = "{{ name | snake_case }}"
+    handler_version = "1.0.0"
+
+    def call(self, context: StepContext) -> StepHandlerResult:
+        """Execute as analyzer or worker based on batch context presence.
+
+        Args:
+            context: Step execution context.
+
+        Returns:
+            StepHandlerResult with batch outcome.
+        """
+        # Check if this is a batch worker invocation
+        batch_inputs = context.step_inputs or {}
+        if batch_inputs.get("cursor") or batch_inputs.get("is_no_op"):
+            return self._process_batch(context, batch_inputs)
+
+        # Otherwise, this is the analyzer
+        return self._analyze_and_create_batches(context)
+
+    def _analyze_and_create_batches(self, context: StepContext) -> StepHandlerResult:
+        # TODO: Determine total items from your data source
+        total_items = int(context.input_data.get("total_items", 1000))
+        worker_count = int(context.step_config.get("worker_count", 5))
+
+        items_per_worker = -(-total_items // worker_count)  # ceiling division
+        cursor_configs = []
+        for i in range(worker_count):
+            start = i * items_per_worker
+            end = min(start + items_per_worker, total_items)
+            if start >= total_items:
+                break
+            cursor_configs.append({
+                "batch_id": f"{i + 1:03d}",
+                "start_cursor": start,
+                "end_cursor": end,
+                "batch_size": end - start,
+            })
+
+        return StepHandlerResult.success(
+            result={
+                "batch_processing_outcome": {
+                    "type": "create_batches",
+                    "worker_template_name": "{{ name | snake_case }}_batch",
+                    "worker_count": len(cursor_configs),
+                    "cursor_configs": cursor_configs,
+                    "total_items": total_items,
+                },
+                "analyzed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+    def _process_batch(self, context: StepContext, batch_inputs: dict) -> StepHandlerResult:
+        # Handle no-op placeholder
+        if batch_inputs.get("is_no_op"):
+            return StepHandlerResult.success(
+                result={
+                    "batch_id": batch_inputs.get("cursor", {}).get("batch_id", "no_op"),
+                    "no_op": True,
+                    "processed_count": 0,
+                }
+            )
+
+        cursor = batch_inputs.get("cursor", {})
+        start = cursor.get("start_cursor", 0)
+        end = cursor.get("end_cursor", 0)
+        batch_id = cursor.get("batch_id", "unknown")
+
+        # TODO: Process items in the batch range
+        items_processed = end - start
+
+        return StepHandlerResult.success(
+            result={
+                "items_processed": items_processed,
+                "items_succeeded": items_processed,
+                "items_failed": 0,
+                "batch_id": batch_id,
+            }
+        )
