@@ -1,0 +1,51 @@
+# frozen_string_literal: true
+
+require 'spec_helper'
+require_relative '../{{ name | snake_case }}_handler'
+
+RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
+  subject(:handler) { described_class.new }
+
+  describe '#call' do
+    let(:context) do
+      instance_double(
+        TaskerCore::Types::StepContext,
+        task_uuid: SecureRandom.uuid,
+        step_uuid: SecureRandom.uuid,
+        input_data: { 'key' => 'value' },
+        step_config: {},
+        retry_count: 0,
+        max_retries: 3
+      )
+    end
+
+    context 'when processing succeeds' do
+      it 'returns a success result' do
+        result = handler.call(context)
+
+        expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
+        expect(result.result[:processed]).to be true
+      end
+    end
+
+    context 'when an error occurs' do
+      before do
+        allow(context).to receive(:input_data).and_raise(StandardError, 'test error')
+      end
+
+      it 'returns a failure result' do
+        result = handler.call(context)
+
+        expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Error)
+        expect(result.message).to eq('test error')
+        expect(result.retryable).to be true
+      end
+    end
+  end
+
+  describe '#handler_name' do
+    it 'returns the snake_case handler name' do
+      expect(handler.handler_name).to be_a(String)
+    end
+  end
+end

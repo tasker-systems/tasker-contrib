@@ -1,0 +1,51 @@
+import {
+  ApiHandler,
+  type StepContext,
+  type StepHandlerResult,
+} from '@tasker-systems/tasker';
+
+/**
+ * {{ name | pascal_case }} API step handler.
+ *
+ * Makes HTTP requests to external services as part of a Tasker workflow.
+ * Extends ApiHandler for built-in HTTP client, error classification,
+ * and retry support using the native fetch API.
+ *
+ * Register this handler in your task definition YAML:
+ *   handler:
+ *     callable: {{ name | pascal_case }}Handler
+ *     initialization:
+ *       base_url: "{{ base_url }}"
+ */
+export class {{ name | pascal_case }}Handler extends ApiHandler {
+  static handlerName = '{{ name | snake_case }}';
+  static handlerVersion = '1.0.0';
+  static baseUrl = '{{ base_url }}';
+
+  async call(context: StepContext): Promise<StepHandlerResult> {
+    // Override base URL from step config if provided
+    const configBaseUrl = context.stepConfig['base_url'] as string | undefined;
+    if (configBaseUrl) {
+      (this.constructor as typeof ApiHandler).baseUrl = configBaseUrl;
+    }
+
+    const endpoint = (context.inputData['endpoint'] as string) || '/resource';
+
+    try {
+      const response = await this.get(endpoint);
+
+      if (response.ok) {
+        return this.apiSuccess(response);
+      }
+      return this.apiFailure(response);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return this.timeoutError(error, endpoint);
+      }
+      return this.connectionError(
+        error instanceof Error ? error : new Error(String(error)),
+        endpoint,
+      );
+    }
+  }
+}

@@ -1,0 +1,65 @@
+# frozen_string_literal: true
+
+require 'spec_helper'
+require_relative '../{{ name | snake_case }}_handler'
+
+RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
+  subject(:handler) { described_class.new }
+
+  describe '#call as analyzer' do
+    let(:context) do
+      instance_double(
+        TaskerCore::Types::StepContext,
+        task_uuid: SecureRandom.uuid,
+        step_uuid: SecureRandom.uuid,
+        input_data: { 'total_items' => 1000 },
+        step_config: { 'worker_count' => 5 },
+        retry_count: 0,
+        max_retries: 3,
+        workflow_step: double(inputs: {})
+      )
+    end
+
+    it 'creates batch cursor configs' do
+      # When no batch context is present, handler acts as analyzer
+      allow(handler).to receive(:get_batch_context).and_return(nil)
+
+      result = handler.call(context)
+
+      expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
+      expect(result.result['batch_processing_outcome']).to be_present
+    end
+  end
+
+  describe '#call as worker' do
+    let(:batch_ctx) do
+      double(
+        batch_id: '001',
+        start_cursor: 0,
+        end_cursor: 200,
+        no_op?: false
+      )
+    end
+
+    let(:context) do
+      instance_double(
+        TaskerCore::Types::StepContext,
+        task_uuid: SecureRandom.uuid,
+        step_uuid: SecureRandom.uuid,
+        input_data: {},
+        step_config: {},
+        retry_count: 0,
+        max_retries: 3
+      )
+    end
+
+    it 'processes the batch and returns worker success' do
+      allow(handler).to receive(:get_batch_context).and_return(batch_ctx)
+
+      result = handler.call(context)
+
+      expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
+      expect(result.result['items_processed']).to eq(200)
+    end
+  end
+end

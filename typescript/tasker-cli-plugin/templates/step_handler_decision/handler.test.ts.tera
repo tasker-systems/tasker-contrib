@@ -1,0 +1,49 @@
+import { describe, it, expect, vi } from 'vitest';
+import { {{ name | pascal_case }}Handler } from '../{{ name | snake_case }}-handler';
+
+describe('{{ name | pascal_case }}Handler', () => {
+  const handler = new {{ name | pascal_case }}Handler();
+
+  function makeContext(routeKey?: string) {
+    return {
+      taskUuid: crypto.randomUUID(),
+      stepUuid: crypto.randomUUID(),
+      inputData: routeKey ? { route_key: routeKey } : {},
+      dependencyResults: {},
+      stepConfig: {},
+      stepInputs: {},
+      retryCount: 0,
+      maxRetries: 3,
+      correlationId: crypto.randomUUID(),
+      handlerName: '{{ name | snake_case }}',
+      event: {} as any,
+      getDependencyResult: vi.fn(),
+      getInput: vi.fn(),
+    } as any;
+  }
+
+  describe('decision routing', () => {
+    it('routes to fast_track_processing', async () => {
+      const result = await handler.call(makeContext('fast_track'));
+
+      expect(result.success).toBe(true);
+      expect(result.result?.decision_point_outcome?.steps).toContain('fast_track_processing');
+    });
+
+    it('routes to manual_review and approval_gate', async () => {
+      const result = await handler.call(makeContext('review_required'));
+
+      expect(result.success).toBe(true);
+      const steps = result.result?.decision_point_outcome?.steps;
+      expect(steps).toContain('manual_review');
+      expect(steps).toContain('approval_gate');
+    });
+
+    it('routes to standard_processing by default', async () => {
+      const result = await handler.call(makeContext());
+
+      expect(result.success).toBe(true);
+      expect(result.result?.decision_point_outcome?.steps).toContain('standard_processing');
+    });
+  });
+});

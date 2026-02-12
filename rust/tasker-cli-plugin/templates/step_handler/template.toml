@@ -1,0 +1,22 @@
+name = "step_handler"
+description = "Generate a Tasker step handler implementing RustStepHandler trait with test"
+
+[[parameters]]
+name = "name"
+description = "Handler name (e.g., ProcessPayment)"
+required = true
+
+[[parameters]]
+name = "module_name"
+description = "Module name for the handler"
+required = false
+default = "handlers"
+
+[[outputs]]
+template = "handler.rs.tera"
+filename = "{{ name | snake_case }}.rs"
+
+[[outputs]]
+template = "handler_test.rs.tera"
+filename = "{{ name | snake_case }}_test.rs"
+subdir = "tests"

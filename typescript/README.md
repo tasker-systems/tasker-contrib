@@ -11,9 +11,7 @@ batteries-included, and aligns with Tasker's philosophy of powerful simplicity.
 
 | Directory | Description |
 |-----------|-------------|
-| `tasker-contrib-bun/` | Bun integration with `Bun.serve` patterns |
 | `tasker-cli-plugin/` | CLI plugin with TypeScript templates for `tasker-cli` |
-| `tasker-bun-template/` | Production-ready Bun application template |
 
 ## Why Bun?
 

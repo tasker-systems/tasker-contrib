@@ -37,63 +37,39 @@ tasker-contrib/
 
 ## Development Commands
 
-### Rails (tasker-contrib-rails)
+### Template Validation (cargo-make)
 
 ```bash
-cd rails/tasker-contrib-rails
-bundle install                          # Uses local tasker-core-rb via Gemfile path
-bundle exec rspec                       # Run tests
-bundle exec rspec spec/path/to/test.rb  # Run single test
-bundle exec rubocop --parallel          # Lint
+# Install cargo-make if needed
+cargo install cargo-make
 
-# Test generators in dummy app
-cd spec/dummy
-bundle exec rails generate tasker:install
-bundle exec rails generate tasker:step_handler TestHandler
+# Build tasker-ctl from sibling tasker-core repo
+cargo make build-ctl
+
+# Validate all plugin manifests
+cargo make validate                      # or: cargo make v
+
+# Generate + syntax-check all templates
+cargo make test-templates                # or: cargo make tt
+
+# Run all validation
+cargo make test-all                      # or: cargo make ta
 ```
 
-### Python (tasker-contrib-fastapi)
+### Direct Script Usage
 
 ```bash
-cd python/tasker-contrib-fastapi
-uv sync                                 # Install dependencies
-uv run pytest                           # Run tests
-uv run ruff check .                     # Lint
-uv run ruff format --check .            # Format check
-```
+# Set TASKER_CTL to point at the binary
+export TASKER_CTL=../tasker-core/target/debug/tasker-ctl
 
-### TypeScript (tasker-contrib-bun)
+# Validate plugins
+./scripts/validate-plugins.sh
 
-```bash
-cd typescript/tasker-contrib-bun
-bun install                             # Install dependencies
-bun test                                # Run tests
-bun run lint                            # Lint
-bun run build                           # Build
-```
+# Test all templates
+./scripts/test-templates.sh
 
-### Rust (tasker-contrib-axum)
-
-```bash
-cd rust/tasker-contrib-axum
-cargo build                             # Build
-cargo test                              # Run tests
-cargo fmt --check                       # Check formatting
-cargo clippy --all-targets -- -D warnings  # Lint
-```
-
-### Ops Validation
-
-```bash
-# Docker Compose
-docker compose -f ops/docker/development/docker-compose.yml config
-
-# Helm (if installed)
-helm lint ops/helm/tasker-orchestration/
-
-# Terraform (if installed)
-terraform -chdir=ops/terraform/aws init -backend=false
-terraform -chdir=ops/terraform/aws validate
+# Test a single plugin
+./scripts/test-templates.sh --plugin tasker-contrib-rails
 ```
 
 ## Cross-Repository Dependencies
@@ -147,28 +123,29 @@ cd ../../tasker-contrib
 
 ## CI Strategy
 
-Path-based CI runs only relevant tests when specific directories change:
+Template validation CI builds `tasker-ctl` from tasker-core source and validates all plugin templates:
 
-- `rails/**` → Rails tests (Ruby 3.2/3.3, Rails 7.0-7.2)
-- `python/**` → Python tests (Python 3.11/3.12)
-- `typescript/**` → TypeScript tests (Bun)
-- `rust/**` → Rust tests
-- `ops/**` → Docker/Helm/Terraform validation
+- `rails/tasker-cli-plugin/**` → Generate Rails templates, `ruby -c` syntax check
+- `python/tasker-cli-plugin/**` → Generate Python templates, `py_compile` check
+- `typescript/tasker-cli-plugin/**` → Generate TypeScript templates, `bun build` check
+- `rust/tasker-cli-plugin/**` → Generate Rust templates, `rustfmt --check`
+- `ops/tasker-cli-plugin/**` → Generate ops templates, YAML/TOML validation
 - `docs/**` → Markdown link checking
 
 ### Testing Modes
 
-1. **CI (ci.yml)**: Path-based, runs against pinned dependencies
-2. **Bleeding Edge (bleeding-edge.yml)**: Triggered by tasker-core, tests latest main
-3. **Upstream Check (upstream-check.yml)**: Daily check for new tasker-core releases
+1. **CI (ci.yml)**: Path-based template validation on PR/merge
+2. **Bleeding Edge (bleeding-edge.yml)**: Full validation against latest tasker-core main
+3. **Upstream Check (upstream-check.yml)**: Daily registry checks for new tasker-core releases
+
+See [.github/CI-ARCHITECTURE.md](.github/CI-ARCHITECTURE.md) for full details.
 
 ## Current Status
 
-| Package | Status |
-|---------|--------|
-| tasker-contrib-rails | In Progress |
-| tasker-contrib-fastapi | Planned |
-| tasker-contrib-bun | Planned |
-| tasker-contrib-axum | Planned |
-| Helm charts | Planned |
-| Terraform modules | Planned |
+| Plugin | Templates | Status |
+|--------|-----------|--------|
+| tasker-contrib-rails | 4 handlers + task template | Active |
+| tasker-contrib-python | 4 handlers + task template | Active |
+| tasker-contrib-typescript | 4 handlers + task template | Active |
+| tasker-contrib-rust | 1 handler + task template | Active |
+| tasker-contrib-ops | docker_compose + config | Active |

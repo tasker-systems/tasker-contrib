@@ -1,0 +1,74 @@
+# frozen_string_literal: true
+
+require 'tasker_core/step_handler'
+
+module {{ module_name }}
+  # {{ name | pascal_case }} batchable step handler.
+  #
+  # Implements the Batchable mixin for parallel batch processing.
+  # This handler can serve as both an analyzer (creating batch configs)
+  # and a worker (processing individual batches).
+  #
+  # Workflow pattern:
+  #   1. Analyzer step: creates cursor configs dividing work into batches
+  #   2. Worker steps: process individual batches in parallel
+  #   3. Aggregator step: combines results from all workers
+  #
+  # Register this handler in your task definition YAML:
+  #   handler:
+  #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
+  class {{ name | pascal_case }}Handler < TaskerCore::StepHandler::Base
+    include TaskerCore::StepHandler::Mixins::Batchable
+
+    def call(context)
+      batch_ctx = get_batch_context(context)
+
+      # If this is a batch worker invocation, process the batch
+      if batch_ctx
+        return process_batch(context, batch_ctx)
+      end
+
+      # Otherwise, this is the analyzer — create batch configs
+      analyze_and_create_batches(context)
+    end
+
+    private
+
+    def analyze_and_create_batches(context)
+      # TODO: Determine total items from your data source
+      total_items = context.input_data['total_items']&.to_i || 1000
+      worker_count = context.step_config['worker_count']&.to_i || 5
+
+      cursor_configs = create_cursor_configs(total_items, worker_count)
+
+      create_batches_outcome(
+        worker_template_name: '{{ name | snake_case }}_batch',
+        cursor_configs: cursor_configs,
+        total_items: total_items,
+        metadata: { 'analyzed_at' => Time.now.iso8601 }
+      )
+    end
+
+    def process_batch(context, batch_ctx)
+      # Handle no-op placeholder
+      no_op_result = handle_no_op_worker(batch_ctx)
+      return no_op_result if no_op_result
+
+      # TODO: Process items in the batch range
+      items_processed = batch_ctx.end_cursor - batch_ctx.start_cursor
+
+      batch_worker_success(
+        items_processed: items_processed,
+        items_succeeded: items_processed,
+        metadata: { 'batch_id' => batch_ctx.batch_id }
+      )
+    rescue StandardError => e
+      failure(
+        message: "Batch processing failed: #{e.message}",
+        error_type: 'RetryableError',
+        retryable: true,
+        metadata: { 'batch_id' => batch_ctx.batch_id }
+      )
+    end
+  end
+end

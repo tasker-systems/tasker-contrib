@@ -1,15 +1,30 @@
-# Tasker CLI Plugin Manifest
-
 [plugin]
 name = "tasker-contrib-python"
 version = "0.1.0"
 description = "Python templates for Tasker CLI"
-languages = ["python"]
-frameworks = ["fastapi", "django"]
+language = "python"
 
-[templates]
-step-handler = { path = "templates/step_handler", languages = ["python"] }
-step-handler-api = { path = "templates/step_handler_api", languages = ["python"] }
-step-handler-decision = { path = "templates/step_handler_decision", languages = ["python"] }
-step-handler-batchable = { path = "templates/step_handler_batchable", languages = ["python"] }
-task-template = { path = "templates/task_template", languages = ["python"] }
+[[templates]]
+name = "step_handler"
+path = "templates/step_handler"
+description = "Generate a step handler class with pytest test"
+
+[[templates]]
+name = "step_handler_api"
+path = "templates/step_handler_api"
+description = "Generate an API step handler with HTTP client and pytest test"
+
+[[templates]]
+name = "step_handler_decision"
+path = "templates/step_handler_decision"
+description = "Generate a decision step handler for workflow routing"
+
+[[templates]]
+name = "step_handler_batchable"
+path = "templates/step_handler_batchable"
+description = "Generate a batchable step handler for parallel processing"
+
+[[templates]]
+name = "task_template"
+path = "templates/task_template"
+description = "Generate a task definition YAML with step DAG"

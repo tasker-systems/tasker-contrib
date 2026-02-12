@@ -1,0 +1,66 @@
+"""Tests for {{ name | pascal_case }}Handler batch processing."""
+
+import uuid
+from unittest.mock import MagicMock
+
+import pytest
+
+from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
+
+
+@pytest.fixture
+def handler():
+    return {{ name | pascal_case }}Handler()
+
+
+class TestAnalyzer:
+    def test_creates_batch_configs(self, handler):
+        context = MagicMock()
+        context.task_uuid = uuid.uuid4()
+        context.step_uuid = uuid.uuid4()
+        context.input_data = {"total_items": 1000}
+        context.step_config = {"worker_count": 5}
+        context.step_inputs = {}
+
+        result = handler.call(context)
+
+        assert result.success is True
+        outcome = result.result["batch_processing_outcome"]
+        assert outcome["type"] == "create_batches"
+        assert outcome["worker_count"] == 5
+        assert outcome["total_items"] == 1000
+
+
+class TestWorker:
+    def test_processes_batch(self, handler):
+        context = MagicMock()
+        context.task_uuid = uuid.uuid4()
+        context.step_uuid = uuid.uuid4()
+        context.input_data = {}
+        context.step_config = {}
+        context.step_inputs = {
+            "cursor": {
+                "batch_id": "001",
+                "start_cursor": 0,
+                "end_cursor": 200,
+                "batch_size": 200,
+            }
+        }
+
+        result = handler.call(context)
+
+        assert result.success is True
+        assert result.result["items_processed"] == 200
+
+    def test_handles_no_op_worker(self, handler):
+        context = MagicMock()
+        context.task_uuid = uuid.uuid4()
+        context.step_uuid = uuid.uuid4()
+        context.input_data = {}
+        context.step_config = {}
+        context.step_inputs = {"is_no_op": True, "cursor": {"batch_id": "no_op"}}
+
+        result = handler.call(context)
+
+        assert result.success is True
+        assert result.result["no_op"] is True

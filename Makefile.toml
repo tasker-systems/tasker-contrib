@@ -1,0 +1,122 @@
+# Tasker Contrib — cargo-make task definitions
+#
+# Usage:
+#   cargo make build-ctl         # Build tasker-ctl from tasker-core source
+#   cargo make validate     (v)  # Validate all plugin manifests
+#   cargo make test-templates(tt)# Tier 1: generate + syntax check all templates
+#   cargo make test-all     (ta) # Run all validation
+#   cargo make ci-sanity-check   # Validate scripts, workflows, and references
+#   cargo make ci-check          # All quality checks + CI sanity
+#   cargo make cleanup-keep      # Remove .keep from populated template dirs
+
+[config]
+skip_core_tasks = true
+
+[env]
+TASKER_CORE_PATH = { value = "../tasker-core", condition = { env_not_set = ["TASKER_CORE_PATH"] } }
+TASKER_CTL = { value = "${CARGO_MAKE_WORKING_DIRECTORY}/bin/tasker-ctl", condition = { env_not_set = ["TASKER_CTL"] } }
+SCRIPTS_DIR = "scripts"
+
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
+[tasks.setup-python]
+description = "Install Python dependencies for template validation (PyYAML)"
+script_runner = "@shell"
+script = '''
+if command -v uv >/dev/null 2>&1; then
+  uv sync
+elif command -v pip3 >/dev/null 2>&1; then
+  pip3 install pyyaml
+else
+  echo "ERROR: Neither uv nor pip3 found. Install Python tooling first."
+  exit 1
+fi
+'''
+
+[tasks.setup]
+description = "Install all development dependencies"
+dependencies = ["setup-python"]
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
+[tasks.build-ctl]
+description = "Build tasker-ctl from tasker-core source and install to bin/"
+script_runner = "@shell"
+script = '''
+TASKER_CORE_PATH="${TASKER_CORE_PATH}" ${SCRIPTS_DIR}/build-tasker-ctl.sh
+'''
+
+# ---------------------------------------------------------------------------
+# Validate
+# ---------------------------------------------------------------------------
+[tasks.validate]
+description = "Validate all plugin manifests"
+script_runner = "@shell"
+script = '''
+if [ ! -x "${TASKER_CTL}" ]; then
+  echo "tasker-ctl not found at ${TASKER_CTL}"
+  echo "Run 'cargo make build-ctl' first."
+  exit 1
+fi
+${SCRIPTS_DIR}/validate-plugins.sh
+'''
+
+[tasks.v]
+alias = "validate"
+
+# ---------------------------------------------------------------------------
+# Test templates
+# ---------------------------------------------------------------------------
+[tasks.test-templates]
+description = "Tier 1: generate and syntax-check all templates"
+script_runner = "@shell"
+script = '''
+if [ ! -x "${TASKER_CTL}" ]; then
+  echo "tasker-ctl not found at ${TASKER_CTL}"
+  echo "Run 'cargo make build-ctl' first."
+  exit 1
+fi
+${SCRIPTS_DIR}/test-templates.sh
+'''
+
+[tasks.tt]
+alias = "test-templates"
+
+# ---------------------------------------------------------------------------
+# Test all
+# ---------------------------------------------------------------------------
+[tasks.test-all]
+description = "Run all validation (validate + test-templates)"
+dependencies = ["validate", "test-templates"]
+
+[tasks.ta]
+alias = "test-all"
+
+# ---------------------------------------------------------------------------
+# CI Sanity Check
+# ---------------------------------------------------------------------------
+[tasks.ci-sanity-check]
+description = "Validate shell scripts, workflows, and file references"
+script_runner = "@shell"
+script = '''
+${SCRIPTS_DIR}/ci-sanity-check.sh
+'''
+
+[tasks.csc]
+alias = "ci-sanity-check"
+
+[tasks.ci-check]
+description = "All quality checks + CI infrastructure sanity"
+dependencies = ["validate", "test-templates", "ci-sanity-check"]
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
+[tasks.cleanup-keep]
+description = "Remove .keep files from populated template directories"
+script_runner = "@shell"
+script = '''
+${SCRIPTS_DIR}/cleanup-keep-files.sh
+'''

@@ -1,17 +1,31 @@
-# Tasker CLI Plugin Manifest
-# This file tells tasker-cli how to discover and use templates from this plugin
-
 [plugin]
 name = "tasker-contrib-rails"
 version = "0.1.0"
-description = "Rails templates and generators for Tasker CLI"
-languages = ["ruby"]
-frameworks = ["rails"]
+description = "Ruby on Rails templates for Tasker CLI"
+language = "ruby"
+framework = "rails"
 
-[templates]
-step-handler = { path = "templates/step_handler", languages = ["ruby"] }
-step-handler-api = { path = "templates/step_handler_api", languages = ["ruby"] }
-step-handler-decision = { path = "templates/step_handler_decision", languages = ["ruby"] }
-step-handler-batchable = { path = "templates/step_handler_batchable", languages = ["ruby"] }
-task-template = { path = "templates/task_template", languages = ["ruby"] }
-rails-initializer = { path = "templates/rails_initializer", frameworks = ["rails"] }
+[[templates]]
+name = "step_handler"
+path = "templates/step_handler"
+description = "Generate a step handler class with RSpec test"
+
+[[templates]]
+name = "step_handler_api"
+path = "templates/step_handler_api"
+description = "Generate an API step handler with HTTP client and RSpec test"
+
+[[templates]]
+name = "step_handler_decision"
+path = "templates/step_handler_decision"
+description = "Generate a decision step handler for workflow routing"
+
+[[templates]]
+name = "step_handler_batchable"
+path = "templates/step_handler_batchable"
+description = "Generate a batchable step handler for parallel processing"
+
+[[templates]]
+name = "task_template"
+path = "templates/task_template"
+description = "Generate a task definition YAML with step DAG"

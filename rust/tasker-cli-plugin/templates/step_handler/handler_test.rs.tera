@@ -1,0 +1,17 @@
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tasker_worker_rust::StepHandlerConfig;
+
+    fn create_test_config() -> StepHandlerConfig {
+        StepHandlerConfig::new(json!({}))
+    }
+
+    #[test]
+    fn test_handler_name() {
+        let config = create_test_config();
+        let handler = {{ name | pascal_case }}Handler::new(config);
+        assert_eq!(handler.name(), "{{ name | snake_case }}");
+    }
+}

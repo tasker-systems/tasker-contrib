@@ -1,0 +1,65 @@
+use anyhow::Result;
+use async_trait::async_trait;
+use serde_json::{json, Value};
+use std::time::Instant;
+use tasker_shared::types::TaskSequenceStep;
+use tasker_worker_rust::{error_result, success_result};
+use tasker_worker_rust::{RustStepHandler, StepHandlerConfig};
+
+/// {{ name | pascal_case }} step handler for Tasker workflow processing.
+///
+/// Implements the `RustStepHandler` trait providing:
+///   - Async step execution with typed context
+///   - Success/error result builders
+///   - Configuration via `StepHandlerConfig`
+///
+/// Register this handler in your task definition YAML:
+/// ```yaml
+/// handler:
+///   callable: {{ name | snake_case }}
+/// ```
+pub struct {{ name | pascal_case }}Handler {
+    config: StepHandlerConfig,
+}
+
+#[async_trait]
+impl RustStepHandler for {{ name | pascal_case }}Handler {
+    fn new(config: StepHandlerConfig) -> Self {
+        Self { config }
+    }
+
+    fn name(&self) -> &str {
+        "{{ name | snake_case }}"
+    }
+
+    async fn call(
+        &self,
+        step_data: &TaskSequenceStep,
+    ) -> Result<tasker_shared::types::StepExecutionResult> {
+        let start = Instant::now();
+
+        // Access input data from the task context
+        let _input_data = &step_data.task.context;
+
+        // Access handler configuration
+        // let some_setting = self.config.get_string("some_setting");
+
+        // Access dependency results from upstream steps
+        // let _dep_results = &step_data.dependency_results;
+
+        // TODO: Implement your business logic here
+        let result_data = json!({
+            "processed": true,
+            "handler": "{{ name | snake_case }}"
+        });
+
+        let duration_ms = start.elapsed().as_millis() as i64;
+
+        Ok(success_result(
+            step_data.workflow_step.workflow_step_uuid,
+            result_data,
+            duration_ms,
+            None,
+        ))
+    }
+}

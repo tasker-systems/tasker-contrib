@@ -1,0 +1,39 @@
+"""Tests for {{ name | pascal_case }}Handler."""
+
+import uuid
+from unittest.mock import MagicMock
+
+import pytest
+
+from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
+
+
+@pytest.fixture
+def handler():
+    return {{ name | pascal_case }}Handler()
+
+
+@pytest.fixture
+def context():
+    ctx = MagicMock()
+    ctx.task_uuid = uuid.uuid4()
+    ctx.step_uuid = uuid.uuid4()
+    ctx.input_data = {"key": "value"}
+    ctx.step_config = {}
+    ctx.retry_count = 0
+    ctx.max_retries = 3
+    return ctx
+
+
+class TestCall:
+    def test_returns_success_result(self, handler, context):
+        result = handler.call(context)
+
+        assert result.success is True
+        assert result.result["processed"] is True
+
+    def test_handler_name_is_set(self, handler):
+        assert handler.handler_name == "{{ name | snake_case }}"
+
+    def test_handler_version_is_set(self, handler):
+        assert handler.handler_version == "1.0.0"

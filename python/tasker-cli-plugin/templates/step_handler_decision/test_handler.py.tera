@@ -1,0 +1,49 @@
+"""Tests for {{ name | pascal_case }}Handler decision routing."""
+
+import uuid
+from unittest.mock import MagicMock
+
+import pytest
+
+from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
+
+
+@pytest.fixture
+def handler():
+    return {{ name | pascal_case }}Handler()
+
+
+def make_context(route_key=None):
+    ctx = MagicMock()
+    ctx.task_uuid = uuid.uuid4()
+    ctx.step_uuid = uuid.uuid4()
+    ctx.input_data = {"route_key": route_key} if route_key else {}
+    ctx.step_config = {}
+    ctx.retry_count = 0
+    ctx.max_retries = 3
+    return ctx
+
+
+class TestDecisionRouting:
+    def test_fast_track_route(self, handler):
+        context = make_context("fast_track")
+        result = handler.call(context)
+
+        assert result.success is True
+        assert "fast_track_processing" in result.result["decision_point_outcome"]["steps"]
+
+    def test_review_required_route(self, handler):
+        context = make_context("review_required")
+        result = handler.call(context)
+
+        assert result.success is True
+        steps = result.result["decision_point_outcome"]["steps"]
+        assert "manual_review" in steps
+        assert "approval_gate" in steps
+
+    def test_default_route(self, handler):
+        context = make_context()
+        result = handler.call(context)
+
+        assert result.success is True
+        assert "standard_processing" in result.result["decision_point_outcome"]["steps"]

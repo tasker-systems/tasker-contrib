@@ -1,0 +1,22 @@
+name = "step_handler_batchable"
+description = "Generate a batchable step handler for parallel processing"
+
+[[parameters]]
+name = "name"
+description = "Handler name (e.g., ProcessCsv)"
+required = true
+
+[[parameters]]
+name = "module_name"
+description = "Module path for the handler"
+required = false
+default = "handlers"
+
+[[outputs]]
+template = "handler.ts.tera"
+filename = "{{ name | snake_case }}-handler.ts"
+
+[[outputs]]
+template = "handler.test.ts.tera"
+filename = "{{ name | snake_case }}-handler.test.ts"
+subdir = "__tests__"

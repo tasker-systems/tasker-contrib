@@ -1,0 +1,46 @@
+# frozen_string_literal: true
+
+require 'tasker_core/step_handler'
+
+module {{ module_name }}
+  # {{ name | pascal_case }} step handler for Tasker workflow processing.
+  #
+  # Implements the cross-language StepHandler contract:
+  #   - Receives a StepContext with task data, dependencies, and configuration
+  #   - Returns success/failure results via helper methods
+  #
+  # Register this handler in your task definition YAML:
+  #   handler:
+  #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
+  class {{ name | pascal_case }}Handler < TaskerCore::StepHandler::Base
+    # Main execution method called by the Tasker orchestration layer.
+    #
+    # @param context [TaskerCore::Types::StepContext] Step execution context
+    # @return [TaskerCore::Types::StepHandlerCallResult] Success or failure result
+    def call(context)
+      # Access input data from the task context
+      input = context.input_data
+
+      # Access results from upstream dependency steps
+      # prev_result = context.get_dependency_result('previous_step_name')
+
+      # Access handler configuration from step definition
+      # config_value = context.step_config['some_setting']
+
+      # TODO: Implement your business logic here
+      result = {
+        processed: true,
+        handler: '{{ name | snake_case }}'
+      }
+
+      success(result: result)
+    rescue StandardError => e
+      failure(
+        message: e.message,
+        error_type: 'RetryableError',
+        retryable: true,
+        metadata: { handler: '{{ name | snake_case }}' }
+      )
+    end
+  end
+end

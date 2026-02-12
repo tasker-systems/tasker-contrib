@@ -1,0 +1,23 @@
+name = "docker_compose"
+description = "Generate a Docker Compose stack for Tasker services"
+
+[[parameters]]
+name = "name"
+description = "Project name for the compose stack"
+required = true
+
+[[parameters]]
+name = "messaging"
+description = "Messaging backend: pgmq or rabbitmq"
+required = false
+default = "pgmq"
+
+[[parameters]]
+name = "cache"
+description = "Cache backend: none or dragonfly"
+required = false
+default = "none"
+
+[[outputs]]
+template = "docker-compose.yml.tera"
+filename = "docker-compose.yml"

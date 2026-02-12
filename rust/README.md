@@ -6,9 +6,7 @@ This directory contains Rust framework integrations for Tasker.
 
 | Directory | Description |
 |-----------|-------------|
-| `tasker-contrib-axum/` | Axum integration with Tower layers and state extractors |
 | `tasker-cli-plugin/` | CLI plugin with Rust templates for `tasker-cli` |
-| `tasker-axum-template/` | Production-ready Axum application template |
 
 ## Note
 

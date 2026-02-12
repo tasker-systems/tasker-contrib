@@ -1,12 +1,15 @@
-# Tasker CLI Plugin Manifest
-
 [plugin]
 name = "tasker-contrib-rust"
 version = "0.1.0"
 description = "Rust templates for Tasker CLI"
-languages = ["rust"]
-frameworks = ["axum"]
+language = "rust"
 
-[templates]
-step-handler = { path = "templates/step_handler", languages = ["rust"] }
-task-template = { path = "templates/task_template", languages = ["rust"] }
+[[templates]]
+name = "step_handler"
+path = "templates/step_handler"
+description = "Generate a step handler implementing RustStepHandler trait with test"
+
+[[templates]]
+name = "task_template"
+path = "templates/task_template"
+description = "Generate a task definition YAML with step DAG"

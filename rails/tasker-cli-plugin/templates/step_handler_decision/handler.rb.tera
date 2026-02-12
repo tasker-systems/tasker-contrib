@@ -1,0 +1,52 @@
+# frozen_string_literal: true
+
+require 'tasker_core/step_handler'
+
+module {{ module_name }}
+  # {{ name | pascal_case }} decision step handler.
+  #
+  # Evaluates conditions and routes the workflow to different downstream
+  # steps based on the decision outcome. Uses the Decision mixin for
+  # standardized decision result formatting.
+  #
+  # Register this handler in your task definition YAML:
+  #   handler:
+  #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
+  class {{ name | pascal_case }}Handler < TaskerCore::StepHandler::Base
+    include TaskerCore::StepHandler::Mixins::Decision
+
+    def call(context)
+      # Extract decision criteria from context
+      input = context.input_data
+
+      # TODO: Implement your routing logic here
+      # Example: route based on a field value
+      route_key = input['route_key'] || 'default'
+
+      case route_key
+      when 'fast_track'
+        decision_success(
+          steps: ['fast_track_processing'],
+          result_data: { route: 'fast_track', reason: 'Meets fast-track criteria' }
+        )
+      when 'review_required'
+        decision_success(
+          steps: ['manual_review', 'approval_gate'],
+          result_data: { route: 'review', reason: 'Review required' }
+        )
+      else
+        decision_success(
+          steps: ['standard_processing'],
+          result_data: { route: 'standard', reason: 'Default routing' }
+        )
+      end
+    rescue StandardError => e
+      failure(
+        message: "Decision failed: #{e.message}",
+        error_type: 'PermanentError',
+        retryable: false,
+        metadata: { handler: '{{ name | snake_case }}' }
+      )
+    end
+  end
+end

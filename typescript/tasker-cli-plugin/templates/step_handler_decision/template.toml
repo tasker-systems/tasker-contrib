@@ -1,0 +1,22 @@
+name = "step_handler_decision"
+description = "Generate a decision step handler for workflow routing"
+
+[[parameters]]
+name = "name"
+description = "Handler name (e.g., RouteOrder)"
+required = true
+
+[[parameters]]
+name = "module_name"
+description = "Module path for the handler"
+required = false
+default = "handlers"
+
+[[outputs]]
+template = "handler.ts.tera"
+filename = "{{ name | snake_case }}-handler.ts"
+
+[[outputs]]
+template = "handler.test.ts.tera"
+filename = "{{ name | snake_case }}-handler.test.ts"
+subdir = "__tests__"

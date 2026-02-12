@@ -1,17 +1,12 @@
-# Tasker Contrib CI Strategy
+# Tasker Contrib CI — Template Validation
 #
-# Unlike tasker-core which runs holistic CI for coherence, tasker-contrib uses
-# path-based CI to only run relevant tests when specific directories change.
+# Validates plugin manifests and generates + syntax-checks all templates.
+# No database or services required — tasker-ctl is a pure CLI tool.
 #
-# CI Modes:
-# 1. PR/Merge (ci.yml): Path-based, runs against pinned dependencies
-# 2. Bleeding Edge (bleeding-edge.yml): Triggered by tasker-core, tests latest
-# 3. Upstream Check (upstream-check.yml): Daily check for new tasker-core releases
-#
-# Versioning Strategy:
-# - tasker-contrib packages pin to tasker-core semver ranges
-# - Bleeding-edge builds catch compatibility issues early
-# - Upstream checks notify when new versions are available
+# Strategy:
+# 1. Build tasker-ctl from tasker-core source (with sccache)
+# 2. Validate all plugin manifests
+# 3. Per-language: generate templates and syntax-check output files
 
 name: CI
 
@@ -21,7 +16,6 @@ on:
   pull_request:
     branches: [main]
 
-# Cancel in-progress runs for the same branch
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -34,308 +28,259 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      rails: ${{ steps.filter.outputs.rails }}
-      python: ${{ steps.filter.outputs.python }}
-      typescript: ${{ steps.filter.outputs.typescript }}
-      rust: ${{ steps.filter.outputs.rust }}
-      ops: ${{ steps.filter.outputs.ops }}
+      templates: ${{ steps.filter.outputs.templates }}
+      rails-templates: ${{ steps.filter.outputs.rails-templates }}
+      python-templates: ${{ steps.filter.outputs.python-templates }}
+      typescript-templates: ${{ steps.filter.outputs.typescript-templates }}
+      rust-templates: ${{ steps.filter.outputs.rust-templates }}
+      ops-templates: ${{ steps.filter.outputs.ops-templates }}
       docs: ${{ steps.filter.outputs.docs }}
+      scripts: ${{ steps.filter.outputs.scripts }}
+      actions: ${{ steps.filter.outputs.actions }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            rails:
-              - 'rails/**'
+            templates:
+              - '*/tasker-cli-plugin/**'
+              - 'scripts/**'
+              - '.github/actions/**'
               - '.github/workflows/ci.yml'
-            python:
-              - 'python/**'
-              - '.github/workflows/ci.yml'
-            typescript:
-              - 'typescript/**'
-              - '.github/workflows/ci.yml'
-            rust:
-              - 'rust/**'
-              - '.github/workflows/ci.yml'
-            ops:
-              - 'ops/**'
-              - '.github/workflows/ci.yml'
+            rails-templates:
+              - 'rails/tasker-cli-plugin/**'
+            python-templates:
+              - 'python/tasker-cli-plugin/**'
+            typescript-templates:
+              - 'typescript/tasker-cli-plugin/**'
+            rust-templates:
+              - 'rust/tasker-cli-plugin/**'
+            ops-templates:
+              - 'ops/tasker-cli-plugin/**'
             docs:
               - 'docs/**'
               - '*.md'
-              - '.github/workflows/ci.yml'
+            scripts:
+              - 'scripts/**'
+            actions:
+              - '.github/actions/**'
 
   # ==========================================================================
-  # Rails CI
+  # Build tasker-ctl
   # ==========================================================================
-  rails:
-    name: Rails
+  build-tasker-ctl:
+    name: Build tasker-ctl
     needs: changes
-    if: needs.changes.outputs.rails == 'true'
+    if: needs.changes.outputs.templates == 'true'
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        ruby: ['3.2', '3.3']
-        rails: ['7.0', '7.1', '7.2']
-    
-    services:
-      postgres:
-        image: quay.io/tembo/pg17-pgmq:latest
-        env:
-          POSTGRES_USER: tasker
-          POSTGRES_PASSWORD: tasker
-          POSTGRES_DB: tasker_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
+    timeout-minutes: 20
+    steps:
+      - name: Checkout tasker-contrib
+        uses: actions/checkout@v4
+        with:
+          path: tasker-contrib
+
+      - name: Build tasker-ctl
+        uses: ./tasker-contrib/.github/actions/build-tasker-core
+
+  # ==========================================================================
+  # Validate all plugin manifests
+  # ==========================================================================
+  validate-plugins:
+    name: Validate Plugins
+    needs: build-tasker-ctl
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Download tasker-ctl
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-ctl
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/tasker-ctl
+
+      - name: Validate all plugins
+        env:
+          TASKER_CTL: ${{ github.workspace }}/bin/tasker-ctl
+        run: ./scripts/validate-plugins.sh
+
+  # ==========================================================================
+  # Rails template tests
+  # ==========================================================================
+  test-ruby-templates:
+    name: Ruby Templates
+    needs: [changes, build-tasker-ctl]
+    if: needs.changes.outputs.rails-templates == 'true' || needs.changes.outputs.templates == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
-          working-directory: rails/tasker-contrib-rails
-      
-      # Build tasker-core-rb from source (bleeding edge) or use published gem
-      - name: Setup tasker-core-rb
-        run: |
-          # For now, we'll use path dependency to local build
-          # Once published, this will use the gem from RubyGems
-          echo "tasker-core-rb setup placeholder"
-      
-      - name: Run tests
-        working-directory: rails/tasker-contrib-rails
-        env:
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
-          RAILS_VERSION: ${{ matrix.rails }}
-        run: |
-          bundle install
-          bundle exec rspec --format progress
-      
-      - name: Lint
-        working-directory: rails/tasker-contrib-rails
-        run: |
-          bundle exec rubocop --parallel
+          ruby-version: '3.3'
 
-  # ==========================================================================
-  # Python CI
-  # ==========================================================================
-  python:
-    name: Python
-    needs: changes
-    if: needs.changes.outputs.python == 'true'
-    runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        python: ['3.11', '3.12']
-    
-    services:
-      postgres:
-        image: quay.io/tembo/pg17-pgmq:latest
-        env:
-          POSTGRES_USER: tasker
-          POSTGRES_PASSWORD: tasker
-          POSTGRES_DB: tasker_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Download tasker-ctl
+        uses: actions/download-artifact@v4
         with:
-          python-version: ${{ matrix.python }}
-      
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-      
-      - name: Setup tasker-core-py
-        run: |
-          # For now, placeholder
-          echo "tasker-core-py setup placeholder"
-      
-      - name: Install dependencies
-        working-directory: python/tasker-contrib-fastapi
-        run: |
-          uv sync
-      
-      - name: Run tests
-        working-directory: python/tasker-contrib-fastapi
+          name: tasker-ctl
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/tasker-ctl
+
+      - name: Test Rails templates
         env:
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
-        run: |
-          uv run pytest
-      
-      - name: Lint
-        working-directory: python/tasker-contrib-fastapi
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
+          TASKER_CTL: ${{ github.workspace }}/bin/tasker-ctl
+        run: ./scripts/test-templates.sh --plugin tasker-contrib-rails
 
   # ==========================================================================
-  # TypeScript CI
+  # Python template tests
   # ==========================================================================
-  typescript:
-    name: TypeScript
-    needs: changes
-    if: needs.changes.outputs.typescript == 'true'
+  test-python-templates:
+    name: Python Templates
+    needs: [changes, build-tasker-ctl]
+    if: needs.changes.outputs.python-templates == 'true' || needs.changes.outputs.templates == 'true'
     runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: quay.io/tembo/pg17-pgmq:latest
-        env:
-          POSTGRES_USER: tasker
-          POSTGRES_PASSWORD: tasker
-          POSTGRES_DB: tasker_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Download tasker-ctl
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-ctl
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/tasker-ctl
+
+      - name: Test Python templates
+        env:
+          TASKER_CTL: ${{ github.workspace }}/bin/tasker-ctl
+        run: ./scripts/test-templates.sh --plugin tasker-contrib-python
+
+  # ==========================================================================
+  # TypeScript template tests
+  # ==========================================================================
+  test-typescript-templates:
+    name: TypeScript Templates
+    needs: [changes, build-tasker-ctl]
+    if: needs.changes.outputs.typescript-templates == 'true' || needs.changes.outputs.templates == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      
-      - name: Setup tasker-core-ts
-        run: |
-          # For now, placeholder
-          echo "tasker-core-ts setup placeholder"
-      
-      - name: Install dependencies
-        working-directory: typescript/tasker-contrib-bun
-        run: |
-          bun install
-      
-      - name: Run tests
-        working-directory: typescript/tasker-contrib-bun
+
+      - name: Download tasker-ctl
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-ctl
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/tasker-ctl
+
+      - name: Test TypeScript templates
         env:
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
-        run: |
-          bun test
-      
-      - name: Lint
-        working-directory: typescript/tasker-contrib-bun
-        run: |
-          bun run lint
+          TASKER_CTL: ${{ github.workspace }}/bin/tasker-ctl
+        run: ./scripts/test-templates.sh --plugin tasker-contrib-typescript
 
   # ==========================================================================
-  # Rust CI
+  # Rust template tests
   # ==========================================================================
-  rust:
-    name: Rust
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
+  test-rust-templates:
+    name: Rust Templates
+    needs: [changes, build-tasker-ctl]
+    if: needs.changes.outputs.rust-templates == 'true' || needs.changes.outputs.templates == 'true'
     runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: quay.io/tembo/pg17-pgmq:latest
-        env:
-          POSTGRES_USER: tasker
-          POSTGRES_PASSWORD: tasker
-          POSTGRES_DB: tasker_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+          components: rustfmt
+
+      - name: Download tasker-ctl
+        uses: actions/download-artifact@v4
         with:
-          workspaces: rust -> target
-      
-      - name: Check formatting
-        working-directory: rust/tasker-contrib-axum
-        run: cargo fmt --check
-      
-      - name: Clippy
-        working-directory: rust/tasker-contrib-axum
-        run: cargo clippy --all-targets -- -D warnings
-      
-      - name: Test
-        working-directory: rust/tasker-contrib-axum
+          name: tasker-ctl
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/tasker-ctl
+
+      - name: Test Rust templates
         env:
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker_test
-        run: cargo test
+          TASKER_CTL: ${{ github.workspace }}/bin/tasker-ctl
+        run: ./scripts/test-templates.sh --plugin tasker-contrib-rust
 
   # ==========================================================================
-  # Ops Validation
+  # Ops template tests
   # ==========================================================================
-  ops:
-    name: Ops Validation
-    needs: changes
-    if: needs.changes.outputs.ops == 'true'
+  test-ops-templates:
+    name: Ops Templates
+    needs: [changes, build-tasker-ctl]
+    if: needs.changes.outputs.ops-templates == 'true' || needs.changes.outputs.templates == 'true'
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Validate Docker Compose files
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Download tasker-ctl
+        uses: actions/download-artifact@v4
+        with:
+          name: tasker-ctl
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/tasker-ctl
+
+      - name: Test Ops templates
+        env:
+          TASKER_CTL: ${{ github.workspace }}/bin/tasker-ctl
+        run: ./scripts/test-templates.sh --plugin tasker-contrib-ops
+
+  # ==========================================================================
+  # CI Sanity Check
+  # ==========================================================================
+  ci-sanity-check:
+    name: CI Sanity Check
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.actions == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Install actionlint
         run: |
-          for file in ops/docker/*/docker-compose*.yml; do
-            if [ -f "$file" ]; then
-              echo "Validating $file"
-              docker compose -f "$file" config > /dev/null
-            fi
-          done
-      
-      - name: Lint Helm charts
-        run: |
-          if command -v helm &> /dev/null; then
-            for chart in ops/helm/*/; do
-              if [ -f "${chart}Chart.yaml" ]; then
-                echo "Linting $chart"
-                helm lint "$chart"
-              fi
-            done
-          fi
-      
-      - name: Validate Terraform
-        run: |
-          if command -v terraform &> /dev/null; then
-            for module in ops/terraform/*/; do
-              if [ -f "${module}main.tf" ]; then
-                echo "Validating $module"
-                terraform -chdir="$module" init -backend=false
-                terraform -chdir="$module" validate
-              fi
-            done
-          fi
+          ACTIONLINT_VERSION="1.7.7"
+          curl -sL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin actionlint
+
+      - name: Run CI sanity check
+        run: ./scripts/ci-sanity-check.sh
 
   # ==========================================================================
   # Documentation
@@ -345,16 +290,15 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Check markdown links
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
           use-quiet-mode: 'yes'
           config-file: '.github/markdown-link-check.json'
-        continue-on-error: true  # Don't fail on dead links for now
+        continue-on-error: true
 
   # ==========================================================================
   # Summary
@@ -362,22 +306,33 @@ jobs:
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [changes, rails, python, typescript, rust, ops, docs]
+    needs:
+      - changes
+      - validate-plugins
+      - test-ruby-templates
+      - test-python-templates
+      - test-typescript-templates
+      - test-rust-templates
+      - test-ops-templates
+      - ci-sanity-check
+      - docs
     if: always()
     steps:
       - name: Check results
         run: |
-          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Rails | ${{ needs.rails.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Python | ${{ needs.python.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| TypeScript | ${{ needs.typescript.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Rust | ${{ needs.rust.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Ops | ${{ needs.ops.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docs | ${{ needs.docs.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-      
+          echo "## CI Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Validate Plugins | ${{ needs.validate-plugins.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Ruby Templates | ${{ needs.test-ruby-templates.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Python Templates | ${{ needs.test-python-templates.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| TypeScript Templates | ${{ needs.test-typescript-templates.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Rust Templates | ${{ needs.test-rust-templates.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Ops Templates | ${{ needs.test-ops-templates.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| CI Sanity Check | ${{ needs.ci-sanity-check.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docs | ${{ needs.docs.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Fail if any job failed
         if: contains(needs.*.result, 'failure')
         run: exit 1

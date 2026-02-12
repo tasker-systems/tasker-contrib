@@ -1,0 +1,64 @@
+# frozen_string_literal: true
+
+require 'tasker_core/step_handler'
+
+module {{ module_name }}
+  # {{ name | pascal_case }} API step handler.
+  #
+  # Makes HTTP requests to external services as part of a Tasker workflow.
+  # Uses the API mixin for HTTP client functionality with automatic
+  # error classification and retry support.
+  #
+  # Register this handler in your task definition YAML:
+  #   handler:
+  #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
+  #     initialization:
+  #       base_url: "{{ base_url }}"
+  class {{ name | pascal_case }}Handler < TaskerCore::StepHandler::Base
+    include TaskerCore::StepHandler::Mixins::API
+
+    def call(context)
+      base_url = context.step_config['base_url'] || '{{ base_url }}'
+
+      # Build the API request from context
+      endpoint = context.input_data['endpoint'] || '/resource'
+      url = "#{base_url}#{endpoint}"
+
+      # Make the HTTP request using the API mixin
+      response = connection(url: base_url).get(endpoint)
+
+      if response.success?
+        body = JSON.parse(response.body)
+        success(
+          result: body,
+          metadata: {
+            status_code: response.status,
+            endpoint: endpoint
+          }
+        )
+      else
+        failure(
+          message: "API request failed: HTTP #{response.status}",
+          error_type: response.status >= 500 ? 'RetryableError' : 'PermanentError',
+          retryable: response.status >= 500,
+          metadata: {
+            status_code: response.status,
+            endpoint: endpoint
+          }
+        )
+      end
+    rescue Faraday::TimeoutError => e
+      failure(
+        message: "API timeout: #{e.message}",
+        error_type: 'RetryableError',
+        retryable: true
+      )
+    rescue Faraday::ConnectionFailed => e
+      failure(
+        message: "API connection failed: #{e.message}",
+        error_type: 'RetryableError',
+        retryable: true
+      )
+    end
+  end
+end
