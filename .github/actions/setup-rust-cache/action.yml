@@ -1,0 +1,27 @@
+name: Setup Rust cache
+description: Cache cargo registry and build artifacts
+
+inputs:
+  cache-prefix:
+    description: Cache key prefix
+    default: contrib
+  working-directory:
+    description: Directory containing Cargo.lock
+    default: tasker-core
+
+runs:
+  using: composite
+  steps:
+    - name: Cache cargo registry and build artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ${{ inputs.working-directory }}/target/
+        key: ${{ runner.os }}-cargo-${{ inputs.cache-prefix }}-${{ hashFiles(format('{0}/Cargo.lock', inputs.working-directory)) }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ inputs.cache-prefix }}-
+          ${{ runner.os }}-cargo-

@@ -53,9 +53,11 @@ jobs:
           # =================================================================
           check_crate() {
             local crate=$1
-            local current=$(echo "$CURRENT_VERSIONS" | jq -r ".rust.\"$crate\" // \"0.0.0\"")
-            local latest=$(curl -s "https://crates.io/api/v1/crates/$crate" | jq -r '.crate.max_version')
-            
+            local current
+            current=$(echo "$CURRENT_VERSIONS" | jq -r ".rust.\"$crate\" // \"0.0.0\"")
+            local latest
+            latest=$(curl -s "https://crates.io/api/v1/crates/$crate" | jq -r '.crate.max_version')
+
             if [ "$latest" != "null" ] && [ "$latest" != "$current" ]; then
               echo "  $crate: $current -> $latest"
               SUMMARY="$SUMMARY\n- **$crate** (Rust): $current → $latest"
@@ -66,17 +68,19 @@ jobs:
           echo "Checking Rust crates..."
           check_crate "tasker-worker" || true
           check_crate "tasker-orchestration" || true
-          check_crate "tasker-cli" || true
-          check_crate "pgmq-notify" || true
+          check_crate "tasker-ctl" || true
+          check_crate "tasker-pgmq" || true
           
           # =================================================================
           # Check PyPI for Python packages
           # =================================================================
           check_pypi() {
             local package=$1
-            local current=$(echo "$CURRENT_VERSIONS" | jq -r ".python.\"$package\" // \"0.0.0\"")
-            local latest=$(curl -s "https://pypi.org/pypi/$package/json" 2>/dev/null | jq -r '.info.version // "not-found"')
-            
+            local current
+            current=$(echo "$CURRENT_VERSIONS" | jq -r ".python.\"$package\" // \"0.0.0\"")
+            local latest
+            latest=$(curl -s "https://pypi.org/pypi/$package/json" 2>/dev/null | jq -r '.info.version // "not-found"')
+
             if [ "$latest" != "not-found" ] && [ "$latest" != "$current" ]; then
               echo "  $package: $current -> $latest"
               SUMMARY="$SUMMARY\n- **$package** (Python): $current → $latest"
@@ -85,16 +89,18 @@ jobs:
           }
           
           echo "Checking Python packages..."
-          check_pypi "tasker-core-py" || true
+          check_pypi "tasker_core" || true
           
           # =================================================================
           # Check RubyGems for Ruby gems
           # =================================================================
           check_gem() {
             local gem=$1
-            local current=$(echo "$CURRENT_VERSIONS" | jq -r ".ruby.\"$gem\" // \"0.0.0\"")
-            local latest=$(curl -s "https://rubygems.org/api/v1/gems/$gem.json" 2>/dev/null | jq -r '.version // "not-found"')
-            
+            local current
+            current=$(echo "$CURRENT_VERSIONS" | jq -r ".ruby.\"$gem\" // \"0.0.0\"")
+            local latest
+            latest=$(curl -s "https://rubygems.org/api/v1/gems/$gem.json" 2>/dev/null | jq -r '.version // "not-found"')
+
             if [ "$latest" != "not-found" ] && [ "$latest" != "$current" ]; then
               echo "  $gem: $current -> $latest"
               SUMMARY="$SUMMARY\n- **$gem** (Ruby): $current → $latest"
@@ -110,9 +116,11 @@ jobs:
           # =================================================================
           check_npm() {
             local package=$1
-            local current=$(echo "$CURRENT_VERSIONS" | jq -r ".typescript.\"$package\" // \"0.0.0\"")
-            local latest=$(curl -s "https://registry.npmjs.org/$package/latest" 2>/dev/null | jq -r '.version // "not-found"')
-            
+            local current
+            current=$(echo "$CURRENT_VERSIONS" | jq -r ".typescript.\"$package\" // \"0.0.0\"")
+            local latest
+            latest=$(curl -s "https://registry.npmjs.org/$package/latest" 2>/dev/null | jq -r '.version // "not-found"')
+
             if [ "$latest" != "not-found" ] && [ "$latest" != "$current" ]; then
               echo "  $package: $current -> $latest"
               SUMMARY="$SUMMARY\n- **$package** (TypeScript): $current → $latest"
@@ -121,7 +129,7 @@ jobs:
           }
           
           echo "Checking npm packages..."
-          check_npm "tasker-core-ts" || true
+          check_npm "@tasker-systems/tasker" || true
           
           # =================================================================
           # Output results
@@ -209,17 +217,17 @@ jobs:
       - name: Check version lag
         id: lag
         run: |
-          # This would check how far behind we are from latest
-          # and flag warnings for significant lag
-          
-          VERSION_FILE=".github/upstream-versions.json"
+          # Check how far behind we are from latest and flag warnings
           WARNINGS=""
-          
-          # Example: Check if we're more than 2 minor versions behind
-          # This would be expanded based on actual version tracking
-          
-          echo "Checking for version lag..."
-          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
+
+          if [ -f ".github/upstream-versions.json" ]; then
+            echo "Checking for version lag..."
+            # This would be expanded based on actual version tracking
+          else
+            echo "No upstream-versions.json found, skipping lag check"
+          fi
+
+          echo "warnings=$WARNINGS" >> "$GITHUB_OUTPUT"
       
       - name: Add deprecation warning to README
         if: steps.lag.outputs.warnings != ''

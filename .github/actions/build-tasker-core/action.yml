@@ -1,0 +1,72 @@
+name: Build tasker-ctl from tasker-core
+description: Shallow-clone tasker-core and build tasker-ctl binary
+
+inputs:
+  tasker-core-ref:
+    description: Git ref (branch, tag, SHA) of tasker-core to build from
+    default: main
+
+outputs:
+  tasker-ctl-path:
+    description: Path to the built tasker-ctl binary
+    value: ${{ steps.build.outputs.binary-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Shallow clone tasker-core
+      shell: bash
+      run: |
+        git clone --depth 1 --branch ${{ inputs.tasker-core-ref }} \
+          https://github.com/tasker-systems/tasker-core.git tasker-core
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install protobuf compiler
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq protobuf-compiler
+
+    - name: Setup sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+
+    - name: Configure sccache environment
+      shell: bash
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        echo "CARGO_TERM_COLOR=always" >> "$GITHUB_ENV"
+
+    - name: Cache cargo registry and build artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          tasker-core/target/
+        key: ${{ runner.os }}-cargo-tasker-ctl-${{ hashFiles('tasker-core/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-tasker-ctl-
+          ${{ runner.os }}-cargo-
+
+    - name: Build tasker-ctl
+      id: build
+      shell: bash
+      run: |
+        cd tasker-core
+        SQLX_OFFLINE=true cargo build --package tasker-ctl --bin tasker-ctl
+        BINARY="$(pwd)/target/debug/tasker-ctl"
+        echo "binary-path=$BINARY" >> "$GITHUB_OUTPUT"
+        echo "Built tasker-ctl at $BINARY"
+
+    - name: Upload tasker-ctl binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: tasker-ctl
+        path: tasker-core/target/debug/tasker-ctl
+        retention-days: 1
+        if-no-files-found: error
