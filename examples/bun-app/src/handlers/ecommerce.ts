@@ -19,7 +19,14 @@ interface CartItem {
 interface PaymentInfo {
   method: string;
   card_last_four?: string;
-  token?: string;
+  token: string;
+  amount: number;
+}
+
+interface CustomerInfo {
+  email: string;
+  name: string;
+  phone?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,14 +152,16 @@ export class ProcessPaymentHandler extends StepHandler {
 
       return this.success(
         {
+          payment_id: `pay_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
           transaction_id: transactionId,
-          auth_code: authCode,
+          status: 'succeeded',
           amount_charged: total,
+          currency: 'USD',
+          payment_method: method,
+          auth_code: authCode,
           processing_fee: processingFee,
           net_amount: Math.round((total - processingFee) * 100) / 100,
-          payment_method: method,
           card_last_four: paymentInfo?.card_last_four || '4242',
-          status: 'authorized',
           gateway: 'stripe_simulator',
           authorized_at: new Date().toISOString(),
         },
@@ -189,33 +198,39 @@ export class UpdateInventoryHandler extends StepHandler {
       }
 
       const items = cartResult.validated_items as CartItem[];
-      const inventoryUpdates: Array<{
+      const updatedProducts: Array<{
         sku: string;
+        name: string;
+        previous_stock: number;
+        new_stock: number;
         quantity_reserved: number;
-        warehouse: string;
         reservation_id: string;
+        warehouse: string;
       }> = [];
 
       // Simulate inventory reservation per item
+      let totalItemsReserved = 0;
       for (const item of items) {
         const warehouse = item.quantity > 5 ? 'warehouse-east' : 'warehouse-west';
-        inventoryUpdates.push({
+        const previousStock = Math.floor(Math.random() * 100) + item.quantity;
+        updatedProducts.push({
           sku: item.sku,
+          name: item.name,
+          previous_stock: previousStock,
+          new_stock: previousStock - item.quantity,
           quantity_reserved: item.quantity,
-          warehouse,
           reservation_id: crypto.randomUUID(),
+          warehouse,
         });
+        totalItemsReserved += item.quantity;
       }
-
-      const totalUnitsReserved = inventoryUpdates.reduce(
-        (sum, update) => sum + update.quantity_reserved,
-        0,
-      );
 
       return this.success(
         {
-          inventory_updates: inventoryUpdates,
-          total_units_reserved: totalUnitsReserved,
+          updated_products: updatedProducts,
+          total_items_reserved: totalItemsReserved,
+          inventory_log_id: `log_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+          updated_at: new Date().toISOString(),
           reservation_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min hold
           all_items_available: true,
         },
@@ -241,10 +256,18 @@ export class CreateOrderHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const customerEmail = context.getInput<string>('customer_email');
+      const customerInfo = context.getInput<CustomerInfo>('customer_info');
       const cartResult = context.getDependencyResult('validate_cart') as Record<string, unknown>;
       const paymentResult = context.getDependencyResult('process_payment') as Record<string, unknown>;
       const inventoryResult = context.getDependencyResult('update_inventory') as Record<string, unknown>;
+
+      if (!customerInfo) {
+        return this.failure(
+          'Customer information is required but was not provided',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
+      }
 
       if (!cartResult || !paymentResult || !inventoryResult) {
         return this.failure(
@@ -255,26 +278,34 @@ export class CreateOrderHandler extends StepHandler {
       }
 
       // Build the order record
+      const orderId = Math.floor(Math.random() * 9000) + 1000;
       const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
       const estimatedDeliveryDays = (cartResult.free_shipping as boolean) ? 5 : 3;
-      const estimatedDelivery = new Date(
+      const deliveryDate = new Date(
         Date.now() + estimatedDeliveryDays * 24 * 60 * 60 * 1000,
-      ).toISOString();
+      );
+      const estimatedDelivery = deliveryDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      const now = new Date().toISOString();
 
       return this.success(
         {
+          order_id: orderId,
           order_number: orderNumber,
-          customer_email: customerEmail,
+          status: 'confirmed',
+          total_amount: cartResult.total,
+          customer_email: customerInfo.email,
+          created_at: now,
+          estimated_delivery: estimatedDelivery,
           items: cartResult.validated_items,
           subtotal: cartResult.subtotal,
           tax: cartResult.tax,
           shipping: cartResult.shipping,
-          total: cartResult.total,
           transaction_id: paymentResult.transaction_id,
-          inventory_reservations: (inventoryResult.inventory_updates as unknown[]).length,
-          status: 'confirmed',
-          estimated_delivery: estimatedDelivery,
-          created_at: new Date().toISOString(),
+          inventory_reservations: (inventoryResult.updated_products as unknown[]).length,
         },
         { order_creation_ms: Math.random() * 30 + 10 },
       );
@@ -298,7 +329,17 @@ export class SendConfirmationHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
+      const customerInfo = context.getInput<CustomerInfo>('customer_info');
       const orderResult = context.getDependencyResult('create_order') as Record<string, unknown>;
+      const cartResult = context.getDependencyResult('validate_cart') as Record<string, unknown>;
+
+      if (!customerInfo || !customerInfo.email) {
+        return this.failure(
+          'Customer email is required but was not provided',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
+      }
 
       if (!orderResult) {
         return this.failure(
@@ -308,29 +349,30 @@ export class SendConfirmationHandler extends StepHandler {
         );
       }
 
-      const customerEmail = orderResult.customer_email as string;
       const orderNumber = orderResult.order_number as string;
-      const total = orderResult.total as number;
+      const totalAmount = orderResult.total_amount as number;
       const estimatedDelivery = orderResult.estimated_delivery as string;
+      const validatedItems = cartResult?.validated_items ?? [];
 
       // Simulate sending confirmation email
-      const messageId = crypto.randomUUID();
-      const templateVersion = 'order_confirmation_v3';
+      const emailId = crypto.randomUUID();
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          message_id: messageId,
-          recipient: customerEmail,
-          template: templateVersion,
-          subject: `Order Confirmed: ${orderNumber}`,
-          order_summary: {
+          email_id: emailId,
+          recipient: customerInfo.email,
+          subject: `Order Confirmation - ${orderNumber}`,
+          status: 'sent',
+          sent_at: now,
+          template: 'order_confirmation',
+          template_data: {
+            customer_name: customerInfo.name,
             order_number: orderNumber,
-            total: `$${total.toFixed(2)}`,
+            total_amount: totalAmount,
             estimated_delivery: estimatedDelivery,
-            item_count: (orderResult.items as unknown[]).length,
+            items: validatedItems,
           },
-          delivery_status: 'queued',
-          sent_at: new Date().toISOString(),
           provider: 'sendgrid_simulator',
         },
         { email_queue_ms: Math.random() * 100 + 50 },

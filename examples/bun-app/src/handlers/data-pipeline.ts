@@ -44,14 +44,14 @@ export class ExtractSalesDataHandler extends StepHandler {
 
       return this.success(
         {
-          source: 'sales_database',
-          record_count: recordCount,
-          sample_records: records,
-          total_revenue: Math.round(totalRevenue * 100) / 100,
+          records: records,
+          extracted_at: new Date().toISOString(),
+          source: 'SalesDatabase',
+          total_amount: Math.round(totalRevenue * 100) / 100,
           date_range: dateRange || { start: 'unknown', end: 'unknown' },
+          record_count: recordCount,
           extraction_sources: sources.filter((s) => s.includes('sales')).length || 1,
           schema_version: '2.1',
-          extracted_at: new Date().toISOString(),
         },
         { extraction_time_ms: Math.random() * 2000 + 500, rows_scanned: recordCount * 3 },
       );
@@ -94,13 +94,15 @@ export class ExtractInventoryDataHandler extends StepHandler {
 
       return this.success(
         {
-          source: 'inventory_management_system',
+          records: inventorySnapshot,
+          extracted_at: new Date().toISOString(),
+          source: 'InventorySystem',
+          total_quantity: totalUnits,
+          warehouses: warehouses,
+          products_tracked: skuCount,
           record_count: skuCount,
           warehouse_count: warehouseCount,
-          inventory_snapshot: inventorySnapshot,
-          total_units_across_warehouses: totalUnits,
           include_archived: parameters.include_archived || false,
-          snapshot_timestamp: new Date().toISOString(),
         },
         { extraction_time_ms: Math.random() * 1500 + 300 },
       );
@@ -145,17 +147,31 @@ export class ExtractCustomerDataHandler extends StepHandler {
         other: Math.floor(totalCustomers * 0.10),
       };
 
+      // Build simulated customer records for downstream consumption
+      const records = Array.from({ length: Math.min(totalCustomers, 10) }, (_, i) => ({
+        customer_id: `CUST-${String(i + 1).padStart(3, '0')}`,
+        name: `Customer ${i + 1}`,
+        tier: Object.keys(segmentBreakdown)[i % Object.keys(segmentBreakdown).length],
+        lifetime_value: Math.round((Math.random() * 10000 + 500) * 100) / 100,
+        join_date: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10),
+      }));
+
+      const totalLifetimeValue = records.reduce((sum, r) => sum + r.lifetime_value, 0);
+
       return this.success(
         {
-          source: 'crm_database',
+          records: records,
+          extracted_at: new Date().toISOString(),
+          source: 'CRMSystem',
           total_customers: totalCustomers,
+          total_lifetime_value: Math.round(totalLifetimeValue * 100) / 100,
+          tier_breakdown: segmentBreakdown,
+          avg_lifetime_value: Math.round((totalLifetimeValue / records.length) * 100) / 100,
           active_customers: activeCustomers,
           new_customers_in_period: newCustomers,
           churn_count: Math.floor(Math.random() * 50) + 5,
-          segment_breakdown: segmentBreakdown,
           region_breakdown: regionBreakdown,
           date_range: dateRange || { start: 'unknown', end: 'unknown' },
-          extracted_at: new Date().toISOString(),
         },
         { extraction_time_ms: Math.random() * 1800 + 400, api_calls_made: 3 },
       );
@@ -179,48 +195,59 @@ export class TransformSalesHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const salesData = context.getDependencyResult('extract_sales_data') as Record<string, unknown>;
+      const extractResults = context.getDependencyResult('extract_sales_data') as Record<string, unknown>;
 
-      if (!salesData) {
-        return this.failure('Missing sales extraction data', ErrorType.HANDLER_ERROR, true);
+      if (!extractResults) {
+        return this.failure('Sales extraction results not found', ErrorType.PERMANENT_ERROR, false);
       }
 
-      const records = salesData.sample_records as DataRecord[];
-      const totalRevenue = salesData.total_revenue as number;
+      const rawRecords = (extractResults.records || []) as DataRecord[];
+      const totalAmount = extractResults.total_amount as number;
 
-      // Group by category and calculate metrics
-      const categoryMetrics: Record<string, { count: number; revenue: number; avg_value: number }> = {};
-      for (const record of records) {
-        if (!categoryMetrics[record.category]) {
-          categoryMetrics[record.category] = { count: 0, revenue: 0, avg_value: 0 };
+      // Group by category to build product_sales equivalent
+      const productSales: Record<string, { total_quantity: number; total_revenue: number; order_count: number }> = {};
+      for (const record of rawRecords) {
+        if (!productSales[record.category]) {
+          productSales[record.category] = { total_quantity: 0, total_revenue: 0, order_count: 0 };
         }
-        categoryMetrics[record.category].count += 1;
-        categoryMetrics[record.category].revenue += record.value;
+        productSales[record.category].order_count += 1;
+        productSales[record.category].total_revenue += record.value;
+        productSales[record.category].total_quantity += 1;
       }
-      for (const cat of Object.keys(categoryMetrics)) {
-        categoryMetrics[cat].avg_value =
-          Math.round((categoryMetrics[cat].revenue / categoryMetrics[cat].count) * 100) / 100;
-        categoryMetrics[cat].revenue = Math.round(categoryMetrics[cat].revenue * 100) / 100;
+      for (const cat of Object.keys(productSales)) {
+        productSales[cat].total_revenue = Math.round(productSales[cat].total_revenue * 100) / 100;
       }
 
       // Calculate time-series aggregation (daily totals)
-      const dailyRevenue: Record<string, number> = {};
-      for (const record of records) {
+      const dailySales: Record<string, { total_amount: number; order_count: number; avg_order_value: number }> = {};
+      for (const record of rawRecords) {
         const day = record.timestamp.substring(0, 10);
-        dailyRevenue[day] = (dailyRevenue[day] || 0) + record.value;
+        if (!dailySales[day]) {
+          dailySales[day] = { total_amount: 0, order_count: 0, avg_order_value: 0 };
+        }
+        dailySales[day].total_amount += record.value;
+        dailySales[day].order_count += 1;
       }
+      for (const day of Object.keys(dailySales)) {
+        dailySales[day].avg_order_value =
+          Math.round((dailySales[day].total_amount / dailySales[day].order_count) * 100) / 100;
+      }
+
+      const totalRevenue = totalAmount || rawRecords.reduce((sum, r) => sum + r.value, 0);
 
       return this.success(
         {
-          category_metrics: categoryMetrics,
-          daily_revenue: dailyRevenue,
+          record_count: rawRecords.length,
+          daily_sales: dailySales,
+          product_sales: productSales,
           total_revenue: totalRevenue,
-          record_count: salesData.record_count,
-          unique_categories: Object.keys(categoryMetrics).length,
-          avg_transaction_value: Math.round((totalRevenue / records.length) * 100) / 100,
+          transformation_type: 'sales_analytics',
+          source: 'extract_sales_data',
+          unique_categories: Object.keys(productSales).length,
+          avg_transaction_value: rawRecords.length > 0 ? Math.round((totalRevenue / rawRecords.length) * 100) / 100 : 0,
           transformed_at: new Date().toISOString(),
         },
-        { transform_time_ms: Math.random() * 300 + 50, records_processed: records.length },
+        { transform_time_ms: Math.random() * 300 + 50, records_processed: rawRecords.length },
       );
     } catch (error) {
       return this.failure(
@@ -242,13 +269,13 @@ export class TransformInventoryHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const inventoryData = context.getDependencyResult('extract_inventory_data') as Record<string, unknown>;
+      const extractResults = context.getDependencyResult('extract_inventory_data') as Record<string, unknown>;
 
-      if (!inventoryData) {
-        return this.failure('Missing inventory extraction data', ErrorType.HANDLER_ERROR, true);
+      if (!extractResults) {
+        return this.failure('Inventory extraction results not found', ErrorType.PERMANENT_ERROR, false);
       }
 
-      const snapshot = inventoryData.inventory_snapshot as Array<{
+      const rawRecords = (extractResults.records || []) as Array<{
         warehouse_id: string;
         total_skus: number;
         total_units: number;
@@ -256,35 +283,39 @@ export class TransformInventoryHandler extends StepHandler {
         out_of_stock_skus: number;
       }>;
 
-      // Calculate warehouse health scores
-      const warehouseHealth = snapshot.map((wh) => {
-        const stockHealthPct = ((wh.total_skus - wh.low_stock_skus - wh.out_of_stock_skus) / wh.total_skus) * 100;
-        return {
-          warehouse_id: wh.warehouse_id,
-          health_score: Math.round(stockHealthPct * 10) / 10,
-          status: stockHealthPct > 90 ? 'healthy' : stockHealthPct > 70 ? 'warning' : 'critical',
-          utilization_pct: Math.round(Math.random() * 30 + 60),
-          units_per_sku: Math.round(wh.total_units / wh.total_skus),
+      // Build warehouse_summary (keyed by warehouse)
+      const warehouseSummary: Record<string, { total_quantity: number; product_count: number; reorder_alerts: number }> = {};
+      for (const wh of rawRecords) {
+        warehouseSummary[wh.warehouse_id] = {
+          total_quantity: wh.total_units,
+          product_count: wh.total_skus,
+          reorder_alerts: wh.low_stock_skus + wh.out_of_stock_skus,
         };
-      });
+      }
 
-      const totalLowStock = snapshot.reduce((sum, wh) => sum + wh.low_stock_skus, 0);
-      const totalOos = snapshot.reduce((sum, wh) => sum + wh.out_of_stock_skus, 0);
-      const avgHealthScore = Math.round(
-        (warehouseHealth.reduce((sum, wh) => sum + wh.health_score, 0) / warehouseHealth.length) * 10,
-      ) / 10;
+      // Build product_inventory (simulated per-product aggregation)
+      const productInventory: Record<string, { total_quantity: number; warehouse_count: number; needs_reorder: boolean }> = {};
+      for (const wh of rawRecords) {
+        const productId = wh.warehouse_id; // Use warehouse_id as proxy for product grouping
+        productInventory[productId] = {
+          total_quantity: wh.total_units,
+          warehouse_count: 1,
+          needs_reorder: wh.low_stock_skus > 0 || wh.out_of_stock_skus > 0,
+        };
+      }
+
+      const totalQuantityOnHand = rawRecords.reduce((sum, wh) => sum + wh.total_units, 0);
+      const reorderAlerts = Object.values(productInventory).filter(p => p.needs_reorder).length;
 
       return this.success(
         {
-          warehouse_health: warehouseHealth,
-          summary: {
-            total_warehouses: snapshot.length,
-            total_low_stock_alerts: totalLowStock,
-            total_out_of_stock: totalOos,
-            average_health_score: avgHealthScore,
-            overall_status: avgHealthScore > 85 ? 'healthy' : 'needs_attention',
-          },
-          total_units: inventoryData.total_units_across_warehouses,
+          record_count: rawRecords.length,
+          warehouse_summary: warehouseSummary,
+          product_inventory: productInventory,
+          total_quantity_on_hand: totalQuantityOnHand,
+          reorder_alerts: reorderAlerts,
+          transformation_type: 'inventory_analytics',
+          source: 'extract_inventory_data',
           transformed_at: new Date().toISOString(),
         },
         { transform_time_ms: Math.random() * 200 + 30 },
@@ -304,61 +335,63 @@ export class TransformInventoryHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class TransformCustomerHandler extends StepHandler {
-  static handlerName = 'DataPipeline.StepHandlers.TransformCustomerHandler';
+  static handlerName = 'DataPipeline.StepHandlers.TransformCustomersHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const customerData = context.getDependencyResult('extract_customer_data') as Record<string, unknown>;
+      const extractResults = context.getDependencyResult('extract_customer_data') as Record<string, unknown>;
 
-      if (!customerData) {
-        return this.failure('Missing customer extraction data', ErrorType.HANDLER_ERROR, true);
+      if (!extractResults) {
+        return this.failure('Customer extraction results not found', ErrorType.PERMANENT_ERROR, false);
       }
 
-      const totalCustomers = customerData.total_customers as number;
-      const activeCustomers = customerData.active_customers as number;
-      const newCustomers = customerData.new_customers_in_period as number;
-      const churnCount = customerData.churn_count as number;
-      const segments = customerData.segment_breakdown as Record<string, number>;
+      const rawRecords = (extractResults.records || []) as Array<{
+        customer_id: string;
+        name: string;
+        tier: string;
+        lifetime_value: number;
+        join_date: string;
+      }>;
 
-      // Calculate customer health metrics
-      const retentionRate = Math.round(((totalCustomers - churnCount) / totalCustomers) * 10000) / 100;
-      const activationRate = Math.round((activeCustomers / totalCustomers) * 10000) / 100;
-      const growthRate = Math.round(((newCustomers - churnCount) / totalCustomers) * 10000) / 100;
+      // Group by tier for tier_analysis
+      const tierGroups = new Map<string, Array<{ lifetime_value: number }>>();
+      for (const record of rawRecords) {
+        const existing = tierGroups.get(record.tier) || [];
+        existing.push(record);
+        tierGroups.set(record.tier, existing);
+      }
 
-      // Compute segment revenue potential (simulated)
-      const segmentAnalysis = Object.entries(segments).map(([segment, count]) => {
-        const avgRevenue: Record<string, number> = {
-          premium: 250,
-          standard: 75,
-          basic: 25,
-          trial: 0,
+      const tierAnalysis: Record<string, { customer_count: number; total_lifetime_value: number; avg_lifetime_value: number }> = {};
+      for (const [tier, tierRecords] of tierGroups) {
+        const totalLtv = tierRecords.reduce((sum, r) => sum + r.lifetime_value, 0);
+        tierAnalysis[tier] = {
+          customer_count: tierRecords.length,
+          total_lifetime_value: Math.round(totalLtv * 100) / 100,
+          avg_lifetime_value: Math.round((totalLtv / tierRecords.length) * 100) / 100,
         };
-        const estimatedRevenue = count * (avgRevenue[segment] || 0);
-        return {
-          segment,
-          customer_count: count,
-          percentage: Math.round((count / totalCustomers) * 10000) / 100,
-          estimated_monthly_revenue: estimatedRevenue,
-        };
-      });
+      }
 
-      const totalEstimatedRevenue = segmentAnalysis.reduce(
-        (sum, s) => sum + s.estimated_monthly_revenue,
-        0,
-      );
+      // Value segmentation
+      const valueSegments = {
+        high_value: rawRecords.filter(r => r.lifetime_value >= 10000).length,
+        medium_value: rawRecords.filter(r => r.lifetime_value >= 1000 && r.lifetime_value < 10000).length,
+        low_value: rawRecords.filter(r => r.lifetime_value < 1000).length,
+      };
+
+      const totalLifetimeValue = rawRecords.reduce((sum, r) => sum + r.lifetime_value, 0);
+      const avgCustomerValue = rawRecords.length > 0 ? totalLifetimeValue / rawRecords.length : 0;
 
       return this.success(
         {
-          customer_health: {
-            retention_rate: retentionRate,
-            activation_rate: activationRate,
-            growth_rate: growthRate,
-            net_promoter_estimate: Math.round(retentionRate * 0.8 - 20),
-          },
-          segment_analysis: segmentAnalysis,
-          total_estimated_monthly_revenue: totalEstimatedRevenue,
-          region_distribution: customerData.region_breakdown,
+          record_count: rawRecords.length,
+          tier_analysis: tierAnalysis,
+          value_segments: valueSegments,
+          total_lifetime_value: Math.round(totalLifetimeValue * 100) / 100,
+          avg_customer_value: Math.round(avgCustomerValue * 100) / 100,
+          transformation_type: 'customer_analytics',
+          source: 'extract_customer_data',
+          region_distribution: extractResults.region_breakdown,
           transformed_at: new Date().toISOString(),
         },
         { transform_time_ms: Math.random() * 250 + 40 },
@@ -378,54 +411,55 @@ export class TransformCustomerHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class AggregateDataHandler extends StepHandler {
-  static handlerName = 'DataPipeline.StepHandlers.AggregateDataHandler';
+  static handlerName = 'DataPipeline.StepHandlers.AggregateMetricsHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const salesTransform = context.getDependencyResult('transform_sales') as Record<string, unknown>;
-      const inventoryTransform = context.getDependencyResult('transform_inventory') as Record<string, unknown>;
-      const customerTransform = context.getDependencyResult('transform_customer') as Record<string, unknown>;
+      const salesData = context.getDependencyResult('transform_sales') as Record<string, unknown>;
+      const inventoryData = context.getDependencyResult('transform_inventory') as Record<string, unknown>;
+      const customerData = context.getDependencyResult('transform_customers') as Record<string, unknown>;
 
-      if (!salesTransform || !inventoryTransform || !customerTransform) {
+      // Validate all sources present
+      const missing: string[] = [];
+      if (!salesData) missing.push('transform_sales');
+      if (!inventoryData) missing.push('transform_inventory');
+      if (!customerData) missing.push('transform_customers');
+
+      if (missing.length > 0) {
         return this.failure(
-          'Missing one or more transform results',
-          ErrorType.HANDLER_ERROR,
-          true,
+          `Missing transform results: ${missing.join(', ')}`,
+          ErrorType.PERMANENT_ERROR,
+          false,
         );
       }
 
-      const salesRevenue = salesTransform.total_revenue as number;
-      const inventorySummary = inventoryTransform.summary as Record<string, unknown>;
-      const customerHealth = customerTransform.customer_health as Record<string, number>;
-      const estimatedMonthlyRevenue = customerTransform.total_estimated_monthly_revenue as number;
+      // Extract metrics from each source (matching source key names)
+      const totalRevenue = (salesData?.total_revenue as number) || 0;
+      const salesRecordCount = (salesData?.record_count as number) || 0;
 
-      // Cross-domain correlation analysis
-      const revenuePerCustomer = Math.round(
-        (salesRevenue / (customerHealth.activation_rate / 100 * 1000)) * 100,
-      ) / 100;
+      const totalInventory = (inventoryData?.total_quantity_on_hand as number) || 0;
+      const reorderAlerts = (inventoryData?.reorder_alerts as number) || 0;
 
-      const businessHealthScore = Math.round(
-        (customerHealth.retention_rate * 0.4 +
-          (inventorySummary.average_health_score as number) * 0.3 +
-          Math.min(customerHealth.growth_rate * 10 + 50, 100) * 0.3) * 10,
-      ) / 10;
+      const totalCustomers = (customerData?.record_count as number) || 0;
+      const totalLtv = (customerData?.total_lifetime_value as number) || 0;
+
+      // Calculate cross-source metrics
+      const revenuePerCustomer = totalCustomers > 0 ? totalRevenue / totalCustomers : 0;
+      const inventoryTurnover = totalInventory > 0 ? totalRevenue / totalInventory : 0;
 
       return this.success(
         {
-          aggregated_metrics: {
-            total_revenue: salesRevenue,
-            estimated_monthly_revenue: estimatedMonthlyRevenue,
-            revenue_per_active_customer: revenuePerCustomer,
-            inventory_health: inventorySummary.overall_status,
-            customer_retention: customerHealth.retention_rate,
-            business_health_score: businessHealthScore,
-          },
-          data_sources: {
-            sales: { records: salesTransform.record_count, categories: salesTransform.unique_categories },
-            inventory: { warehouses: (inventorySummary.total_warehouses as number), units: inventoryTransform.total_units },
-            customers: { segments: (customerTransform.segment_analysis as unknown[]).length },
-          },
+          total_revenue: totalRevenue,
+          total_inventory_quantity: totalInventory,
+          total_customers: totalCustomers,
+          total_customer_lifetime_value: totalLtv,
+          sales_transactions: salesRecordCount,
+          inventory_reorder_alerts: reorderAlerts,
+          revenue_per_customer: Math.round(revenuePerCustomer * 100) / 100,
+          inventory_turnover_indicator: Math.round(inventoryTurnover * 10000) / 10000,
+          aggregation_complete: true,
+          sources_included: 3,
           aggregated_at: new Date().toISOString(),
         },
         { aggregation_time_ms: Math.random() * 150 + 30 },
@@ -450,66 +484,80 @@ export class GenerateInsightsHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const aggregated = context.getDependencyResult('aggregate_data') as Record<string, unknown>;
+      const metrics = context.getDependencyResult('aggregate_metrics') as Record<string, unknown>;
 
-      if (!aggregated) {
-        return this.failure('Missing aggregated data', ErrorType.HANDLER_ERROR, true);
+      if (!metrics) {
+        return this.failure('Aggregated metrics not found', ErrorType.PERMANENT_ERROR, false);
       }
 
-      const metrics = aggregated.aggregated_metrics as Record<string, unknown>;
-      const healthScore = metrics.business_health_score as number;
-      const retentionRate = metrics.customer_retention as number;
-      const inventoryHealth = metrics.inventory_health as string;
+      const insights: Array<{ category: string; finding: string; metric: number; recommendation: string }> = [];
 
-      // Generate actionable insights based on the aggregated data
-      const insights: Array<{ category: string; severity: string; insight: string; recommendation: string }> = [];
+      // Revenue insights (matching source key reads)
+      const revenue = (metrics.total_revenue as number) || 0;
+      const customers = (metrics.total_customers as number) || 0;
+      const revenuePerCustomer = (metrics.revenue_per_customer as number) || 0;
 
-      if (healthScore < 70) {
+      if (revenue > 0) {
         insights.push({
-          category: 'business_health',
-          severity: 'high',
-          insight: `Business health score is ${healthScore}, below the target of 70`,
-          recommendation: 'Review customer acquisition and retention strategies',
+          category: 'Revenue',
+          finding: `Total revenue of $${revenue} with ${customers} customers`,
+          metric: revenuePerCustomer,
+          recommendation:
+            revenuePerCustomer < 500 ? 'Consider upselling strategies' : 'Customer spend is healthy',
         });
       }
 
-      if (retentionRate < 85) {
+      // Inventory insights
+      const inventoryAlerts = (metrics.inventory_reorder_alerts as number) || 0;
+      if (inventoryAlerts > 0) {
         insights.push({
-          category: 'customer_retention',
-          severity: 'medium',
-          insight: `Customer retention rate of ${retentionRate}% is below the 85% benchmark`,
-          recommendation: 'Implement targeted win-back campaigns for churned customers',
+          category: 'Inventory',
+          finding: `${inventoryAlerts} products need reordering`,
+          metric: inventoryAlerts,
+          recommendation: 'Review reorder points and place purchase orders',
+        });
+      } else {
+        insights.push({
+          category: 'Inventory',
+          finding: 'All products above reorder points',
+          metric: 0,
+          recommendation: 'Inventory levels are healthy',
         });
       }
 
-      if (inventoryHealth === 'needs_attention') {
-        insights.push({
-          category: 'inventory',
-          severity: 'medium',
-          insight: 'Inventory health requires attention across one or more warehouses',
-          recommendation: 'Review low-stock alerts and reorder points for critical SKUs',
-        });
-      }
+      // Customer insights
+      const totalLtv = (metrics.total_customer_lifetime_value as number) || 0;
+      const avgLtv = customers > 0 ? totalLtv / customers : 0;
 
-      // Always include a positive insight
       insights.push({
-        category: 'revenue',
-        severity: 'info',
-        insight: `Total revenue of $${(metrics.total_revenue as number).toFixed(2)} with estimated monthly run-rate of $${(metrics.estimated_monthly_revenue as number).toFixed(2)}`,
-        recommendation: 'Continue monitoring revenue trends for seasonal patterns',
+        category: 'Customer Value',
+        finding: `Average customer lifetime value: $${avgLtv.toFixed(2)}`,
+        metric: avgLtv,
+        recommendation:
+          avgLtv > 3000 ? 'Focus on retention programs' : 'Increase customer engagement',
       });
 
-      const reportId = `RPT-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      // Business health score
+      let score = 0;
+      if (revenuePerCustomer > 500) score += 40;
+      if (inventoryAlerts === 0) score += 30;
+      if (avgLtv > 3000) score += 30;
+
+      let rating: string;
+      if (score >= 80) rating = 'Excellent';
+      else if (score >= 60) rating = 'Good';
+      else if (score >= 40) rating = 'Fair';
+      else rating = 'Needs Improvement';
+
+      const healthScore = { score, max_score: 100, rating };
 
       return this.success(
         {
-          report_id: reportId,
           insights,
-          insight_count: insights.length,
-          high_severity_count: insights.filter((i) => i.severity === 'high').length,
-          executive_summary: `Pipeline analysis complete. Business health: ${healthScore}/100. ${insights.length} insights generated, ${insights.filter((i) => i.severity === 'high').length} requiring immediate attention.`,
+          health_score: healthScore,
+          total_metrics_analyzed: Object.keys(metrics).length,
+          pipeline_complete: true,
           generated_at: new Date().toISOString(),
-          next_scheduled_run: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         },
         { insight_generation_ms: Math.random() * 500 + 100 },
       );

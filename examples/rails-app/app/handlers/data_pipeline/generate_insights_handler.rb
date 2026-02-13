@@ -2,7 +2,8 @@ module DataPipeline
   module StepHandlers
     class GenerateInsightsHandler < TaskerCore::StepHandler::Base
       def call(context)
-        aggregation = context.get_dependency_field('aggregate_metrics', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        aggregation = context.get_dependency_result('aggregate_metrics')
 
         raise TaskerCore::Errors::PermanentError.new(
           'Aggregated metrics not available',
@@ -129,19 +130,29 @@ module DataPipeline
 
         report_id = "RPT-#{Time.current.strftime('%Y%m%d')}-#{SecureRandom.hex(4).upcase}"
 
+        # Source-compatible health_score
+        health_score_obj = {
+          score: overall_health,
+          max_score: 100,
+          rating: health_label.capitalize
+        }
+
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            insights: insights,
+            health_score: health_score_obj,
+            total_metrics_analyzed: aggregation.is_a?(Hash) ? aggregation.keys.count : 0,
+            pipeline_complete: true,
+            generated_at: Time.current.iso8601,
             report_id: report_id,
             business_health: health_label,
             overall_score: overall_health,
             component_scores: health_scores,
-            insights: insights,
             recommendations: recommendations.sort_by { |r| { 'urgent' => 0, 'high' => 1, 'medium' => 2, 'low' => 3 }[r[:priority]] || 4 },
             insight_count: insights.size,
             recommendation_count: recommendations.size,
             critical_items: insights.count { |i| i[:severity] == 'critical' },
-            data_freshness: aggregation['aggregated_at'],
-            generated_at: Time.current.iso8601
+            data_freshness: aggregation['aggregated_at']
           },
           metadata: {
             handler: self.class.name,

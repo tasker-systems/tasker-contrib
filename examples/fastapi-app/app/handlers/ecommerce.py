@@ -33,8 +33,8 @@ class ValidateCartHandler(StepHandler):
     STANDARD_SHIPPING = 9.99
 
     def call(self, context: StepContext) -> StepHandlerResult:
-        items = context.get_input("items")
-        if not items or not isinstance(items, list):
+        cart_items = context.get_input("cart_items")
+        if not cart_items or not isinstance(cart_items, list):
             return StepHandlerResult.failure(
                 message="Cart is empty or items field is missing",
                 error_type=ErrorType.VALIDATION_ERROR,
@@ -45,7 +45,7 @@ class ValidateCartHandler(StepHandler):
         validated_items: list[dict[str, Any]] = []
         subtotal = 0.0
 
-        for idx, item in enumerate(items):
+        for idx, item in enumerate(cart_items):
             sku = item.get("sku")
             name = item.get("name")
             quantity = item.get("quantity", 0)
@@ -123,7 +123,8 @@ class ProcessPaymentHandler(StepHandler):
     ERROR_TOKENS = {"tok_test_gateway_error", "tok_test_timeout"}
 
     def call(self, context: StepContext) -> StepHandlerResult:
-        payment_token = context.get_input("payment_token") or "tok_test_success"
+        payment_info = context.get_input("payment_info")
+        payment_token = (payment_info or {}).get("token", "tok_test_success")
 
         cart_result = context.get_dependency_result("validate_cart")
         if cart_result is None:
@@ -156,14 +157,18 @@ class ProcessPaymentHandler(StepHandler):
             f"{payment_token}:{total}:{transaction_id}".encode()
         ).hexdigest()[:12].upper()
 
+        payment_id = f"pay_{uuid.uuid4().hex[:12]}"
+
         return StepHandlerResult.success(
             result={
+                "payment_id": payment_id,
                 "transaction_id": transaction_id,
                 "authorization_code": authorization_code,
                 "amount_charged": total,
                 "currency": "USD",
-                "payment_method": "card",
+                "payment_method_type": "card",
                 "gateway_response": "approved",
+                "status": "completed",
                 "processed_at": datetime.now(timezone.utc).isoformat(),
             },
             metadata={
@@ -192,32 +197,49 @@ class UpdateInventoryHandler(StepHandler):
                 retryable=False,
             )
 
+        customer_info = context.get_input("customer_info")
+
         validated_items = cart_result.get("validated_items", [])
-        reservations: list[dict[str, Any]] = []
-        total_units_reserved = 0
+        updated_products: list[dict[str, Any]] = []
+        inventory_changes: list[dict[str, Any]] = []
+        total_items_reserved = 0
 
         for item in validated_items:
             reservation_id = f"res_{uuid.uuid4().hex[:12]}"
             quantity = item["quantity"]
-            total_units_reserved += quantity
+            total_items_reserved += quantity
 
-            reservations.append(
+            updated_products.append(
                 {
-                    "reservation_id": reservation_id,
-                    "sku": item["sku"],
+                    "product_id": item.get("sku"),
+                    "name": item.get("name"),
                     "quantity_reserved": quantity,
+                    "reservation_id": reservation_id,
                     "warehouse": "WH-EAST-01",
                     "status": "reserved",
-                    "expires_at": "2026-02-13T00:00:00Z",
                 }
             )
 
+            inventory_changes.append(
+                {
+                    "product_id": item.get("sku"),
+                    "change_type": "reservation",
+                    "quantity": -quantity,
+                    "reason": "order_checkout",
+                    "reservation_id": reservation_id,
+                    "inventory_log_id": f"log_{uuid.uuid4().hex[:6]}",
+                }
+            )
+
+        inventory_log_id = f"log_{uuid.uuid4().hex[:8]}"
+
         return StepHandlerResult.success(
             result={
-                "reservations": reservations,
-                "total_units_reserved": total_units_reserved,
-                "reservation_count": len(reservations),
-                "reserved_at": datetime.now(timezone.utc).isoformat(),
+                "updated_products": updated_products,
+                "total_items_reserved": total_items_reserved,
+                "inventory_changes": inventory_changes,
+                "inventory_log_id": inventory_log_id,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             },
             metadata={"warehouse": "WH-EAST-01"},
         )
@@ -234,6 +256,8 @@ class CreateOrderHandler(StepHandler):
     handler_version = "1.0.0"
 
     def call(self, context: StepContext) -> StepHandlerResult:
+        customer_info = context.get_input("customer_info")
+
         cart_result = context.get_dependency_result("validate_cart")
         payment_result = context.get_dependency_result("process_payment")
         inventory_result = context.get_dependency_result("update_inventory")
@@ -246,25 +270,36 @@ class CreateOrderHandler(StepHandler):
             )
 
         order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
-        customer_email = context.get_input("customer_email")
-        shipping_address = context.get_input("shipping_address")
+        order_number = f"ORD-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
+        customer_email = (customer_info or {}).get("email")
+        total_amount = cart_result["total"]
+
+        from datetime import timedelta
+
+        estimated_delivery = (datetime.now(timezone.utc) + timedelta(days=7)).strftime(
+            "%B %d, %Y"
+        )
 
         return StepHandlerResult.success(
             result={
                 "order_id": order_id,
+                "order_number": order_number,
                 "customer_email": customer_email,
-                "shipping_address": shipping_address,
                 "items": cart_result["validated_items"],
                 "item_count": cart_result["item_count"],
                 "subtotal": cart_result["subtotal"],
                 "tax": cart_result["tax"],
                 "shipping": cart_result["shipping"],
                 "total": cart_result["total"],
+                "total_amount": total_amount,
+                "payment_id": payment_result.get("payment_id"),
                 "transaction_id": payment_result["transaction_id"],
-                "authorization_code": payment_result["authorization_code"],
-                "reservations": inventory_result["reservations"],
+                "authorization_code": payment_result.get("authorization_code"),
+                "updated_products": inventory_result.get("updated_products"),
+                "inventory_log_id": inventory_result.get("inventory_log_id"),
                 "status": "confirmed",
                 "created_at": datetime.now(timezone.utc).isoformat(),
+                "estimated_delivery": estimated_delivery,
             },
             metadata={"order_id": order_id},
         )
@@ -281,7 +316,11 @@ class SendConfirmationHandler(StepHandler):
     handler_version = "1.0.0"
 
     def call(self, context: StepContext) -> StepHandlerResult:
+        customer_info = context.get_input("customer_info")
+
         order_result = context.get_dependency_result("create_order")
+        cart_validation = context.get_dependency_result("validate_cart")
+
         if order_result is None:
             return StepHandlerResult.failure(
                 message="Missing create_order dependency result",
@@ -290,7 +329,7 @@ class SendConfirmationHandler(StepHandler):
             )
 
         message_id = f"msg_{uuid.uuid4().hex[:16]}"
-        customer_email = order_result.get("customer_email", "unknown@example.com")
+        customer_email = (customer_info or {}).get("email", order_result.get("customer_email", "unknown@example.com"))
         order_id = order_result.get("order_id", "UNKNOWN")
         total = order_result.get("total", 0.0)
         item_count = order_result.get("item_count", 0)
@@ -304,8 +343,10 @@ class SendConfirmationHandler(StepHandler):
 
         return StepHandlerResult.success(
             result={
-                "message_id": message_id,
+                "email_sent": True,
                 "recipient": customer_email,
+                "email_type": "order_confirmation",
+                "message_id": message_id,
                 "subject": subject,
                 "body_preview": body_preview,
                 "channel": "email",

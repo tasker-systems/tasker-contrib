@@ -2,7 +2,8 @@ module DataPipeline
   module StepHandlers
     class TransformInventoryHandler < TaskerCore::StepHandler::Base
       def call(context)
-        extraction = context.get_dependency_field('extract_inventory_data', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        extraction = context.get_dependency_result('extract_inventory_data')
 
         raise TaskerCore::Errors::PermanentError.new(
           'Inventory extraction data not available',
@@ -57,8 +58,37 @@ module DataPipeline
           { category: cm[:category], estimated_turnover: (rand(2.0..12.0)).round(1) }
         end
 
+        # Build warehouse_summary and product_inventory for source compatibility
+        warehouse_summary = by_warehouse.transform_values do |wh_records|
+          {
+            total_quantity: wh_records.sum { |r| r['on_hand_quantity'].to_i },
+            product_count: wh_records.map { |r| r['sku'] }.uniq.count,
+            reorder_alerts: wh_records.count { |r| r['needs_reorder'] }
+          }
+        end
+
+        product_inventory = records.group_by { |r| r['sku'] }.transform_values do |product_records|
+          total_qty = product_records.sum { |r| r['on_hand_quantity'].to_i }
+          total_reorder = product_records.sum { |r| r['reorder_point'].to_i }
+          {
+            total_quantity: total_qty,
+            warehouse_count: product_records.map { |r| r['warehouse'] }.uniq.count,
+            needs_reorder: total_qty < total_reorder
+          }
+        end
+
+        reorder_alerts_count = product_inventory.count { |_id, data| data[:needs_reorder] }
+        total_quantity_on_hand = records.sum { |r| r['on_hand_quantity'].to_i }
+
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            record_count: records.size,
+            warehouse_summary: warehouse_summary,
+            product_inventory: product_inventory,
+            total_quantity_on_hand: total_quantity_on_hand,
+            reorder_alerts: reorder_alerts_count,
+            transformation_type: 'inventory_analytics',
+            source: 'extract_inventory_data',
             transform_id: "tfm_inv_#{SecureRandom.hex(8)}",
             source_record_count: records.size,
             category_metrics: category_metrics,

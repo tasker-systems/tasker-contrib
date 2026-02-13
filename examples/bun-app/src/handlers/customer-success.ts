@@ -20,58 +20,50 @@ export class ValidateRefundRequestHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const orderId = context.getInput<string>('order_id');
-      const customerEmail = context.getInput<string>('customer_email');
-      const refundReason = context.getInput<string>('refund_reason') || 'Customer request';
+      // TAS-137: Use getInput() for task context access (matches source key names)
+      const ticketId = context.getInput('ticket_id') as string | undefined;
+      const customerId = context.getInput('customer_id') as string | undefined;
+      const refundAmount = context.getInput('refund_amount') as number | undefined;
+      const _refundReason = context.getInput('refund_reason') as string | undefined;
 
-      if (!orderId) {
+      // Validate required fields
+      const missingFields: string[] = [];
+      if (!ticketId) missingFields.push('ticket_id');
+      if (!customerId) missingFields.push('customer_id');
+      if (!refundAmount) missingFields.push('refund_amount');
+
+      if (missingFields.length > 0) {
         return this.failure(
-          'order_id is required for refund validation',
-          ErrorType.VALIDATION_ERROR,
+          `Missing required fields for refund validation: ${missingFields.join(', ')}`,
+          ErrorType.PERMANENT_ERROR,
           false,
         );
       }
 
-      if (!customerEmail) {
-        return this.failure(
-          'customer_email is required for refund validation',
-          ErrorType.VALIDATION_ERROR,
-          false,
-        );
+      // Simulate customer service system validation
+      const purchaseDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      // Determine customer tier
+      let customerTier = 'standard';
+      if (customerId!.toLowerCase().includes('vip') || customerId!.toLowerCase().includes('premium')) {
+        customerTier = 'premium';
+      } else if (customerId!.toLowerCase().includes('gold')) {
+        customerTier = 'gold';
       }
 
-      // Simulate order lookup and validation
-      const orderAge = Math.floor(Math.random() * 60) + 1; // days since purchase
-      const refundWindow = 30; // 30-day refund window
-      const withinRefundWindow = orderAge <= refundWindow;
-
-      // Validate refund reason categories
-      const validReasons = [
-        'defective_product',
-        'wrong_item',
-        'not_as_described',
-        'changed_mind',
-        'duplicate_order',
-        'customer_request',
-        'late_delivery',
-      ];
-      const normalizedReason = refundReason.toLowerCase().replace(/\s+/g, '_');
-      const isValidReason = validReasons.includes(normalizedReason);
-
-      const requestId = `RFD-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          request_id: requestId,
-          order_id: orderId,
-          customer_email: customerEmail,
-          refund_reason: normalizedReason,
-          is_valid_reason: isValidReason,
-          order_age_days: orderAge,
-          within_refund_window: withinRefundWindow,
-          validation_status: withinRefundWindow && isValidReason ? 'approved' : 'requires_review',
-          policy_version: '2024.1',
-          validated_at: new Date().toISOString(),
+          request_validated: true,
+          ticket_id: ticketId,
+          customer_id: customerId,
+          ticket_status: 'open',
+          customer_tier: customerTier,
+          original_purchase_date: purchaseDate,
+          payment_id: `pay_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+          validation_timestamp: now,
+          namespace: 'customer_success',
         },
         { validation_time_ms: Math.random() * 80 + 20 },
       );
@@ -90,58 +82,54 @@ export class ValidateRefundRequestHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class CheckRefundEligibilityHandler extends StepHandler {
-  static handlerName = 'CustomerSuccess.StepHandlers.CheckRefundEligibilityHandler';
+  static handlerName = 'CustomerSuccess.StepHandlers.CheckRefundPolicyHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
       const validationResult = context.getDependencyResult('validate_refund_request') as Record<string, unknown>;
 
-      if (!validationResult) {
-        return this.failure('Missing refund validation result', ErrorType.HANDLER_ERROR, true);
+      if (!validationResult?.request_validated) {
+        return this.failure(
+          'Request validation must be completed before policy check',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
       }
 
-      const customerEmail = validationResult.customer_email as string;
-      const withinWindow = validationResult.within_refund_window as boolean;
-      const validReason = validationResult.is_valid_reason as boolean;
+      // Read keys matching source (customer_tier, original_purchase_date from dependency)
+      const customerTier = (validationResult.customer_tier as string) || 'standard';
+      const purchaseDateStr = validationResult.original_purchase_date as string;
+      const refundAmount = context.getInput('refund_amount') as number;
 
-      // Simulate customer history lookup
-      const previousRefunds = Math.floor(Math.random() * 5);
-      const accountAge = Math.floor(Math.random() * 365) + 30; // days
-      const totalOrders = Math.floor(Math.random() * 20) + 1;
-      const customerTier = totalOrders > 10 ? 'gold' : totalOrders > 5 ? 'silver' : 'bronze';
+      // Refund policy rules by customer tier
+      const refundPolicies: Record<string, { window_days: number; requires_approval: boolean; max_amount: number }> = {
+        standard: { window_days: 30, requires_approval: true, max_amount: 10_000 },
+        gold: { window_days: 60, requires_approval: false, max_amount: 50_000 },
+        premium: { window_days: 90, requires_approval: false, max_amount: 100_000 },
+      };
 
-      // Calculate eligibility score (0-100)
-      let eligibilityScore = 100;
-      if (!withinWindow) eligibilityScore -= 40;
-      if (!validReason) eligibilityScore -= 20;
-      if (previousRefunds > 3) eligibilityScore -= 15 * (previousRefunds - 3);
-      if (accountAge < 90) eligibilityScore -= 10;
-      eligibilityScore = Math.max(0, Math.min(100, eligibilityScore));
+      const policy = refundPolicies[customerTier] || refundPolicies.standard;
+      const purchaseDate = new Date(purchaseDateStr);
+      const daysSincePurchase = Math.floor(
+        (Date.now() - purchaseDate.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      const withinWindow = daysSincePurchase <= policy.window_days;
 
-      const eligible = eligibilityScore >= 50;
-      const requiresApproval = eligibilityScore >= 50 && eligibilityScore < 75;
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          customer_email: customerEmail,
-          eligible,
-          eligibility_score: eligibilityScore,
-          requires_manual_approval: requiresApproval,
-          customer_profile: {
-            tier: customerTier,
-            account_age_days: accountAge,
-            total_orders: totalOrders,
-            previous_refunds: previousRefunds,
-            lifetime_value: Math.round((totalOrders * 85 + Math.random() * 500) * 100) / 100,
-          },
-          decision_factors: {
-            within_refund_window: withinWindow,
-            valid_reason: validReason,
-            refund_history_ok: previousRefunds <= 3,
-            account_age_ok: accountAge >= 90,
-          },
-          checked_at: new Date().toISOString(),
+          policy_checked: true,
+          policy_compliant: true,
+          customer_tier: customerTier,
+          refund_window_days: policy.window_days,
+          days_since_purchase: daysSincePurchase,
+          within_refund_window: withinWindow,
+          requires_approval: policy.requires_approval,
+          max_allowed_amount: policy.max_amount,
+          policy_checked_at: now,
+          namespace: 'customer_success',
         },
         { eligibility_check_ms: Math.random() * 120 + 30 },
       );
@@ -160,77 +148,59 @@ export class CheckRefundEligibilityHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class CalculateRefundAmountHandler extends StepHandler {
-  static handlerName = 'CustomerSuccess.StepHandlers.CalculateRefundAmountHandler';
+  static handlerName = 'CustomerSuccess.StepHandlers.GetManagerApprovalHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const eligibilityResult = context.getDependencyResult('check_refund_eligibility') as Record<string, unknown>;
-      const validationResult = context.getDependencyResult('validate_refund_request') as Record<string, unknown>;
+      // TAS-137: Read dependency results matching source key names
+      const policyResult = context.getDependencyResult('check_refund_policy') as Record<string, unknown>;
 
-      if (!eligibilityResult || !validationResult) {
-        return this.failure('Missing dependency results', ErrorType.HANDLER_ERROR, true);
-      }
-
-      const eligible = eligibilityResult.eligible as boolean;
-
-      if (!eligible) {
-        return this.success(
-          {
-            refund_amount: 0,
-            original_amount: 0,
-            refund_type: 'none',
-            reason: 'Customer not eligible for refund',
-            eligible: false,
-          },
-          { calculation_time_ms: 5 },
+      if (!policyResult?.policy_checked) {
+        return this.failure(
+          'Policy check must be completed before approval',
+          ErrorType.PERMANENT_ERROR,
+          false,
         );
       }
 
-      // Simulate order amount calculation
-      const originalAmount = Math.round((Math.random() * 200 + 20) * 100) / 100;
-      const reason = validationResult.refund_reason as string;
-      const profile = eligibilityResult.customer_profile as Record<string, unknown>;
-      const tier = profile.tier as string;
+      const requiresApproval = policyResult.requires_approval as boolean;
+      const customerTier = policyResult.customer_tier as string;
+      const customerId = (context.getDependencyResult('validate_refund_request') as Record<string, unknown>)?.customer_id as string;
 
-      // Calculate refund based on reason and tier
-      let refundPercentage = 100;
-      let restockingFee = 0;
+      const now = new Date().toISOString();
 
-      if (reason === 'changed_mind') {
-        restockingFee = Math.round(originalAmount * 0.15 * 100) / 100; // 15% restocking
-        refundPercentage = 85;
-      } else if (reason === 'late_delivery') {
-        refundPercentage = 100; // Full refund for late delivery
-      }
-
-      // Loyalty bonus: gold tier customers get full refunds
-      if (tier === 'gold' && refundPercentage < 100) {
-        refundPercentage = 100;
-        restockingFee = 0;
-      }
-
-      const refundAmount = Math.round(originalAmount * (refundPercentage / 100) * 100) / 100;
-
-      return this.success(
-        {
-          original_amount: originalAmount,
-          refund_amount: refundAmount,
-          restocking_fee: restockingFee,
-          refund_percentage: refundPercentage,
-          refund_type: refundAmount === originalAmount ? 'full' : 'partial',
-          currency: 'usd',
-          loyalty_adjustment: tier === 'gold' && reason === 'changed_mind',
-          breakdown: {
-            product_refund: refundAmount,
-            tax_refund: Math.round(refundAmount * 0.0875 * 100) / 100,
-            shipping_refund: reason === 'defective_product' ? 9.99 : 0,
+      if (requiresApproval) {
+        // Approval granted (simulated)
+        return this.success(
+          {
+            approval_obtained: true,
+            approval_required: true,
+            auto_approved: false,
+            approval_id: `appr_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+            manager_id: `mgr_${Math.floor(Math.random() * 5) + 1}`,
+            manager_notes: `Approved refund request for customer ${customerId}`,
+            approved_at: now,
+            namespace: 'customer_success',
           },
-          eligible: true,
-          calculated_at: new Date().toISOString(),
-        },
-        { calculation_time_ms: Math.random() * 40 + 10 },
-      );
+          { calculation_time_ms: Math.random() * 40 + 10 },
+        );
+      } else {
+        // Auto-approved
+        return this.success(
+          {
+            approval_obtained: true,
+            approval_required: false,
+            auto_approved: true,
+            approval_id: null,
+            manager_id: null,
+            manager_notes: `Auto-approved for customer tier ${customerTier}`,
+            approved_at: now,
+            namespace: 'customer_success',
+          },
+          { calculation_time_ms: Math.random() * 40 + 10 },
+        );
+      }
     } catch (error) {
       return this.failure(
         error instanceof Error ? error.message : String(error),
@@ -246,70 +216,49 @@ export class CalculateRefundAmountHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class NotifyCustomerSuccessHandler extends StepHandler {
-  static handlerName = 'CustomerSuccess.StepHandlers.NotifyCustomerSuccessHandler';
+  static handlerName = 'CustomerSuccess.StepHandlers.ExecuteRefundWorkflowHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
+      // TAS-137: Read dependency results matching source key names
+      const approvalResult = context.getDependencyResult('get_manager_approval') as Record<string, unknown>;
+
+      if (!approvalResult?.approval_obtained) {
+        return this.failure(
+          'Manager approval must be obtained before executing refund',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
+      }
+
       const validationResult = context.getDependencyResult('validate_refund_request') as Record<string, unknown>;
-      const eligibilityResult = context.getDependencyResult('check_refund_eligibility') as Record<string, unknown>;
-      const calculationResult = context.getDependencyResult('calculate_refund_amount') as Record<string, unknown>;
-
-      if (!validationResult || !eligibilityResult || !calculationResult) {
-        return this.failure('Missing dependency results', ErrorType.HANDLER_ERROR, true);
+      const paymentId = validationResult?.payment_id as string;
+      if (!paymentId) {
+        return this.failure(
+          'Payment ID not found in validation results',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
       }
 
-      const customerEmail = validationResult.customer_email as string;
-      const requestId = validationResult.request_id as string;
-      const refundAmount = calculationResult.refund_amount as number;
-      const eligible = calculationResult.eligible as boolean;
+      const correlationId =
+        (context.getInput('correlation_id') as string) || `cs-corr_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`;
 
-      // Determine notification template and channels
-      const template = eligible ? 'refund_approved_v2' : 'refund_denied_v2';
-      const subject = eligible
-        ? `Your refund of $${refundAmount.toFixed(2)} has been approved`
-        : 'Update on your refund request';
-
-      const notifications = [
-        {
-          channel: 'email',
-          recipient: customerEmail,
-          template,
-          subject,
-          message_id: crypto.randomUUID(),
-          status: 'queued',
-        },
-        {
-          channel: 'in_app',
-          recipient: customerEmail,
-          template: `${template}_in_app`,
-          message_id: crypto.randomUUID(),
-          status: 'delivered',
-        },
-      ];
-
-      // Notify CS team via internal channel for high-value refunds
-      if (refundAmount > 100) {
-        notifications.push({
-          channel: 'slack',
-          recipient: '#cs-refunds',
-          template: 'cs_team_refund_alert',
-          subject: `High-value refund: ${requestId} - $${refundAmount.toFixed(2)}`,
-          message_id: crypto.randomUUID(),
-          status: 'queued',
-        });
-      }
+      // Simulate task creation in payments namespace
+      const taskId = `task_${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          request_id: requestId,
-          notifications,
-          notification_count: notifications.length,
-          customer_notified: true,
-          team_notified: refundAmount > 100,
-          csat_survey_scheduled: eligible,
-          follow_up_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          notified_at: new Date().toISOString(),
+          task_delegated: true,
+          target_namespace: 'payments',
+          target_workflow: 'process_refund',
+          delegated_task_id: taskId,
+          delegated_task_status: 'created',
+          delegation_timestamp: now,
+          correlation_id: correlationId,
+          namespace: 'customer_success',
         },
         { notification_dispatch_ms: Math.random() * 100 + 30 },
       );
@@ -328,55 +277,41 @@ export class NotifyCustomerSuccessHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class UpdateCrmRecordHandler extends StepHandler {
-  static handlerName = 'CustomerSuccess.StepHandlers.UpdateCrmRecordHandler';
+  static handlerName = 'CustomerSuccess.StepHandlers.UpdateTicketStatusHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const validationResult = context.getDependencyResult('validate_refund_request') as Record<string, unknown>;
-      const eligibilityResult = context.getDependencyResult('check_refund_eligibility') as Record<string, unknown>;
-      const calculationResult = context.getDependencyResult('calculate_refund_amount') as Record<string, unknown>;
-      const notificationResult = context.getDependencyResult('notify_customer_success') as Record<string, unknown>;
+      // TAS-137: Read dependency results matching source key names
+      const delegationResult = context.getDependencyResult('execute_refund_workflow') as Record<string, unknown>;
 
-      if (!validationResult || !eligibilityResult || !calculationResult || !notificationResult) {
-        return this.failure('Missing dependency results', ErrorType.HANDLER_ERROR, true);
+      if (!delegationResult?.task_delegated) {
+        return this.failure(
+          'Refund workflow must be executed before updating ticket',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
       }
 
-      const customerEmail = validationResult.customer_email as string;
-      const orderId = validationResult.order_id as string;
-      const requestId = validationResult.request_id as string;
-      const profile = eligibilityResult.customer_profile as Record<string, unknown>;
-      const refundAmount = calculationResult.refund_amount as number;
+      const validationResult = context.getDependencyResult('validate_refund_request') as Record<string, unknown>;
+      const ticketId = validationResult?.ticket_id as string;
+      const delegatedTaskId = delegationResult.delegated_task_id as string;
+      const correlationId = delegationResult.correlation_id as string;
+      const refundAmount = context.getInput('refund_amount') as number;
 
-      // Simulate CRM record update
-      const crmRecordId = `CRM-${crypto.randomUUID().substring(0, 8)}`;
-      const caseId = `CASE-${Date.now()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
-
-      const crmUpdates = [
-        { field: 'last_interaction', value: new Date().toISOString(), updated: true },
-        { field: 'refund_history', value: `Added ${requestId}`, updated: true },
-        { field: 'satisfaction_risk', value: refundAmount > 100 ? 'medium' : 'low', updated: true },
-        { field: 'retention_score', value: Math.max(0, (profile.lifetime_value as number) - refundAmount), updated: true },
-      ];
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          crm_record_id: crmRecordId,
-          case_id: caseId,
-          customer_email: customerEmail,
-          order_id: orderId,
-          request_id: requestId,
-          updates_applied: crmUpdates,
-          fields_updated: crmUpdates.length,
-          case_status: 'resolved',
-          resolution_type: calculationResult.eligible ? 'refund_issued' : 'refund_denied',
-          resolution_summary: {
-            refund_amount: refundAmount,
-            customer_tier: profile.tier,
-            notifications_sent: notificationResult.notification_count,
-          },
-          crm_provider: 'salesforce_simulator',
-          updated_at: new Date().toISOString(),
+          ticket_updated: true,
+          ticket_id: ticketId,
+          previous_status: 'in_progress',
+          new_status: 'resolved',
+          resolution_note: `Refund of $${(refundAmount / 100).toFixed(2)} processed successfully. Delegated task ID: ${delegatedTaskId}. Correlation ID: ${correlationId}`,
+          updated_at: now,
+          refund_completed: true,
+          delegated_task_id: delegatedTaskId,
+          namespace: 'customer_success',
         },
         { crm_update_ms: Math.random() * 150 + 40 },
       );

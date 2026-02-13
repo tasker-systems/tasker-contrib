@@ -2,8 +2,22 @@ module CustomerSuccess
   module StepHandlers
     class GetManagerApprovalHandler < TaskerCore::StepHandler::Base
       def call(context)
-        validation = context.get_dependency_field('validate_refund_request', ['result'])
-        policy_check = context.get_dependency_field('check_refund_policy', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        policy_result_full = context.get_dependency_result('check_refund_policy')
+        policy_check = policy_result_full&.is_a?(Hash) ? policy_result_full : nil
+
+        validation_full = context.get_dependency_result('validate_refund_request')
+        validation = validation_full&.is_a?(Hash) ? validation_full : nil
+
+        # TAS-137: Use get_dependency_field() for nested field extraction
+        requires_approval = context.get_dependency_field('check_refund_policy', 'requires_approval')
+        customer_tier_field = context.get_dependency_field('check_refund_policy', 'customer_tier')
+        ticket_id = context.get_dependency_field('validate_refund_request', 'ticket_id')
+        customer_id_field = context.get_dependency_field('validate_refund_request', 'customer_id')
+
+        # TAS-137: Use get_input() for task context access
+        refund_amount_input = context.get_input('refund_amount')
+        refund_reason_input = context.get_input('refund_reason')
         agent_id = context.get_input('agent_id')
         priority = context.get_input('priority') || 'normal'
 
@@ -16,7 +30,14 @@ module CustomerSuccess
         unless policy_check['policy_passed']
           return TaskerCore::Types::StepHandlerCallResult.success(
             result: {
+              approval_obtained: false,
+              approval_required: false,
+              auto_approved: false,
               approval_id: "apr_#{SecureRandom.hex(8)}",
+              manager_id: nil,
+              manager_notes: nil,
+              approved_at: Time.current.iso8601,
+              namespace: 'customer_success',
               approved: false,
               reason: 'policy_violation',
               violations: policy_check['violations'],
@@ -36,7 +57,14 @@ module CustomerSuccess
         if policy_check['auto_approve']
           return TaskerCore::Types::StepHandlerCallResult.success(
             result: {
+              approval_obtained: true,
+              approval_required: false,
+              auto_approved: true,
               approval_id: "apr_#{SecureRandom.hex(8)}",
+              manager_id: nil,
+              manager_notes: nil,
+              approved_at: Time.current.iso8601,
+              namespace: 'customer_success',
               approved: true,
               reason: 'auto_approved',
               approval_level: 'auto',
@@ -82,7 +110,14 @@ module CustomerSuccess
 
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            approval_obtained: approved,
+            approval_required: true,
+            auto_approved: false,
             approval_id: approval_id,
+            manager_id: manager[:id],
+            manager_notes: approved ? "Approved refund request for customer #{customer_id_field}" : 'Refund request does not meet approval criteria after review',
+            approved_at: Time.current.iso8601,
+            namespace: 'customer_success',
             approved: approved,
             reason: approved ? 'manager_approved' : 'manager_denied',
             denial_reason: approved ? nil : 'Refund request does not meet approval criteria after review',

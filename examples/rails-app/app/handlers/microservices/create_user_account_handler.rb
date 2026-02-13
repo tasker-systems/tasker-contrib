@@ -5,10 +5,14 @@ module Microservices
       BLOCKED_DOMAINS = %w[tempmail.com throwaway.email mailinator.com].freeze
 
       def call(context)
-        email = context.get_input('email')
-        name = context.get_input('name')
-        plan = context.get_input('plan')
-        referral_code = context.get_input('referral_code')
+        # TAS-137: Use get_input_or() for task context with default values
+        user_info = context.get_input_or('user_info', {})
+        user_info = user_info.deep_symbolize_keys if user_info.is_a?(Hash)
+
+        email = user_info[:email]
+        name = user_info[:name]
+        plan = user_info[:plan] || 'free'
+        referral_code = user_info[:referral_code]
 
         # Validate email
         raise TaskerCore::Errors::PermanentError.new(
@@ -59,6 +63,7 @@ module Microservices
             plan: plan,
             referral_code: referral_code,
             referral_valid: referral_valid,
+            status: 'created',
             account_status: 'created',
             email_verified: false,
             verification_token: SecureRandom.urlsafe_base64(32),

@@ -8,7 +8,13 @@ module Microservices
       }.freeze
 
       def call(context)
-        account_data = context.get_dependency_field('create_user_account', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step data
+        account_data_result = context.get_dependency_result('create_user_account')
+        account_data = account_data_result&.is_a?(Hash) ? account_data_result : nil
+
+        # TAS-137: Use get_dependency_field() for nested field extraction
+        user_id_field = context.get_dependency_field('create_user_account', 'user_id')
+        plan_field = context.get_dependency_field('create_user_account', 'plan') || 'free'
 
         raise TaskerCore::Errors::PermanentError.new(
           'User account data not available',
@@ -56,6 +62,8 @@ module Microservices
             trial_end_date: trial_end,
             payment_method_required: plan != 'free',
             next_billing_date: (Time.current + (trial_days > 0 ? trial_days : 30).days).to_date.iso8601,
+            price: monthly_price,
+            status: plan == 'free' ? 'active' : 'trial',
             billing_status: plan == 'free' ? 'active' : 'trial',
             created_at: Time.current.iso8601
           },

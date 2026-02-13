@@ -2,7 +2,8 @@ module DataPipeline
   module StepHandlers
     class TransformSalesHandler < TaskerCore::StepHandler::Base
       def call(context)
-        extraction = context.get_dependency_field('extract_sales_data', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        extraction = context.get_dependency_result('extract_sales_data')
 
         raise TaskerCore::Errors::PermanentError.new(
           'Sales extraction data not available',
@@ -61,14 +62,38 @@ module DataPipeline
         discounted = records.select { |r| r['discount_rate'].to_f > 0 }
         avg_discount = discounted.empty? ? 0.0 : (discounted.sum { |r| r['discount_rate'].to_f } / discounted.size).round(3)
 
+        # Build daily_sales and product_sales for source compatibility
+        daily_sales = records.group_by { |r| r['sale_date'] }
+                             .transform_values do |day_records|
+                               {
+                                 total_amount: day_records.sum { |r| r['revenue'].to_f },
+                                 order_count: day_records.count,
+                                 avg_order_value: day_records.sum { |r| r['revenue'].to_f } / day_records.count.to_f
+                               }
+        end
+
+        product_sales = records.group_by { |r| r['product'] }
+                               .transform_values do |product_records|
+                                 {
+                                   total_quantity: product_records.sum { |r| r['quantity'].to_i },
+                                   total_revenue: product_records.sum { |r| r['revenue'].to_f },
+                                   order_count: product_records.count
+                                 }
+        end
+
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            record_count: records.size,
+            daily_sales: daily_sales,
+            product_sales: product_sales,
+            total_revenue: total_revenue.round(2),
+            transformation_type: 'sales_analytics',
+            source: 'extract_sales_data',
             transform_id: "tfm_sales_#{SecureRandom.hex(8)}",
             source_record_count: records.size,
             product_metrics: product_metrics,
             region_metrics: region_metrics,
             channel_metrics: channel_metrics,
-            total_revenue: total_revenue.round(2),
             average_discount_rate: avg_discount,
             discount_usage_rate: ((discounted.size.to_f / records.size) * 100).round(1),
             top_product: product_metrics.first&.dig(:product),

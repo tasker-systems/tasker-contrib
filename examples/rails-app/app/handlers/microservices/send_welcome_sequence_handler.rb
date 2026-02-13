@@ -2,9 +2,19 @@ module Microservices
   module StepHandlers
     class SendWelcomeSequenceHandler < TaskerCore::StepHandler::Base
       def call(context)
-        account_data = context.get_dependency_field('create_user_account', ['result'])
-        billing_data = context.get_dependency_field('setup_billing_profile', ['result'])
-        preferences_data = context.get_dependency_field('initialize_preferences', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step data
+        account_data_full = context.get_dependency_result('create_user_account')
+        billing_data_full = context.get_dependency_result('setup_billing_profile')
+        preferences_data_full = context.get_dependency_result('initialize_preferences')
+
+        account_data = account_data_full&.is_a?(Hash) ? account_data_full : nil
+        billing_data = billing_data_full&.is_a?(Hash) ? billing_data_full : nil
+        preferences_data = preferences_data_full&.is_a?(Hash) ? preferences_data_full : nil
+
+        # TAS-137: Use get_dependency_field() for nested field extraction
+        user_id_field = context.get_dependency_field('create_user_account', 'user_id')
+        email_field = context.get_dependency_field('create_user_account', 'email')
+        plan_field = context.get_dependency_field('create_user_account', 'plan') || 'free'
 
         raise TaskerCore::Errors::PermanentError.new(
           'Upstream data not available for welcome sequence',
@@ -100,10 +110,18 @@ module Microservices
           drip_schedule << { day: 10, template: 'trial_reminder', subject: "Your trial ends in #{billing_data['trial_days'].to_i - 10} days" }
         end
 
+        channels_used = notifications_sent.map { |n| n[:channel] }.uniq
+
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
-            sequence_id: "seq_#{SecureRandom.hex(8)}",
             user_id: user_id,
+            plan: plan,
+            channels_used: channels_used,
+            messages_sent: notifications_sent.size,
+            welcome_sequence_id: "welcome_#{SecureRandom.hex(6)}",
+            status: 'sent',
+            sent_at: sent_at.iso8601,
+            sequence_id: "seq_#{SecureRandom.hex(8)}",
             email: email,
             notifications_sent: notifications_sent,
             total_notifications: notifications_sent.size,

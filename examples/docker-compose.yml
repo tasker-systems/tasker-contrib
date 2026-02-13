@@ -10,14 +10,16 @@
 # app-specific database for domain models (orders, analytics_jobs, etc.).
 
 services:
-  postgres:
+  tasker-postgres:
     image: ghcr.io/tasker-systems/tasker-postgres:latest
+    container_name: tasker-postgres
     ports:
       - "5432:5432"
     environment:
       POSTGRES_USER: tasker
       POSTGRES_PASSWORD: tasker
       POSTGRES_DB: tasker
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init-app-dbs.sql
@@ -26,51 +28,83 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - tasker-network
 
-  orchestration:
+  tasker-orchestration:
     image: ghcr.io/tasker-systems/tasker-orchestration:latest
+    container_name: tasker-orchestration
     depends_on:
-      postgres:
+      tasker-postgres:
         condition: service_healthy
       dragonfly:
+        condition: service_started
+      rabbitmq:
         condition: service_started
     ports:
       - "8080:8080"
     environment:
-      DATABASE_URL: postgresql://tasker:tasker@postgres:5432/tasker
+      DATABASE_URL: postgresql://tasker:tasker@tasker-postgres:5432/tasker
       REDIS_URL: redis://dragonfly:6379
       TASKER_ENV: development
       RUST_LOG: info
+      LOG_LEVEL: info
+      PORT: 8080
+      WORKSPACE_PATH: /app
+      # TAS-61 V2: Single-file configuration from v2 directory
+      TASKER_CONFIG_PATH: /app/config/orchestration.toml
+    volumes:
+      - ./orchestration/config:/app/config:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/live || exit 1"]
+      test: ["CMD", "curl", "-f", "http://tasker-orchestration:8080/health"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 3
       start_period: 15s
+    networks:
+      - tasker-network
 
   dragonfly:
     image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    container_name: dragonfly
+    command: ["--memcached_port", "11211"]
     ports:
-      - "6379:6379"
+      - "6379:6379" # Redis protocol
+      - "11211:11211" # Memcached protocol
+    volumes:
+      - dragonfly_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - tasker-network
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:4-management-alpine
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: tasker
+      RABBITMQ_DEFAULT_PASS: tasker
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - tasker-network
 
 volumes:
   postgres_data:
+  rabbitmq_data:
+  dragonfly_data:
+
+networks:
+  tasker-network:
+    driver: bridge

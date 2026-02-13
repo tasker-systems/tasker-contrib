@@ -65,6 +65,11 @@ async fn create_refund_check(
 
     // Determine which namespace workflow to submit based on the request.
     // For the team scaling pattern, we create tasks in both namespaces.
+    //
+    // Customer Success context must include:
+    //   - ticket_id (required by validate_refund_request)
+    //   - customer_id (required by validate_refund_request - source handler contract)
+    //   - refund_amount (required by validate_refund_request and read by check_refund_policy, update_ticket_status)
     let cs_task_payload = serde_json::json!({
         "name": "customer_success_process_refund",
         "namespace": "customer_success_rs",
@@ -74,6 +79,7 @@ async fn create_refund_check(
         "reason": format!("Refund request: {} - {}", req.order_id, req.reason),
         "context": {
             "ticket_id": req.ticket_id.as_deref().unwrap_or("TICKET-000"),
+            "customer_id": format!("cust_{}", req.customer_email.split('@').next().unwrap_or("unknown")),
             "customer_email": req.customer_email,
             "order_id": req.order_id,
             "refund_amount": req.refund_amount,
@@ -82,6 +88,11 @@ async fn create_refund_check(
         }
     });
 
+    // Payments context must include:
+    //   - payment_id (required by validate_payment_eligibility - source handler contract)
+    //   - refund_amount (required by validate_payment_eligibility)
+    //   - customer_email (read by notify_customer from context)
+    let payment_id = format!("pay_{}", req.order_id.replace('-', ""));
     let payments_task_payload = serde_json::json!({
         "name": "payments_process_refund",
         "namespace": "payments_rs",
@@ -90,6 +101,7 @@ async fn create_refund_check(
         "source_system": "example-axum",
         "reason": format!("Payment refund: {} - ${:.2}", req.order_id, req.refund_amount),
         "context": {
+            "payment_id": payment_id,
             "order_id": req.order_id,
             "customer_email": req.customer_email,
             "refund_amount": req.refund_amount,

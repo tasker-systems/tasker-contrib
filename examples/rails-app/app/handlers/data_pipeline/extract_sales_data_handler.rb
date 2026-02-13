@@ -56,6 +56,7 @@ module DataPipeline
             date_range: { start_date: start_date, end_date: end_date },
             record_count: records.size,
             records: records,
+            total_amount: total_revenue.round(2),
             total_revenue: total_revenue.round(2),
             extracted_at: Time.current.iso8601
           },

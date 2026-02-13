@@ -1,0 +1,274 @@
+# Tasker Configuration - orchestration Context
+# Environment: test
+# Generated: 2026-01-28T23:21:16.167378+00:00
+# Source: config/tasker
+#
+# This file is a MERGED configuration (base + environment overrides).
+# DO NOT EDIT manually - regenerate using: tasker-ctl config generate
+#
+# Environment Variable Overrides (applied at runtime):
+# - DATABASE_URL: Override database.url (K8s secrets rotation)
+# - TASKER_TEMPLATE_PATH: Override worker.template_path (testing)
+# - TASKER_WEB_BIND_ADDRESS: Override web bind address (CI/testing port isolation)
+#
+
+[common.backoff]
+backoff_multiplier = 2.0
+default_backoff_seconds = [
+    1,
+    2,
+    4,
+]
+jitter_enabled = true
+jitter_max_percentage = 0.15
+max_backoff_seconds = 10
+
+[common.cache]
+analytics_ttl_seconds = 30
+backend = "redis"
+default_ttl_seconds = 3600
+enabled = true
+template_ttl_seconds = 300
+
+[common.cache.moka]
+max_capacity = 10000
+
+[common.cache.redis]
+connection_timeout_seconds = 5
+database = 0
+max_connections = 10
+url = "${REDIS_URL:-redis://localhost:6379}"
+
+[common.circuit_breakers.component_configs.cache]
+failure_threshold = 5
+success_threshold = 2
+
+[common.circuit_breakers.component_configs.messaging]
+failure_threshold = 5
+success_threshold = 2
+
+[common.circuit_breakers.component_configs.web]
+failure_threshold = 5
+success_threshold = 2
+
+[common.circuit_breakers.component_configs.task_readiness]
+failure_threshold = 10
+success_threshold = 3
+
+[common.circuit_breakers.default_config]
+failure_threshold = 5
+success_threshold = 2
+timeout_seconds = 30
+
+[common.circuit_breakers.global_settings]
+metrics_collection_interval_seconds = 10
+min_state_transition_interval_seconds = 5.0
+
+[common.database]
+url = "${DATABASE_URL:-postgresql://tasker:tasker@localhost:5432/tasker_rust_test}"
+
+[common.database.pool]
+acquire_timeout_seconds = 30
+idle_timeout_seconds = 60
+max_connections = 30
+max_lifetime_seconds = 3600
+min_connections = 2
+slow_acquire_threshold_ms = 500
+
+[common.execution]
+environment = "test"
+step_enqueue_batch_size = 10
+
+[common.mpsc_channels.event_publisher]
+event_queue_buffer_size = 100
+
+[common.mpsc_channels.ffi]
+ruby_event_buffer_size = 100
+
+[common.mpsc_channels.overflow_policy]
+log_warning_threshold = 0.8
+
+[common.mpsc_channels.overflow_policy.metrics]
+saturation_check_interval_seconds = 10
+
+[common.pgmq_database]
+enabled = true
+url = "${PGMQ_DATABASE_URL:-}"
+
+[common.pgmq_database.pool]
+acquire_timeout_seconds = 5
+idle_timeout_seconds = 60
+max_connections = 10
+max_lifetime_seconds = 3600
+min_connections = 1
+slow_acquire_threshold_ms = 500
+
+[common.queues]
+backend = "${TASKER_MESSAGING_BACKEND:-pgmq}"
+default_visibility_timeout_seconds = 30
+naming_pattern = "{namespace}_{name}_queue"
+orchestration_namespace = "orchestration"
+worker_namespace = "worker"
+
+[common.queues.orchestration_queues]
+step_results = "orchestration_step_results"
+task_finalizations = "orchestration_task_finalizations"
+task_requests = "orchestration_task_requests"
+
+[common.queues.pgmq]
+poll_interval_ms = 250
+
+[common.queues.pgmq.queue_depth_thresholds]
+critical_threshold = 500
+overflow_threshold = 1000
+
+[common.queues.rabbitmq]
+heartbeat_seconds = 30
+prefetch_count = 10
+url = "${RABBITMQ_URL:-amqp://tasker:tasker@localhost:5672/%2F}"
+
+[common.system]
+default_dependent_system = "default"
+
+[common.task_templates]
+search_paths = ["config/task_templates/*.{yml,yaml}"]
+
+[orchestration]
+enable_performance_logging = false
+shutdown_timeout_ms = 5000
+
+[orchestration.batch_processing]
+checkpoint_stall_minutes = 2
+default_batch_size = 100
+enabled = true
+max_parallel_batches = 10
+
+[orchestration.decision_points]
+enable_detailed_logging = false
+enable_metrics = true
+enabled = true
+max_decision_depth = 20
+max_steps_per_decision = 100
+warn_threshold_depth = 10
+warn_threshold_steps = 50
+
+[orchestration.dlq]
+enabled = true
+
+[orchestration.dlq.staleness_detection]
+batch_size = 10
+detection_interval_seconds = 60
+dry_run = false
+enabled = true
+
+[orchestration.dlq.staleness_detection.actions]
+auto_move_to_dlq = true
+auto_transition_to_error = true
+emit_events = true
+event_channel = "task_staleness_detected"
+
+[orchestration.dlq.staleness_detection.thresholds]
+steps_in_process_minutes = 5
+task_max_lifetime_hours = 1
+waiting_for_dependencies_minutes = 5
+waiting_for_retry_minutes = 2
+
+[orchestration.event_systems.orchestration]
+deployment_mode = "Hybrid"
+system_id = "orchestration-event-system"
+
+[orchestration.event_systems.orchestration.health]
+enabled = true
+error_rate_threshold_per_minute = 20
+max_consecutive_errors = 10
+performance_monitoring_enabled = true
+
+[orchestration.event_systems.orchestration.processing]
+batch_size = 20
+max_concurrent_operations = 50
+max_retries = 3
+
+[orchestration.event_systems.orchestration.processing.backoff]
+initial_delay_ms = 50
+jitter_percent = 0.1
+max_delay_ms = 500
+multiplier = 1.5
+
+[orchestration.event_systems.orchestration.timing]
+claim_timeout_seconds = 300
+fallback_polling_interval_seconds = 1
+health_check_interval_seconds = 30
+processing_timeout_seconds = 60
+visibility_timeout_seconds = 30
+
+[orchestration.event_systems.task_readiness]
+deployment_mode = "Hybrid"
+system_id = "task-readiness-event-system"
+
+[orchestration.event_systems.task_readiness.health]
+enabled = true
+error_rate_threshold_per_minute = 20
+max_consecutive_errors = 10
+performance_monitoring_enabled = true
+
+[orchestration.event_systems.task_readiness.processing]
+batch_size = 50
+max_concurrent_operations = 100
+max_retries = 3
+
+[orchestration.event_systems.task_readiness.processing.backoff]
+initial_delay_ms = 100
+jitter_percent = 0.1
+max_delay_ms = 10000
+multiplier = 2.0
+
+[orchestration.event_systems.task_readiness.timing]
+claim_timeout_seconds = 300
+fallback_polling_interval_seconds = 1
+health_check_interval_seconds = 30
+processing_timeout_seconds = 60
+visibility_timeout_seconds = 30
+
+[orchestration.grpc]
+bind_address = "${TASKER_ORCHESTRATION_GRPC_BIND_ADDRESS:-0.0.0.0:9190}"
+enable_health_service = true
+enable_reflection = true
+enabled = true
+keepalive_interval_seconds = 30
+keepalive_timeout_seconds = 20
+max_concurrent_streams = 200
+max_frame_size = 16384
+tls_enabled = false
+
+[orchestration.mpsc_channels.command_processor]
+command_buffer_size = 100
+
+[orchestration.mpsc_channels.event_listeners]
+pgmq_event_buffer_size = 100
+
+[orchestration.mpsc_channels.event_systems]
+event_channel_buffer_size = 100
+
+[orchestration.web]
+bind_address = "${TASKER_WEB_BIND_ADDRESS:-0.0.0.0:8080}"
+config_endpoint_enabled = true
+enabled = true
+request_timeout_ms = 30000
+
+[orchestration.web.auth]
+api_key = ""
+api_key_header = "X-API-Key"
+enabled = false
+jwt_audience = "tasker-api"
+jwt_issuer = "tasker-core"
+jwt_private_key = ""
+jwt_public_key = "${TASKER_JWT_PUBLIC_KEY:-}"
+jwt_public_key_path = "${TASKER_JWT_PUBLIC_KEY_PATH:-}"
+jwt_token_expiry_hours = 24
+
+[orchestration.web.database_pools]
+max_total_connections_hint = 30
+web_api_connection_timeout_seconds = 30
+web_api_idle_timeout_seconds = 600
+web_api_max_connections = 15
+web_api_pool_size = 10

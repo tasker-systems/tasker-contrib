@@ -17,65 +17,55 @@ import {
 // ---------------------------------------------------------------------------
 
 export class ProcessRefundPaymentHandler extends StepHandler {
-  static handlerName = 'Payments.StepHandlers.ProcessRefundPaymentHandler';
+  static handlerName = 'Payments.StepHandlers.ValidatePaymentEligibilityHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const refundAmount = context.getInput<string>('refund_amount') || '0.00';
-      const paymentMethod = context.getInput<string>('payment_method') || 'credit_card';
-      const originalTransactionId = context.getInput<string>('original_transaction_id');
+      // TAS-137: Use getInput() matching source key names
+      const paymentId = context.getInput('payment_id') as string | undefined;
+      const refundAmount = context.getInput('refund_amount') as number | undefined;
+      const _partialRefund = context.getInput('partial_refund') as boolean | undefined;
 
-      const amount = parseFloat(refundAmount);
-      if (isNaN(amount) || amount <= 0) {
+      // Validate required fields
+      const missingFields: string[] = [];
+      if (!paymentId) missingFields.push('payment_id');
+      if (!refundAmount) missingFields.push('refund_amount');
+
+      if (missingFields.length > 0) {
         return this.failure(
-          `Invalid refund amount: ${refundAmount}`,
-          ErrorType.VALIDATION_ERROR,
+          `Missing required fields for payment validation: ${missingFields.join(', ')}`,
+          ErrorType.PERMANENT_ERROR,
           false,
         );
       }
 
-      // Simulate payment gateway refund processing
-      const refundTransactionId = `rfnd_${crypto.randomUUID().replace(/-/g, '').substring(0, 14)}`;
-      const processingFee = Math.round(amount * 0.005 * 100) / 100; // 0.5% refund processing fee
-      const netRefund = Math.round((amount - processingFee) * 100) / 100;
+      const validPaymentId = paymentId as string;
+      const validRefundAmount = refundAmount as number;
 
-      // Simulate gateway response times based on payment method
-      const gatewayResponseMs: Record<string, number> = {
-        credit_card: Math.random() * 300 + 200,
-        debit_card: Math.random() * 200 + 150,
-        bank_transfer: Math.random() * 500 + 300,
-        paypal: Math.random() * 400 + 250,
-      };
-      const responseTime = gatewayResponseMs[paymentMethod] || Math.random() * 300 + 200;
+      if (validRefundAmount <= 0) {
+        return this.failure(
+          `Refund amount must be positive, got: ${validRefundAmount}`,
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
+      }
 
-      // Determine settlement timeline
-      const settlementDays: Record<string, number> = {
-        credit_card: 5,
-        debit_card: 3,
-        bank_transfer: 7,
-        paypal: 2,
-      };
-      const days = settlementDays[paymentMethod] || 5;
-      const estimatedSettlement = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          refund_transaction_id: refundTransactionId,
-          original_transaction_id: originalTransactionId || 'unknown',
-          amount: amount,
-          processing_fee: processingFee,
-          net_refund: netRefund,
-          currency: 'usd',
-          payment_method: paymentMethod,
-          status: 'processing',
-          gateway: 'stripe_simulator',
-          gateway_reference: `ch_${crypto.randomUUID().replace(/-/g, '').substring(0, 14)}`,
-          estimated_settlement: estimatedSettlement,
-          settlement_days: days,
-          processed_at: new Date().toISOString(),
+          payment_validated: true,
+          payment_id: validPaymentId,
+          original_amount: validRefundAmount + 1000,
+          refund_amount: validRefundAmount,
+          payment_method: 'credit_card',
+          gateway_provider: 'MockPaymentGateway',
+          eligibility_status: 'eligible',
+          validation_timestamp: now,
+          namespace: 'payments',
         },
-        { gateway_response_ms: responseTime },
+        { gateway_response_ms: Math.random() * 300 + 200 },
       );
     } catch (error) {
       return this.failure(
@@ -92,72 +82,40 @@ export class ProcessRefundPaymentHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class UpdateLedgerHandler extends StepHandler {
-  static handlerName = 'Payments.StepHandlers.UpdateLedgerHandler';
+  static handlerName = 'Payments.StepHandlers.ProcessGatewayRefundHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const paymentResult = context.getDependencyResult('process_refund_payment') as Record<string, unknown>;
+      // TAS-137: Read dependency results matching source key names
+      const validationResult = context.getDependencyResult('validate_payment_eligibility') as Record<string, unknown>;
 
-      if (!paymentResult) {
-        return this.failure('Missing refund payment result', ErrorType.HANDLER_ERROR, true);
+      if (!validationResult?.payment_validated) {
+        return this.failure(
+          'Payment validation must be completed before processing refund',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
       }
 
-      const amount = paymentResult.amount as number;
-      const processingFee = paymentResult.processing_fee as number;
-      const netRefund = paymentResult.net_refund as number;
-      const refundTransactionId = paymentResult.refund_transaction_id as string;
+      const paymentId = validationResult.payment_id as string;
+      const refundAmount = validationResult.refund_amount as number;
 
-      // Simulate double-entry bookkeeping
-      const journalEntryId = `JE-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-
-      const ledgerEntries = [
-        {
-          entry_id: `${journalEntryId}-001`,
-          account: 'accounts_receivable',
-          debit: 0,
-          credit: amount,
-          description: 'Customer refund issued',
-        },
-        {
-          entry_id: `${journalEntryId}-002`,
-          account: 'revenue',
-          debit: amount,
-          credit: 0,
-          description: 'Revenue reversal for refund',
-        },
-        {
-          entry_id: `${journalEntryId}-003`,
-          account: 'payment_processing_fees',
-          debit: processingFee,
-          credit: 0,
-          description: 'Refund processing fee',
-        },
-        {
-          entry_id: `${journalEntryId}-004`,
-          account: 'cash',
-          debit: 0,
-          credit: netRefund,
-          description: 'Cash outflow for refund',
-        },
-      ];
-
-      const totalDebits = ledgerEntries.reduce((sum, e) => sum + e.debit, 0);
-      const totalCredits = ledgerEntries.reduce((sum, e) => sum + e.credit, 0);
-      const balanced = Math.abs(totalDebits - totalCredits) < 0.01;
+      const now = new Date();
+      const estimatedArrival = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString();
 
       return this.success(
         {
-          journal_entry_id: journalEntryId,
-          refund_transaction_id: refundTransactionId,
-          ledger_entries: ledgerEntries,
-          entry_count: ledgerEntries.length,
-          total_debits: Math.round(totalDebits * 100) / 100,
-          total_credits: Math.round(totalCredits * 100) / 100,
-          balanced,
-          fiscal_period: new Date().toISOString().substring(0, 7), // YYYY-MM
-          accounting_standard: 'GAAP',
-          posted_at: new Date().toISOString(),
+          refund_processed: true,
+          refund_id: `rfnd_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+          payment_id: paymentId,
+          refund_amount: refundAmount,
+          refund_status: 'processed',
+          gateway_transaction_id: `gtx_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+          gateway_provider: 'MockPaymentGateway',
+          processed_at: now.toISOString(),
+          estimated_arrival: estimatedArrival,
+          namespace: 'payments',
         },
         { ledger_update_ms: Math.random() * 80 + 20 },
       );
@@ -176,69 +134,38 @@ export class UpdateLedgerHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class ReconcileAccountHandler extends StepHandler {
-  static handlerName = 'Payments.StepHandlers.ReconcileAccountHandler';
+  static handlerName = 'Payments.StepHandlers.UpdatePaymentRecordsHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const paymentResult = context.getDependencyResult('process_refund_payment') as Record<string, unknown>;
-      const ledgerResult = context.getDependencyResult('update_ledger') as Record<string, unknown>;
+      // TAS-137: Read dependency results matching source key names
+      const refundResult = context.getDependencyResult('process_gateway_refund') as Record<string, unknown>;
 
-      if (!paymentResult || !ledgerResult) {
-        return this.failure('Missing dependency results', ErrorType.HANDLER_ERROR, true);
+      if (!refundResult?.refund_processed) {
+        return this.failure(
+          'Gateway refund must be completed before updating records',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
       }
 
-      const refundTransactionId = paymentResult.refund_transaction_id as string;
-      const journalEntryId = ledgerResult.journal_entry_id as string;
-      const balanced = ledgerResult.balanced as boolean;
+      const paymentId = refundResult.payment_id as string;
+      const refundId = refundResult.refund_id as string;
 
-      // Simulate reconciliation checks
-      const reconciliationId = `REC-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-
-      const reconciliationChecks = [
-        {
-          check: 'ledger_balance',
-          status: balanced ? 'passed' : 'failed',
-          detail: balanced ? 'Debits and credits are balanced' : 'Imbalance detected',
-        },
-        {
-          check: 'gateway_confirmation',
-          status: 'passed',
-          detail: `Gateway confirmed refund ${refundTransactionId}`,
-        },
-        {
-          check: 'duplicate_detection',
-          status: 'passed',
-          detail: 'No duplicate refund detected for this transaction',
-        },
-        {
-          check: 'amount_verification',
-          status: 'passed',
-          detail: 'Refund amount matches original payment records',
-        },
-        {
-          check: 'regulatory_compliance',
-          status: 'passed',
-          detail: 'Refund complies with PCI DSS and local regulations',
-        },
-      ];
-
-      const allPassed = reconciliationChecks.every((c) => c.status === 'passed');
-      const failedChecks = reconciliationChecks.filter((c) => c.status === 'failed');
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          reconciliation_id: reconciliationId,
-          refund_transaction_id: refundTransactionId,
-          journal_entry_id: journalEntryId,
-          checks: reconciliationChecks,
-          checks_total: reconciliationChecks.length,
-          checks_passed: reconciliationChecks.filter((c) => c.status === 'passed').length,
-          checks_failed: failedChecks.length,
-          reconciliation_status: allPassed ? 'reconciled' : 'discrepancy_found',
-          requires_manual_review: !allPassed,
-          discrepancies: failedChecks.map((c) => c.detail),
-          reconciled_at: new Date().toISOString(),
+          records_updated: true,
+          payment_id: paymentId,
+          refund_id: refundId,
+          record_id: `rec_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+          payment_status: 'refunded',
+          refund_status: 'completed',
+          history_entries_created: 2,
+          updated_at: now,
+          namespace: 'payments',
         },
         { reconciliation_time_ms: Math.random() * 200 + 50 },
       );
@@ -257,56 +184,47 @@ export class ReconcileAccountHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class GenerateRefundReceiptHandler extends StepHandler {
-  static handlerName = 'Payments.StepHandlers.GenerateRefundReceiptHandler';
+  static handlerName = 'Payments.StepHandlers.NotifyCustomerHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const paymentResult = context.getDependencyResult('process_refund_payment') as Record<string, unknown>;
-      const ledgerResult = context.getDependencyResult('update_ledger') as Record<string, unknown>;
-      const reconcileResult = context.getDependencyResult('reconcile_account') as Record<string, unknown>;
+      // TAS-137: Read dependency results matching source key names
+      const refundResult = context.getDependencyResult('process_gateway_refund') as Record<string, unknown>;
 
-      if (!paymentResult || !ledgerResult || !reconcileResult) {
-        return this.failure('Missing dependency results', ErrorType.HANDLER_ERROR, true);
+      if (!refundResult?.refund_processed) {
+        return this.failure(
+          'Refund must be processed before sending notification',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
       }
 
-      const refundTransactionId = paymentResult.refund_transaction_id as string;
-      const amount = paymentResult.amount as number;
-      const paymentMethod = paymentResult.payment_method as string;
-      const estimatedSettlement = paymentResult.estimated_settlement as string;
-      const reconciliationId = reconcileResult.reconciliation_id as string;
-      const reconciliationStatus = reconcileResult.reconciliation_status as string;
+      const customerEmail = context.getInput('customer_email') as string | undefined;
+      if (!customerEmail) {
+        return this.failure(
+          'Customer email is required for notification',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
+      }
 
-      // Generate receipt
-      const receiptId = `RCPT-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-      const receiptNumber = `R${new Date().getFullYear()}${String(Date.now()).slice(-8)}`;
+      const refundId = refundResult.refund_id as string;
+      const refundAmount = refundResult.refund_amount as number;
+
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          receipt_id: receiptId,
-          receipt_number: receiptNumber,
-          refund_transaction_id: refundTransactionId,
-          reconciliation_id: reconciliationId,
-          receipt_details: {
-            refund_amount: amount,
-            currency: 'usd',
-            payment_method: paymentMethod,
-            estimated_settlement: estimatedSettlement,
-            original_transaction_id: paymentResult.original_transaction_id,
-          },
-          compliance: {
-            reconciliation_status: reconciliationStatus,
-            audit_trail_id: crypto.randomUUID(),
-            regulatory_reference: `REG-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`,
-            tax_implications: amount > 50 ? 'Form 1099-K may apply' : 'No tax reporting required',
-          },
-          delivery: {
-            email_sent: true,
-            pdf_generated: true,
-            pdf_url: `https://receipts.example.com/${receiptId}.pdf`,
-            archive_url: `https://archive.example.com/refunds/${receiptNumber}`,
-          },
-          generated_at: new Date().toISOString(),
+          notification_sent: true,
+          customer_email: customerEmail,
+          message_id: `msg_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+          notification_type: 'refund_confirmation',
+          sent_at: now,
+          delivery_status: 'delivered',
+          refund_id: refundId,
+          refund_amount: refundAmount,
+          namespace: 'payments',
         },
         { receipt_generation_ms: Math.random() * 300 + 80 },
       );

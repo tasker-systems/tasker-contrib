@@ -15,8 +15,11 @@ module Payments
         payment_id = context.get_input('payment_id')
         refund_amount = context.get_input('refund_amount')
         currency = context.get_input('currency') || 'USD'
-        reason = context.get_input('reason')
+        # TAS-137: Source uses 'refund_reason' not 'reason'
+        reason = context.get_input('refund_reason')
         idempotency_key = context.get_input('idempotency_key')
+        # TAS-137: Source reads partial_refund with default
+        partial_refund = context.get_input_or('partial_refund', false)
 
         raise TaskerCore::Errors::PermanentError.new(
           'Payment ID is required',
@@ -72,10 +75,17 @@ module Payments
 
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
-            eligibility_id: eligibility_id,
+            payment_validated: true,
             payment_id: payment_id,
-            eligible: within_window && !is_duplicate,
+            original_amount: original_amount,
             refund_amount: amount,
+            payment_method: 'credit_card',
+            gateway_provider: gateway,
+            eligibility_status: (within_window && !is_duplicate) ? 'eligible' : 'ineligible',
+            validation_timestamp: Time.current.iso8601,
+            namespace: 'payments',
+            eligibility_id: eligibility_id,
+            eligible: within_window && !is_duplicate,
             currency: currency,
             reason: reason,
             original_payment: {
@@ -101,7 +111,8 @@ module Payments
             eligible: within_window,
             amount: amount,
             currency: currency,
-            gateway: gateway
+            gateway: gateway,
+            eligibility_status: (within_window && !is_duplicate) ? 'eligible' : 'ineligible'
           }
         )
       end

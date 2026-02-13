@@ -35,8 +35,19 @@ module Microservices
       }.freeze
 
       def call(context)
-        account_data = context.get_dependency_field('create_user_account', ['result'])
-        marketing_consent = context.get_input('marketing_consent')
+        # TAS-137: Use get_dependency_result() for upstream step data
+        account_data_result = context.get_dependency_result('create_user_account')
+        account_data = account_data_result&.is_a?(Hash) ? account_data_result : nil
+
+        # TAS-137: Use get_dependency_field() for nested field extraction
+        user_id_field = context.get_dependency_field('create_user_account', 'user_id')
+        plan_field = context.get_dependency_field('create_user_account', 'plan') || 'free'
+
+        # TAS-137: Use get_input_or() for task context access
+        user_info = context.get_input_or('user_info', {})
+        user_info = user_info.deep_symbolize_keys if user_info.is_a?(Hash)
+        custom_prefs = user_info[:preferences] || {}
+        marketing_consent = custom_prefs[:marketing_consent]
 
         raise TaskerCore::Errors::PermanentError.new(
           'User account data not available',
@@ -71,6 +82,11 @@ module Microservices
             user_id: user_id,
             plan: plan,
             preferences: preferences,
+            defaults_applied: defaults.keys.count,
+            customizations: custom_prefs.keys.count,
+            status: 'active',
+            created_at: Time.current.iso8601,
+            updated_at: Time.current.iso8601,
             feature_flags: {
               beta_features: plan != 'free',
               advanced_analytics: %w[pro enterprise].include?(plan),

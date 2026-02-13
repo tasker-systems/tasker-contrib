@@ -18,27 +18,64 @@ use tracing::info;
 use uuid::Uuid;
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Determine customer tier based on customer ID (aligned with source)
+fn determine_customer_tier(customer_id: &str) -> &'static str {
+    let lower = customer_id.to_lowercase();
+    if lower.contains("vip") || lower.contains("premium") {
+        "premium"
+    } else if lower.contains("gold") {
+        "gold"
+    } else {
+        "standard"
+    }
+}
+
+/// Refund policy rules by tier (aligned with source)
+fn get_refund_policy(tier: &str) -> (i32, bool, i64) {
+    // (window_days, requires_approval, max_amount)
+    match tier {
+        "gold" => (60, false, 50_000),
+        "premium" => (90, false, 100_000),
+        _ => (30, true, 10_000), // standard
+    }
+}
+
+// ============================================================================
 // Step 1: Validate Refund Request
 // ============================================================================
 
 /// Validates the incoming refund request, checking for required fields,
 /// valid amounts, and order existence. Enriches the request with order details.
+///
+/// Context keys (aligned with source): ticket_id, customer_id, refund_amount
+/// Output keys (aligned with source): request_validated, ticket_id, customer_id,
+///   ticket_status, customer_tier, original_purchase_date, payment_id,
+///   validation_timestamp, namespace
 pub fn validate_refund_request(context: &Value) -> Result<Value, String> {
+    // Source reads: ticket_id, customer_id, refund_amount from task context
     let ticket_id = context.get("ticket_id")
         .and_then(|v| v.as_str())
         .ok_or("Missing ticket_id in context")?;
 
-    let customer_email = context.get("customer_email")
+    let customer_id = context.get("customer_id")
         .and_then(|v| v.as_str())
-        .ok_or("Missing customer_email in context")?;
-
-    let order_id = context.get("order_id")
-        .and_then(|v| v.as_str())
-        .ok_or("Missing order_id in context")?;
+        .ok_or("Missing customer_id in context")?;
 
     let refund_amount = context.get("refund_amount")
         .and_then(|v| v.as_f64())
         .ok_or("Missing or invalid refund_amount in context")?;
+
+    // Also read app-specific fields that may be in context
+    let customer_email = context.get("customer_email")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown@example.com");
+
+    let order_id = context.get("order_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
 
     let reason = context.get("reason")
         .and_then(|v| v.as_str())
@@ -52,38 +89,41 @@ pub fn validate_refund_request(context: &Value) -> Result<Value, String> {
         return Err(format!("Refund amount ${:.2} exceeds maximum single refund limit of $10,000", refund_amount));
     }
 
-    // Simulate order lookup (in production, this would query the orders database)
-    let order_total = refund_amount * 1.5; // Simulated: order was larger than refund
-    let order_date = "2025-11-15T10:30:00Z";
-    let days_since_order = 30; // Simulated
-
-    if refund_amount > order_total {
-        return Err(format!(
-            "Refund amount ${:.2} exceeds order total ${:.2}",
-            refund_amount, order_total
-        ));
+    // Simulate ticket validation scenarios (aligned with source)
+    if ticket_id.contains("ticket_closed") {
+        return Err("Cannot process refund for closed ticket".to_string());
+    }
+    if ticket_id.contains("ticket_cancelled") {
+        return Err("Cannot process refund for cancelled ticket".to_string());
     }
 
-    let validation_id = format!("val_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+    let customer_tier = determine_customer_tier(customer_id);
+    let purchase_date = (chrono::Utc::now() - chrono::Duration::days(30)).to_rfc3339();
+    let payment_id = format!("pay_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let now = chrono::Utc::now().to_rfc3339();
 
     info!(
-        "Refund request validated: ticket={}, order={}, amount=${:.2}, reason={}",
-        ticket_id, order_id, refund_amount, reason
+        "Refund request validated: ticket={}, customer_id={}, customer_tier={}, amount=${:.2}",
+        ticket_id, customer_id, customer_tier, refund_amount
     );
 
+    // Output keys aligned with source: request_validated, ticket_id, customer_id,
+    // ticket_status, customer_tier, original_purchase_date, payment_id,
+    // validation_timestamp, namespace
     Ok(json!({
-        "validation_id": validation_id,
+        "request_validated": true,
         "ticket_id": ticket_id,
+        "customer_id": customer_id,
+        "ticket_status": "open",
+        "customer_tier": customer_tier,
+        "original_purchase_date": purchase_date,
+        "payment_id": payment_id,
+        "validation_timestamp": now,
+        "namespace": "customer_success",
         "customer_email": customer_email,
         "order_id": order_id,
-        "order_total": order_total,
-        "order_date": order_date,
-        "days_since_order": days_since_order,
         "refund_amount": refund_amount,
-        "refund_percentage": ((refund_amount / order_total) * 100.0).round(),
-        "reason": reason,
-        "is_valid": true,
-        "validated_at": chrono::Utc::now().to_rfc3339()
+        "reason": reason
     }))
 }
 
@@ -93,73 +133,79 @@ pub fn validate_refund_request(context: &Value) -> Result<Value, String> {
 
 /// Evaluates the refund request against company refund policies.
 /// Determines if the refund requires manager approval based on amount and timing.
-pub fn check_refund_policy(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
+///
+/// Dependency reads (aligned with source):
+///   validate_refund_request -> full result (request_validated), customer_tier
+/// Context reads (aligned with source): refund_amount
+/// Output keys (aligned with source): policy_checked, policy_compliant, customer_tier,
+///   refund_window_days, days_since_purchase, within_refund_window, requires_approval,
+///   max_allowed_amount, policy_checked_at, namespace
+pub fn check_refund_policy(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
     let validation = dependency_results.get("validate_refund_request")
         .ok_or("Missing validate_refund_request dependency")?;
 
-    let refund_amount = validation.get("refund_amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let days_since_order = validation.get("days_since_order").and_then(|v| v.as_i64()).unwrap_or(0);
-    let refund_percentage = validation.get("refund_percentage").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let order_id = validation.get("order_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+    // Source checks request_validated from dependency result
+    let validated = validation.get("request_validated")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    let mut policy_checks = Vec::new();
-    let mut requires_approval = false;
-    let mut approval_reason = Vec::new();
-
-    // Policy 1: Time-based (30-day return window)
-    let within_return_window = days_since_order <= 30;
-    policy_checks.push(json!({
-        "policy": "return_window",
-        "description": "30-day return policy",
-        "passed": within_return_window,
-        "details": format!("{} days since order", days_since_order)
-    }));
-    if !within_return_window {
-        requires_approval = true;
-        approval_reason.push("Outside 30-day return window".to_string());
+    if !validated {
+        return Err("Request validation must be completed before policy check".to_string());
     }
 
-    // Policy 2: Amount threshold (auto-approve under $100)
-    let under_auto_threshold = refund_amount < 100.0;
-    policy_checks.push(json!({
-        "policy": "amount_threshold",
-        "description": "Auto-approve refunds under $100",
-        "passed": under_auto_threshold,
-        "details": format!("Refund amount: ${:.2}", refund_amount)
-    }));
-    if !under_auto_threshold {
-        requires_approval = true;
-        approval_reason.push(format!("Amount ${:.2} exceeds auto-approve threshold", refund_amount));
+    // Source reads: customer_tier from validate_refund_request
+    let customer_tier = validation.get("customer_tier")
+        .and_then(|v| v.as_str())
+        .unwrap_or("standard");
+
+    // Source reads: refund_amount from task context
+    let refund_amount = context.get("refund_amount")
+        .and_then(|v| v.as_f64())
+        .or_else(|| validation.get("refund_amount").and_then(|v| v.as_f64()))
+        .unwrap_or(0.0);
+
+    // Check policy compliance (aligned with source get_refund_policy)
+    let (window_days, requires_approval, max_amount) = get_refund_policy(customer_tier);
+    let days_since_purchase = 30; // Simplified for demo
+    let within_window = days_since_purchase <= window_days;
+    let within_amount_limit = (refund_amount as i64) <= max_amount;
+
+    if !within_window {
+        return Err(format!(
+            "Refund request outside policy window: {} days (max: {} days)",
+            days_since_purchase, window_days
+        ));
     }
 
-    // Policy 3: Partial refund check (full refunds need review if over $250)
-    let is_partial = refund_percentage < 100.0;
-    let partial_ok = is_partial || refund_amount < 250.0;
-    policy_checks.push(json!({
-        "policy": "full_refund_review",
-        "description": "Full refunds over $250 require review",
-        "passed": partial_ok,
-        "details": format!("Refund is {:.0}% of order (${:.2})", refund_percentage, refund_amount)
-    }));
-    if !partial_ok {
-        requires_approval = true;
-        approval_reason.push("Full refund exceeds $250 threshold".to_string());
+    if !within_amount_limit {
+        return Err(format!(
+            "Refund amount exceeds policy limit: ${:.2} (max: ${:.2})",
+            refund_amount / 100.0,
+            max_amount as f64 / 100.0
+        ));
     }
 
-    let all_passed = policy_checks.iter().all(|p| p["passed"].as_bool().unwrap_or(false));
+    let now = chrono::Utc::now().to_rfc3339();
 
     info!(
-        "Policy check for order {}: {} checks, approval_required={}, all_passed={}",
-        order_id, policy_checks.len(), requires_approval, all_passed
+        "Policy check passed: customer_tier={}, requires_approval={}, refund_amount=${:.2}",
+        customer_tier, requires_approval, refund_amount
     );
 
+    // Output keys aligned with source: policy_checked, policy_compliant, customer_tier,
+    // refund_window_days, days_since_purchase, within_refund_window, requires_approval,
+    // max_allowed_amount, policy_checked_at, namespace
     Ok(json!({
-        "policy_checks": policy_checks,
-        "all_policies_passed": all_passed,
-        "requires_manager_approval": requires_approval,
-        "approval_reasons": approval_reason,
-        "auto_approvable": !requires_approval,
-        "checked_at": chrono::Utc::now().to_rfc3339()
+        "policy_checked": true,
+        "policy_compliant": true,
+        "customer_tier": customer_tier,
+        "refund_window_days": window_days,
+        "days_since_purchase": days_since_purchase,
+        "within_refund_window": within_window,
+        "requires_approval": requires_approval,
+        "max_allowed_amount": max_amount,
+        "policy_checked_at": now,
+        "namespace": "customer_success"
     }))
 }
 
@@ -169,6 +215,12 @@ pub fn check_refund_policy(dependency_results: &HashMap<String, Value>) -> Resul
 
 /// Routes the refund for manager approval if policies require it.
 /// For refunds that pass all policies, auto-approval is granted.
+///
+/// Dependency reads (aligned with source):
+///   check_refund_policy -> full result (policy_checked), requires_approval, customer_tier
+///   validate_refund_request -> ticket_id, customer_id
+/// Output keys (aligned with source): approval_obtained, approval_required, auto_approved,
+///   approval_id, manager_id, manager_notes, approved_at, namespace
 pub fn get_manager_approval(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
     let policy_result = dependency_results.get("check_refund_policy")
         .ok_or("Missing check_refund_policy dependency")?;
@@ -176,63 +228,81 @@ pub fn get_manager_approval(dependency_results: &HashMap<String, Value>) -> Resu
     let validation = dependency_results.get("validate_refund_request")
         .ok_or("Missing validate_refund_request dependency")?;
 
-    let requires_approval = policy_result.get("requires_manager_approval")
+    // Source checks policy_checked from dependency result
+    let policy_checked = policy_result.get("policy_checked")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if !policy_checked {
+        return Err("Policy check must be completed before approval".to_string());
+    }
+
+    // Source reads: requires_approval, customer_tier from check_refund_policy
+    let requires_approval = policy_result.get("requires_approval")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
 
-    let approval_reasons = policy_result.get("approval_reasons")
-        .cloned()
-        .unwrap_or(json!([]));
+    let customer_tier = policy_result.get("customer_tier")
+        .and_then(|v| v.as_str())
+        .unwrap_or("standard");
 
-    let refund_amount = validation.get("refund_amount")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-
+    // Source reads: ticket_id, customer_id from validate_refund_request
     let ticket_id = validation.get("ticket_id")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
-    let approval_id = format!("appr_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+    let customer_id = validation.get("customer_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
 
-    if !requires_approval {
-        info!("Auto-approved refund for ticket {}: ${:.2}", ticket_id, refund_amount);
-        return Ok(json!({
+    let now = chrono::Utc::now().to_rfc3339();
+
+    if requires_approval {
+        // Simulate approval scenarios (aligned with source)
+        if ticket_id.contains("ticket_denied") {
+            return Err("Manager denied refund request".to_string());
+        }
+        if ticket_id.contains("ticket_pending") {
+            return Err("Waiting for manager approval (retryable)".to_string());
+        }
+
+        let approval_id = format!("appr_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+        let manager_id = format!("mgr_{}", (ticket_id.len() % 5) + 1);
+
+        info!(
+            "Manager approval obtained: approval_id={}, manager_id={}",
+            approval_id, manager_id
+        );
+
+        // Output keys aligned with source: approval_obtained, approval_required, auto_approved,
+        // approval_id, manager_id, manager_notes, approved_at, namespace
+        Ok(json!({
+            "approval_obtained": true,
+            "approval_required": true,
+            "auto_approved": false,
             "approval_id": approval_id,
-            "ticket_id": ticket_id,
-            "approval_type": "auto",
-            "approved": true,
-            "approver": "system",
-            "refund_amount": refund_amount,
-            "notes": "Auto-approved: all policies passed",
-            "approved_at": chrono::Utc::now().to_rfc3339()
-        }));
+            "manager_id": manager_id,
+            "manager_notes": format!("Approved refund request for customer {}", customer_id),
+            "approved_at": now,
+            "namespace": "customer_success"
+        }))
+    } else {
+        info!(
+            "Auto-approved for tier={}, ticket={}",
+            customer_tier, ticket_id
+        );
+
+        Ok(json!({
+            "approval_obtained": true,
+            "approval_required": false,
+            "auto_approved": true,
+            "approval_id": null,
+            "manager_id": null,
+            "manager_notes": format!("Auto-approved for customer tier {}", customer_tier),
+            "approved_at": now,
+            "namespace": "customer_success"
+        }))
     }
-
-    // Simulate manager review (in production, this might be async/deferred)
-    let approved = refund_amount < 5000.0; // Simulate: approve under $5k
-    let manager = "manager@company.com";
-
-    info!(
-        "Manager {} {} refund for ticket {}: ${:.2} (reasons: {:?})",
-        if approved { "approved" } else { "rejected" },
-        manager, ticket_id, refund_amount, approval_reasons
-    );
-
-    Ok(json!({
-        "approval_id": approval_id,
-        "ticket_id": ticket_id,
-        "approval_type": "manual",
-        "approved": approved,
-        "approver": manager,
-        "refund_amount": refund_amount,
-        "approval_reasons": approval_reasons,
-        "notes": if approved {
-            "Approved after manager review"
-        } else {
-            "Rejected: exceeds manager authority limit"
-        },
-        "reviewed_at": chrono::Utc::now().to_rfc3339()
-    }))
 }
 
 // ============================================================================
@@ -241,6 +311,12 @@ pub fn get_manager_approval(dependency_results: &HashMap<String, Value>) -> Resu
 
 /// Coordinates the actual refund execution by gathering all approvals
 /// and creating the refund execution record.
+///
+/// Dependency reads (aligned with source):
+///   get_manager_approval -> full result (approval_obtained)
+///   validate_refund_request -> payment_id
+/// Output keys (aligned with source): task_delegated, target_namespace, target_workflow,
+///   delegated_task_id, delegated_task_status, delegation_timestamp, correlation_id, namespace
 pub fn execute_refund_workflow(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
     let approval = dependency_results.get("get_manager_approval")
         .ok_or("Missing get_manager_approval dependency")?;
@@ -248,38 +324,48 @@ pub fn execute_refund_workflow(dependency_results: &HashMap<String, Value>) -> R
     let validation = dependency_results.get("validate_refund_request")
         .ok_or("Missing validate_refund_request dependency")?;
 
-    let approved = approval.get("approved").and_then(|v| v.as_bool()).unwrap_or(false);
+    // Source checks approval_obtained from dependency result
+    let approval_obtained = approval.get("approval_obtained")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    if !approved {
-        return Ok(json!({
-            "status": "rejected",
-            "reason": "Manager approval was not granted",
-            "ticket_id": validation.get("ticket_id").and_then(|v| v.as_str()).unwrap_or("unknown"),
-            "executed_at": chrono::Utc::now().to_rfc3339()
-        }));
+    if !approval_obtained {
+        return Err("Manager approval must be obtained before executing refund".to_string());
     }
 
-    let refund_amount = validation.get("refund_amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let order_id = validation.get("order_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let ticket_id = validation.get("ticket_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let approval_id = approval.get("approval_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+    // Source reads: payment_id from validate_refund_request
+    let payment_id = validation.get("payment_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
-    let execution_id = format!("exec_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+    if payment_id.is_empty() {
+        return Err("Payment ID not found in validation results".to_string());
+    }
+
+    let ticket_id = validation.get("ticket_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    let correlation_id = format!("cs-corr_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let task_id = format!("task_{}", Uuid::new_v4());
+    let now = chrono::Utc::now().to_rfc3339();
 
     info!(
-        "Refund workflow executed: ticket={}, order={}, amount=${:.2}, approval={}",
-        ticket_id, order_id, refund_amount, approval_id
+        "Refund workflow delegated: task_id={}, correlation_id={}, ticket={}",
+        task_id, correlation_id, ticket_id
     );
 
+    // Output keys aligned with source: task_delegated, target_namespace, target_workflow,
+    // delegated_task_id, delegated_task_status, delegation_timestamp, correlation_id, namespace
     Ok(json!({
-        "execution_id": execution_id,
-        "ticket_id": ticket_id,
-        "order_id": order_id,
-        "refund_amount": refund_amount,
-        "approval_id": approval_id,
-        "status": "executed",
-        "payment_refund_initiated": true,
-        "executed_at": chrono::Utc::now().to_rfc3339()
+        "task_delegated": true,
+        "target_namespace": "payments",
+        "target_workflow": "process_refund",
+        "delegated_task_id": task_id,
+        "delegated_task_status": "created",
+        "delegation_timestamp": now,
+        "correlation_id": correlation_id,
+        "namespace": "customer_success"
     }))
 }
 
@@ -289,58 +375,77 @@ pub fn execute_refund_workflow(dependency_results: &HashMap<String, Value>) -> R
 
 /// Updates the support ticket with the final refund outcome.
 /// Records the complete refund timeline for audit purposes.
-pub fn update_ticket_status(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
+///
+/// Dependency reads (aligned with source):
+///   execute_refund_workflow -> full result (task_delegated), delegated_task_id, correlation_id
+///   validate_refund_request -> ticket_id
+/// Context reads (aligned with source): refund_amount
+/// Output keys (aligned with source): ticket_updated, ticket_id, previous_status, new_status,
+///   resolution_note, updated_at, refund_completed, delegated_task_id, namespace
+pub fn update_ticket_status(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
     let execution = dependency_results.get("execute_refund_workflow")
         .ok_or("Missing execute_refund_workflow dependency")?;
 
     let validation = dependency_results.get("validate_refund_request")
         .ok_or("Missing validate_refund_request dependency")?;
 
-    let approval = dependency_results.get("get_manager_approval")
-        .ok_or("Missing get_manager_approval dependency")?;
+    // Source checks task_delegated from dependency result
+    let task_delegated = execution.get("task_delegated")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    let ticket_id = validation.get("ticket_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let customer_email = validation.get("customer_email").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let execution_status = execution.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let approved = approval.get("approved").and_then(|v| v.as_bool()).unwrap_or(false);
+    if !task_delegated {
+        return Err("Refund workflow must be executed before updating ticket".to_string());
+    }
 
-    let ticket_status = if execution_status == "executed" && approved {
-        "resolved"
-    } else if !approved {
-        "rejected"
-    } else {
-        "pending_review"
-    };
+    // Source reads: ticket_id from validate_refund_request
+    let ticket_id = validation.get("ticket_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
 
-    let resolution_note = match ticket_status {
-        "resolved" => format!(
-            "Refund of ${:.2} processed successfully for order {}",
-            validation.get("refund_amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
-            validation.get("order_id").and_then(|v| v.as_str()).unwrap_or("unknown")
-        ),
-        "rejected" => "Refund request was not approved. Customer has been notified.".to_string(),
-        _ => "Refund is pending further review.".to_string(),
-    };
+    // Source reads: delegated_task_id, correlation_id from execute_refund_workflow
+    let delegated_task_id = execution.get("delegated_task_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    let correlation_id = execution.get("correlation_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    // Source reads: refund_amount from task context
+    let refund_amount = context.get("refund_amount")
+        .and_then(|v| v.as_f64())
+        .or_else(|| validation.get("refund_amount").and_then(|v| v.as_f64()))
+        .unwrap_or(0.0);
+
+    // Simulate ticket lock scenario (aligned with source)
+    if ticket_id.contains("ticket_locked") {
+        return Err("Ticket locked by another agent, will retry".to_string());
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
 
     info!(
-        "Ticket {} updated to '{}' for customer {}",
-        ticket_id, ticket_status, customer_email
+        "Ticket updated: ticket_id={}, status=resolved, delegated_task={}",
+        ticket_id, delegated_task_id
     );
 
+    // Output keys aligned with source: ticket_updated, ticket_id, previous_status, new_status,
+    // resolution_note, updated_at, refund_completed, delegated_task_id, namespace
     Ok(json!({
+        "ticket_updated": true,
         "ticket_id": ticket_id,
-        "customer_email": customer_email,
         "previous_status": "in_progress",
-        "new_status": ticket_status,
-        "resolution_note": resolution_note,
-        "timeline": {
-            "opened": validation.get("validated_at"),
-            "policy_checked": dependency_results.get("check_refund_policy")
-                .and_then(|r| r.get("checked_at")),
-            "approved": approval.get("reviewed_at").or_else(|| approval.get("approved_at")),
-            "executed": execution.get("executed_at"),
-            "closed": chrono::Utc::now().to_rfc3339()
-        },
-        "updated_at": chrono::Utc::now().to_rfc3339()
+        "new_status": "resolved",
+        "resolution_note": format!(
+            "Refund of ${:.2} processed successfully. Delegated task ID: {}. Correlation ID: {}",
+            refund_amount / 100.0,
+            delegated_task_id,
+            correlation_id
+        ),
+        "updated_at": now,
+        "refund_completed": true,
+        "delegated_task_id": delegated_task_id,
+        "namespace": "customer_success"
     }))
 }

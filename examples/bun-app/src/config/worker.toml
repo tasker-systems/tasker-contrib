@@ -94,7 +94,7 @@ min_connections = 1
 slow_acquire_threshold_ms = 500
 
 [common.queues]
-backend = "${TASKER_MESSAGING_BACKEND:-pgmq}"
+backend = "${TASKER_MESSAGING_BACKEND:-rabbitmq}"
 default_visibility_timeout_seconds = 30
 naming_pattern = "{namespace}_{name}_queue"
 orchestration_namespace = "orchestration"

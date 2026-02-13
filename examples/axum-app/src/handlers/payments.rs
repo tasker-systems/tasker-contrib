@@ -22,15 +22,22 @@ use uuid::Uuid;
 
 /// Validates that the payment is eligible for a refund by checking the original
 /// transaction status, payment method, and refund windows.
+///
+/// Context keys (aligned with source): payment_id, refund_amount
+/// Output keys (aligned with source): payment_validated, payment_id, original_amount,
+///   refund_amount, payment_method, gateway_provider, eligibility_status,
+///   validation_timestamp, namespace
 pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
-    let order_id = context.get("order_id")
+    // Source reads: payment_id, refund_amount from task context
+    let payment_id = context.get("payment_id")
         .and_then(|v| v.as_str())
-        .ok_or("Missing order_id in context")?;
+        .ok_or("Missing payment_id in context")?;
 
     let refund_amount = context.get("refund_amount")
         .and_then(|v| v.as_f64())
         .ok_or("Missing or invalid refund_amount")?;
 
+    // Also read app-specific context fields
     let payment_method = context.get("payment_method")
         .and_then(|v| v.as_str())
         .unwrap_or("credit_card");
@@ -39,21 +46,31 @@ pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
         .and_then(|v| v.as_str())
         .unwrap_or("unknown@example.com");
 
+    let order_id = context.get("order_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
     // Validate refund amount
     if refund_amount <= 0.0 {
         return Err("Refund amount must be positive".to_string());
     }
 
-    // Simulate original transaction lookup
-    let original_transaction_id = format!("txn_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
-    let original_amount = refund_amount * 1.5; // Simulated: order total was larger
-    let transaction_date = "2025-11-15T10:30:00Z";
+    // Simulate validation scenarios (aligned with source)
+    if payment_id.contains("pay_test_insufficient") {
+        return Err("Insufficient funds available for refund".to_string());
+    }
+    if payment_id.contains("pay_test_processing") {
+        return Err("Payment is still processing, cannot refund yet (retryable)".to_string());
+    }
+    if payment_id.contains("pay_test_ineligible") {
+        return Err("Payment is not eligible for refund: past refund window".to_string());
+    }
 
     // Check if payment method supports refunds
     let refund_supported = match payment_method {
         "credit_card" | "debit_card" | "bank_transfer" => true,
-        "gift_card" => refund_amount <= 500.0, // Gift cards limited to $500 refund
-        "crypto" => false, // Crypto payments cannot be refunded via gateway
+        "gift_card" => refund_amount <= 500.0,
+        "crypto" => false,
         _ => true,
     };
 
@@ -64,6 +81,9 @@ pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
         ));
     }
 
+    // Simulate original transaction lookup
+    let original_amount = refund_amount + 1000.0;
+
     // Check refund does not exceed original transaction
     if refund_amount > original_amount {
         return Err(format!(
@@ -72,25 +92,29 @@ pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
         ));
     }
 
-    let eligibility_id = format!("elig_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+    let now = chrono::Utc::now().to_rfc3339();
 
     info!(
-        "Payment eligibility validated: order={}, amount=${:.2}, method={}, txn={}",
-        order_id, refund_amount, payment_method, original_transaction_id
+        "Payment eligibility validated: payment_id={}, amount=${:.2}, method={}",
+        payment_id, refund_amount, payment_method
     );
 
+    // Output keys aligned with source: payment_validated, payment_id, original_amount,
+    // refund_amount, payment_method, gateway_provider, eligibility_status,
+    // validation_timestamp, namespace
     Ok(json!({
-        "eligibility_id": eligibility_id,
-        "order_id": order_id,
-        "customer_email": customer_email,
-        "original_transaction_id": original_transaction_id,
+        "payment_validated": true,
+        "payment_id": payment_id,
         "original_amount": original_amount,
-        "transaction_date": transaction_date,
         "refund_amount": refund_amount,
         "payment_method": payment_method,
-        "is_eligible": true,
-        "is_partial_refund": refund_amount < original_amount,
-        "validated_at": chrono::Utc::now().to_rfc3339()
+        "gateway_provider": "MockPaymentGateway",
+        "eligibility_status": "eligible",
+        "validation_timestamp": now,
+        "namespace": "payments",
+        "customer_email": customer_email,
+        "order_id": order_id,
+        "is_partial_refund": refund_amount < original_amount
     }))
 }
 
@@ -99,20 +123,36 @@ pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
 // ============================================================================
 
 /// Processes the refund through the payment gateway. Simulates interaction
-/// with a payment processor (Stripe, PayPal, etc.) and returns the refund
-/// transaction details.
+/// with a payment processor and returns the refund transaction details.
+///
+/// Dependency reads (aligned with source):
+///   validate_payment_eligibility -> full result (payment_validated), payment_id, refund_amount
+/// Output keys (aligned with source): refund_processed, refund_id, payment_id, refund_amount,
+///   refund_status, gateway_transaction_id, gateway_provider, processed_at,
+///   estimated_arrival, namespace
 pub fn process_gateway_refund(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let eligibility = dependency_results.get("validate_eligibility")
-        .ok_or("Missing validate_eligibility dependency")?;
+    let eligibility = dependency_results.get("validate_payment_eligibility")
+        .ok_or("Missing validate_payment_eligibility dependency")?;
+
+    // Source checks payment_validated from dependency result
+    let payment_validated = eligibility.get("payment_validated")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if !payment_validated {
+        return Err("Payment validation must be completed before processing refund".to_string());
+    }
+
+    // Source reads: payment_id, refund_amount from validate_payment_eligibility
+    let payment_id = eligibility.get("payment_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
 
     let refund_amount = eligibility.get("refund_amount")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
 
-    let original_txn = eligibility.get("original_transaction_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
+    // Also read app-specific fields
     let payment_method = eligibility.get("payment_method")
         .and_then(|v| v.as_str())
         .unwrap_or("credit_card");
@@ -121,8 +161,17 @@ pub fn process_gateway_refund(dependency_results: &HashMap<String, Value>) -> Re
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
+    // Simulate gateway scenarios (aligned with source)
+    if payment_id.contains("pay_test_gateway_timeout") {
+        return Err("Gateway timeout, will retry".to_string());
+    }
+    if payment_id.contains("pay_test_gateway_error") {
+        return Err("Gateway refund failed: Gateway error".to_string());
+    }
+
     // Generate refund transaction
-    let refund_txn_id = format!("ref_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let refund_id = format!("rfnd_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let gateway_transaction_id = format!("gtx_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
     let gateway_reference = format!("GW-{}", &Uuid::new_v4().to_string().replace('-', "")[..8].to_uppercase());
 
     // Simulate processing time based on payment method
@@ -134,31 +183,38 @@ pub fn process_gateway_refund(dependency_results: &HashMap<String, Value>) -> Re
         _ => (5, "default_gateway"),
     };
 
-    let estimated_completion = chrono::Utc::now() + chrono::Duration::days(estimated_days);
+    let now = chrono::Utc::now();
+    let estimated_arrival = (now + chrono::Duration::days(estimated_days)).to_rfc3339();
 
     // Calculate gateway fee (simulated)
-    let gateway_fee = (refund_amount * 0.003 * 100.0).round() / 100.0; // 0.3% processing fee
+    let gateway_fee = (refund_amount * 0.003 * 100.0).round() / 100.0;
     let net_refund = ((refund_amount - gateway_fee) * 100.0).round() / 100.0;
 
     info!(
-        "Gateway refund processed: {} -> {}, amount=${:.2}, fee=${:.2}, via {}",
-        original_txn, refund_txn_id, refund_amount, gateway_fee, gateway_name
+        "Gateway refund processed: refund_id={}, payment_id={}, amount=${:.2}, via {}",
+        refund_id, payment_id, refund_amount, gateway_name
     );
 
+    // Output keys aligned with source: refund_processed, refund_id, payment_id, refund_amount,
+    // refund_status, gateway_transaction_id, gateway_provider, processed_at,
+    // estimated_arrival, namespace
     Ok(json!({
-        "refund_transaction_id": refund_txn_id,
-        "gateway_reference": gateway_reference,
-        "original_transaction_id": original_txn,
-        "order_id": order_id,
+        "refund_processed": true,
+        "refund_id": refund_id,
+        "payment_id": payment_id,
         "refund_amount": refund_amount,
+        "refund_status": "processed",
+        "gateway_transaction_id": gateway_transaction_id,
+        "gateway_provider": "MockPaymentGateway",
+        "processed_at": now.to_rfc3339(),
+        "estimated_arrival": estimated_arrival,
+        "namespace": "payments",
+        "gateway_reference": gateway_reference,
+        "order_id": order_id,
         "gateway_fee": gateway_fee,
         "net_refund_amount": net_refund,
         "payment_method": payment_method,
-        "gateway": gateway_name,
-        "status": "processed",
-        "estimated_completion": estimated_completion.to_rfc3339(),
-        "estimated_business_days": estimated_days,
-        "processed_at": chrono::Utc::now().to_rfc3339()
+        "estimated_business_days": estimated_days
     }))
 }
 
@@ -168,23 +224,53 @@ pub fn process_gateway_refund(dependency_results: &HashMap<String, Value>) -> Re
 
 /// Updates internal payment records with the refund transaction details.
 /// Creates an audit trail entry and adjusts the account balance.
+///
+/// Dependency reads (aligned with source):
+///   process_gateway_refund -> full result (refund_processed), payment_id, refund_id
+/// Output keys (aligned with source): records_updated, payment_id, refund_id, record_id,
+///   payment_status, refund_status, history_entries_created, updated_at, namespace
 pub fn update_payment_records(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let eligibility = dependency_results.get("validate_eligibility")
-        .ok_or("Missing validate_eligibility dependency")?;
-
     let gateway_result = dependency_results.get("process_gateway_refund")
         .ok_or("Missing process_gateway_refund dependency")?;
 
+    let eligibility = dependency_results.get("validate_payment_eligibility")
+        .ok_or("Missing validate_payment_eligibility dependency")?;
+
+    // Source checks refund_processed from dependency result
+    let refund_processed = gateway_result.get("refund_processed")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if !refund_processed {
+        return Err("Gateway refund must be completed before updating records".to_string());
+    }
+
+    // Source reads: payment_id, refund_id from process_gateway_refund
+    let payment_id = gateway_result.get("payment_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    let refund_id = gateway_result.get("refund_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    // Also read app-specific fields
     let order_id = eligibility.get("order_id").and_then(|v| v.as_str()).unwrap_or("unknown");
     let customer_email = eligibility.get("customer_email").and_then(|v| v.as_str()).unwrap_or("unknown");
     let original_amount = eligibility.get("original_amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let refund_amount = gateway_result.get("refund_amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let refund_txn_id = gateway_result.get("refund_transaction_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let refund_txn_id = gateway_result.get("gateway_transaction_id").and_then(|v| v.as_str()).unwrap_or("unknown");
     let gateway_ref = gateway_result.get("gateway_reference").and_then(|v| v.as_str()).unwrap_or("unknown");
     let is_partial = eligibility.get("is_partial_refund").and_then(|v| v.as_bool()).unwrap_or(false);
 
+    // Simulate record lock scenario (aligned with source)
+    if payment_id.contains("pay_test_record_lock") {
+        return Err("Payment record locked, will retry".to_string());
+    }
+
     let record_id = format!("rec_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
     let audit_id = format!("aud_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+    let now = chrono::Utc::now().to_rfc3339();
 
     // Calculate new balance
     let remaining_balance = ((original_amount - refund_amount) * 100.0).round() / 100.0;
@@ -198,26 +284,33 @@ pub fn update_payment_records(dependency_results: &HashMap<String, Value>) -> Re
         "gateway_reference": gateway_ref,
         "amount": refund_amount,
         "performed_by": "system",
-        "timestamp": chrono::Utc::now().to_rfc3339()
+        "timestamp": &now
     });
 
     info!(
-        "Payment records updated: order={}, refund={}, remaining_balance=${:.2}",
-        order_id, refund_txn_id, remaining_balance
+        "Payment records updated: payment_id={}, refund_id={}, record_id={}",
+        payment_id, refund_id, record_id
     );
 
+    // Output keys aligned with source: records_updated, payment_id, refund_id, record_id,
+    // payment_status, refund_status, history_entries_created, updated_at, namespace
     Ok(json!({
+        "records_updated": true,
+        "payment_id": payment_id,
+        "refund_id": refund_id,
         "record_id": record_id,
+        "payment_status": "refunded",
+        "refund_status": "completed",
+        "history_entries_created": 2,
+        "updated_at": now,
+        "namespace": "payments",
         "order_id": order_id,
         "customer_email": customer_email,
         "original_amount": original_amount,
         "refund_amount": refund_amount,
         "remaining_balance": remaining_balance,
         "is_partial_refund": is_partial,
-        "refund_transaction_id": refund_txn_id,
-        "audit_entry": audit_entry,
-        "status": "recorded",
-        "updated_at": chrono::Utc::now().to_rfc3339()
+        "audit_entry": audit_entry
     }))
 }
 
@@ -227,21 +320,47 @@ pub fn update_payment_records(dependency_results: &HashMap<String, Value>) -> Re
 
 /// Sends a refund notification to the customer with complete details
 /// about the refund amount, expected timeline, and reference numbers.
-pub fn notify_customer(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let eligibility = dependency_results.get("validate_eligibility")
-        .ok_or("Missing validate_eligibility dependency")?;
-
+///
+/// Dependency reads (aligned with source):
+///   process_gateway_refund -> full result (refund_processed), refund_id, refund_amount
+/// Context reads (aligned with source): customer_email
+/// Output keys (aligned with source): notification_sent, customer_email, message_id,
+///   notification_type, sent_at, delivery_status, refund_id, refund_amount, namespace
+pub fn notify_customer(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
     let gateway_result = dependency_results.get("process_gateway_refund")
         .ok_or("Missing process_gateway_refund dependency")?;
 
-    let records_result = dependency_results.get("update_records")
-        .ok_or("Missing update_records dependency")?;
+    let eligibility = dependency_results.get("validate_payment_eligibility")
+        .ok_or("Missing validate_payment_eligibility dependency")?;
 
-    let customer_email = eligibility.get("customer_email")
+    let records_result = dependency_results.get("update_payment_records")
+        .ok_or("Missing update_payment_records dependency")?;
+
+    // Source checks refund_processed from process_gateway_refund
+    let refund_processed = gateway_result.get("refund_processed")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if !refund_processed {
+        return Err("Refund must be processed before sending notification".to_string());
+    }
+
+    // Source reads: customer_email from task context
+    let customer_email = context.get("customer_email")
         .and_then(|v| v.as_str())
+        .or_else(|| eligibility.get("customer_email").and_then(|v| v.as_str()))
         .unwrap_or("unknown@example.com");
 
-    let order_id = eligibility.get("order_id")
+    // Simulate notification scenarios (aligned with source)
+    if customer_email.contains("@test_bounce") {
+        return Err("Customer email bounced".to_string());
+    }
+    if customer_email.contains("@test_rate_limit") {
+        return Err("Email service rate limited, will retry".to_string());
+    }
+
+    // Source reads: refund_id, refund_amount from process_gateway_refund
+    let refund_id = gateway_result.get("refund_id")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
@@ -249,11 +368,16 @@ pub fn notify_customer(dependency_results: &HashMap<String, Value>) -> Result<Va
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
 
+    // Also read app-specific fields
+    let order_id = eligibility.get("order_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
     let estimated_days = gateway_result.get("estimated_business_days")
         .and_then(|v| v.as_i64())
         .unwrap_or(5);
 
-    let refund_txn_id = gateway_result.get("refund_transaction_id")
+    let refund_txn_id = gateway_result.get("gateway_transaction_id")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
@@ -265,7 +389,8 @@ pub fn notify_customer(dependency_results: &HashMap<String, Value>) -> Result<Va
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let notification_id = format!("notif_{}", &Uuid::new_v4().to_string().replace('-', "")[..10]);
+    let message_id = format!("msg_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let now = chrono::Utc::now().to_rfc3339();
 
     // Build customer-friendly notification
     let refund_type = if is_partial { "partial" } else { "full" };
@@ -278,21 +403,25 @@ pub fn notify_customer(dependency_results: &HashMap<String, Value>) -> Result<Va
     );
 
     info!(
-        "Customer notification sent: {} to {} for order {} (${:.2})",
-        notification_id, customer_email, order_id, refund_amount
+        "Customer notification sent: message_id={}, customer_email={}, refund_id={}",
+        message_id, customer_email, refund_id
     );
 
+    // Output keys aligned with source: notification_sent, customer_email, message_id,
+    // notification_type, sent_at, delivery_status, refund_id, refund_amount, namespace
     Ok(json!({
-        "notification_id": notification_id,
-        "recipient": customer_email,
-        "channel": "email",
+        "notification_sent": true,
+        "customer_email": customer_email,
+        "message_id": message_id,
+        "notification_type": "refund_confirmation",
+        "sent_at": now,
+        "delivery_status": "delivered",
+        "refund_id": refund_id,
+        "refund_amount": refund_amount,
+        "namespace": "payments",
         "subject": subject,
         "body": body,
         "order_id": order_id,
-        "refund_amount": refund_amount,
-        "refund_transaction_id": refund_txn_id,
-        "estimated_completion_days": estimated_days,
-        "status": "sent",
-        "sent_at": chrono::Utc::now().to_rfc3339()
+        "estimated_completion_days": estimated_days
     }))
 }

@@ -42,8 +42,10 @@ module DataPipeline
         end
 
         avg_ltv = (records.sum { |r| r[:lifetime_value] } / records.size).round(2)
+        total_ltv = records.sum { |r| r[:lifetime_value] }
         segment_distribution = records.group_by { |r| r[:segment] }
                                        .transform_values(&:count)
+        tier_breakdown = records.group_by { |r| r[:tier] }.transform_values(&:count)
 
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
@@ -51,6 +53,10 @@ module DataPipeline
             extraction_id: "ext_cust_#{SecureRandom.hex(8)}",
             record_count: records.size,
             records: records,
+            total_customers: records.size,
+            total_lifetime_value: total_ltv.round(2),
+            tier_breakdown: tier_breakdown,
+            avg_lifetime_value: avg_ltv,
             average_lifetime_value: avg_ltv,
             segment_distribution: segment_distribution,
             engagement_rate: (records.count { |r| r[:email_engaged] }.to_f / records.size).round(3),

@@ -15,7 +15,17 @@ module CustomerSuccess
       }.freeze
 
       def call(context)
-        validation = context.get_dependency_field('validate_refund_request', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        validation_result = context.get_dependency_result('validate_refund_request')
+        validation = validation_result&.is_a?(Hash) ? validation_result : nil
+
+        # TAS-137: Use get_dependency_field() for nested field extraction
+        customer_tier = context.get_dependency_field('validate_refund_request', 'customer_tier') || 'standard'
+        original_purchase_date = context.get_dependency_field('validate_refund_request', 'original_purchase_date')
+
+        # TAS-137: Use get_input() for task context access
+        refund_amount_input = context.get_input('refund_amount')
+        refund_reason_input = context.get_input('refund_reason')
 
         raise TaskerCore::Errors::PermanentError.new(
           'Validation data not available',
@@ -71,6 +81,16 @@ module CustomerSuccess
 
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            policy_checked: true,
+            policy_compliant: policy_passed,
+            customer_tier: customer_tier,
+            refund_window_days: policy[:window_days],
+            days_since_purchase: days_since_order,
+            within_refund_window: days_since_order <= policy[:window_days],
+            requires_approval: requires_manager,
+            max_allowed_amount: policy[:auto_approve_threshold] == Float::INFINITY ? 999_999 : policy[:auto_approve_threshold],
+            policy_checked_at: Time.current.iso8601,
+            namespace: 'customer_success',
             check_id: check_id,
             policy_passed: policy_passed,
             violations: violations,

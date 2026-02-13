@@ -2,10 +2,20 @@ module Microservices
   module StepHandlers
     class UpdateUserStatusHandler < TaskerCore::StepHandler::Base
       def call(context)
-        account_data = context.get_dependency_field('create_user_account', ['result'])
-        billing_data = context.get_dependency_field('setup_billing_profile', ['result'])
-        preferences_data = context.get_dependency_field('initialize_preferences', ['result'])
-        welcome_data = context.get_dependency_field('send_welcome_sequence', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step data
+        account_data_full = context.get_dependency_result('create_user_account')
+        billing_data_full = context.get_dependency_result('setup_billing_profile')
+        preferences_data_full = context.get_dependency_result('initialize_preferences')
+        welcome_data_full = context.get_dependency_result('send_welcome_sequence')
+
+        account_data = account_data_full&.is_a?(Hash) ? account_data_full : nil
+        billing_data = billing_data_full&.is_a?(Hash) ? billing_data_full : nil
+        preferences_data = preferences_data_full&.is_a?(Hash) ? preferences_data_full : nil
+        welcome_data = welcome_data_full&.is_a?(Hash) ? welcome_data_full : nil
+
+        # TAS-137: Use get_dependency_field() for nested field extraction
+        user_id_field = context.get_dependency_field('create_user_account', 'user_id')
+        plan_field = context.get_dependency_field('create_user_account', 'plan') || 'free'
 
         raise TaskerCore::Errors::PermanentError.new(
           'Upstream data not available for status update',
@@ -54,6 +64,16 @@ module Microservices
           result: {
             user_id: user_id,
             status: all_steps_completed ? 'active' : 'partially_active',
+            plan: plan,
+            registration_summary: profile_summary,
+            activation_timestamp: activated_at.iso8601,
+            all_services_coordinated: all_steps_completed,
+            services_completed: %w[
+              user_service
+              billing_service
+              preferences_service
+              notification_service
+            ],
             registration_complete: all_steps_completed,
             registration_steps: registration_steps,
             onboarding_score: onboarding_score,

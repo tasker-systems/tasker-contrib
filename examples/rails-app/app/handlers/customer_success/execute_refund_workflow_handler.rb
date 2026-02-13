@@ -2,8 +2,23 @@ module CustomerSuccess
   module StepHandlers
     class ExecuteRefundWorkflowHandler < TaskerCore::StepHandler::Base
       def call(context)
-        validation = context.get_dependency_field('validate_refund_request', ['result'])
-        approval = context.get_dependency_field('get_manager_approval', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        approval_result = context.get_dependency_result('get_manager_approval')
+        approval = approval_result&.is_a?(Hash) ? approval_result : nil
+
+        validation_full = context.get_dependency_result('validate_refund_request')
+        validation = validation_full&.is_a?(Hash) ? validation_full : nil
+
+        # TAS-137: Use get_dependency_field() for nested field extraction
+        payment_id = context.get_dependency_field('validate_refund_request', 'payment_id')
+        approval_id = context.get_dependency_field('get_manager_approval', 'approval_id')
+
+        # TAS-137: Use get_input() for task context access
+        refund_amount_input = context.get_input('refund_amount')
+        refund_reason_input = context.get_input_or('refund_reason', 'customer_request')
+        customer_email_input = context.get_input_or('customer_email', 'customer@example.com')
+        ticket_id_input = context.get_input('ticket_id')
+        correlation_id_input = context.get_input('correlation_id') || "cs-#{SecureRandom.hex(8)}"
 
         raise TaskerCore::Errors::PermanentError.new(
           'Upstream data not available for refund execution',
@@ -11,20 +26,10 @@ module CustomerSuccess
         ) if validation.nil? || approval.nil?
 
         # Cannot proceed without approval
-        unless approval['approved']
-          return TaskerCore::Types::StepHandlerCallResult.success(
-            result: {
-              execution_id: "exec_#{SecureRandom.hex(8)}",
-              executed: false,
-              reason: 'not_approved',
-              denial_reason: approval['denial_reason'] || approval['reason'],
-              executed_at: Time.current.iso8601
-            },
-            metadata: {
-              handler: self.class.name,
-              executed: false,
-              reason: 'not_approved'
-            }
+        unless approval['approved'] || approval['approval_obtained']
+          raise TaskerCore::Errors::PermanentError.new(
+            'Manager approval must be obtained before executing refund',
+            error_code: 'MISSING_APPROVAL'
           )
         end
 
@@ -32,6 +37,10 @@ module CustomerSuccess
         order_ref = validation['order_ref']
         customer_id = validation['customer_id']
         payment_method = validation.dig('order_data', 'payment_method') || 'unknown'
+
+        # Cross-namespace workflow coordination: delegate to payments namespace
+        delegated_task_id = "task_#{SecureRandom.uuid}"
+        correlation_id = correlation_id_input
 
         execution_id = "exec_#{SecureRandom.hex(8)}"
         refund_transaction_id = "rfnd_#{SecureRandom.hex(12)}"
@@ -93,6 +102,14 @@ module CustomerSuccess
 
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            task_delegated: true,
+            target_namespace: 'payments',
+            target_workflow: 'process_refund',
+            delegated_task_id: delegated_task_id,
+            delegated_task_status: 'created',
+            delegation_timestamp: Time.current.iso8601,
+            correlation_id: correlation_id,
+            namespace: 'customer_success',
             execution_id: execution_id,
             executed: all_completed,
             refund_transaction_id: refund_transaction_id,
@@ -111,7 +128,11 @@ module CustomerSuccess
             execution_id: execution_id,
             refund_transaction_id: refund_transaction_id,
             amount: amount,
-            steps_completed: steps_executed.count { |s| s[:status] == 'completed' }
+            steps_completed: steps_executed.count { |s| s[:status] == 'completed' },
+            target_namespace: 'payments',
+            target_workflow: 'process_refund',
+            delegated_task_id: delegated_task_id,
+            correlation_id: correlation_id
           }
         )
       end

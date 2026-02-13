@@ -1,10 +1,64 @@
+# TaskTemplate Configuration - Axum Example Application
+#
+# E-commerce Order Processing Workflow Pattern
+# Demonstrates complete order checkout workflow with cart validation, payment, inventory, and confirmation
+#
+# Template: ecommerce/order_processing:1.0.0
+# Implementation: Axum Example Application
+#
+# Business Workflow Pattern (5 steps):
+# 1. Validate Cart: Validate cart items, check availability, calculate totals
+# 2. Process Payment: Process customer payment using payment service
+# 3. Update Inventory: Reserve inventory for order items
+# 4. Create Order: Create order record with all details
+# 5. Send Confirmation: Send order confirmation email to customer
+#
+# This demonstrates real-world e-commerce checkout workflow with external service integration
+#
+---
 name: ecommerce_order_processing
-namespace_name: ecommerce_rs
+namespace_name: ecommerce
 version: 1.0.0
-
+description: "Complete e-commerce order processing: validate -> payment -> inventory -> order -> confirmation"
+metadata:
+  author: Axum Example Application
+  tags:
+    - namespace:ecommerce
+    - pattern:order_processing
+    - dependencies:linear_with_validation
+    - implementation:axum_example
+    - language:rust
+    - type_safety:compile_time
+    - business_logic:ecommerce_checkout
+    - external_services:simulated
+  documentation_url:
+  created_at: "2026-01-12T00:00:00Z"
+  updated_at: "2026-01-12T00:00:00Z"
+  notes: "Axum example application demonstrating e-commerce checkout workflow"
 task_handler:
-  callable: "ecommerce_order_processing"
-
+  callable: Ecommerce.TaskHandlers.OrderProcessingHandler
+  initialization:
+    input_validation:
+      required_fields:
+        - cart_items
+        - customer_info
+        - payment_info
+      business_rules:
+        - cart_validation: required
+        - payment_processing: external_gateway
+        - inventory_management: check_and_reserve
+        - order_creation: transaction_safe
+        - email_notification: async_delivery
+    expected_results:
+      validate_cart: "validated cart with totals"
+      process_payment: "payment confirmation"
+      update_inventory: "inventory reservations"
+      create_order: "order created"
+      send_confirmation: "email sent"
+system_dependencies:
+  primary: default
+  secondary: []
+domain_events: []
 input_schema:
   type: object
   required:
@@ -14,85 +68,150 @@ input_schema:
   properties:
     cart_items:
       type: array
+      description: "Array of cart items with product_id and quantity"
       items:
         type: object
-        required: [product_id, quantity]
+        required:
+          - product_id
+          - quantity
         properties:
           product_id:
             type: integer
+            description: "Product ID"
           quantity:
             type: integer
-            minimum: 1
+            description: "Quantity to purchase"
     customer_info:
       type: object
-      required: [email, name]
+      required:
+        - email
+        - name
       properties:
         email:
           type: string
-          format: email
+          description: "Customer email address"
         name:
           type: string
+          description: "Customer full name"
+        phone:
+          type: string
+          description: "Customer phone number"
     payment_info:
       type: object
-      required: [method, token, amount]
+      required:
+        - method
+        - token
+        - amount
       properties:
         method:
           type: string
+          description: "Payment method (credit_card, paypal, etc.)"
         token:
           type: string
+          description: "Payment token from payment gateway"
         amount:
           type: number
-          minimum: 0
-    shipping_address:
-      type: object
-
+          description: "Payment amount"
 steps:
   - name: validate_cart
-    description: Validate cart items, check availability, and calculate pricing
+    description: "Validate cart items, check availability, calculate totals (subtotal, tax, shipping)"
     handler:
-      callable: "ecommerce_validate_cart"
+      callable: ecommerce_validate_cart
+      initialization:
+        scenario: ecommerce_checkout
+    system_dependency:
     dependencies: []
     retry:
+      retryable: true
       max_attempts: 2
-      backoff_seconds: [1, 5]
+      backoff: exponential
+      backoff_base_ms: 100
+      max_backoff_ms: 5000
+    timeout_seconds: 10
+    publishes_events: []
 
   - name: process_payment
-    description: Process payment through the payment gateway
+    description: "Process customer payment using mock payment service"
     handler:
-      callable: "ecommerce_process_payment"
+      callable: ecommerce_process_payment
+      initialization:
+        scenario: ecommerce_checkout
+    system_dependency:
     dependencies:
       - validate_cart
     retry:
-      max_attempts: 3
-      backoff_seconds: [2, 10, 30]
+      retryable: true
+      max_attempts: 2
+      backoff: exponential
+      backoff_base_ms: 100
+      max_backoff_ms: 5000
+    timeout_seconds: 10
+    publishes_events: []
 
   - name: update_inventory
-    description: Reserve inventory for the validated cart items
+    description: "Reserve inventory for order items using mock inventory service"
     handler:
-      callable: "ecommerce_update_inventory"
-    dependencies:
-      - validate_cart
-    retry:
-      max_attempts: 3
-      backoff_seconds: [1, 5, 15]
-
-  - name: create_order
-    description: Create the order record aggregating upstream results
-    handler:
-      callable: "ecommerce_create_order"
+      callable: ecommerce_update_inventory
+      initialization:
+        scenario: ecommerce_checkout
+    system_dependency:
     dependencies:
       - process_payment
+    retry:
+      retryable: true
+      max_attempts: 2
+      backoff: exponential
+      backoff_base_ms: 100
+      max_backoff_ms: 5000
+    timeout_seconds: 10
+    publishes_events: []
+
+  - name: create_order
+    description: "Create order record with customer, payment, and inventory details"
+    handler:
+      callable: ecommerce_create_order
+      initialization:
+        scenario: ecommerce_checkout
+    system_dependency:
+    dependencies:
       - update_inventory
     retry:
+      retryable: true
       max_attempts: 2
-      backoff_seconds: [2, 10]
+      backoff: exponential
+      backoff_base_ms: 100
+      max_backoff_ms: 5000
+    timeout_seconds: 10
+    publishes_events: []
 
   - name: send_confirmation
-    description: Send order confirmation email to the customer
+    description: "Send order confirmation email to customer using mock email service"
     handler:
-      callable: "ecommerce_send_confirmation"
+      callable: ecommerce_send_confirmation
+      initialization:
+        scenario: ecommerce_checkout
+    system_dependency:
     dependencies:
       - create_order
     retry:
-      max_attempts: 3
-      backoff_seconds: [5, 15, 30]
+      retryable: true
+      max_attempts: 2
+      backoff: exponential
+      backoff_base_ms: 100
+      max_backoff_ms: 5000
+    timeout_seconds: 10
+    publishes_events: []
+
+environments:
+  test:
+    steps:
+      - name: validate_cart
+        timeout_seconds: 10
+      - name: process_payment
+        timeout_seconds: 10
+      - name: update_inventory
+        timeout_seconds: 10
+      - name: create_order
+        timeout_seconds: 10
+      - name: send_confirmation
+        timeout_seconds: 10

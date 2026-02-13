@@ -4,11 +4,12 @@ module CustomerSuccess
       VALID_REASONS = %w[defective not_as_described changed_mind late_delivery duplicate_charge].freeze
 
       def call(context)
+        # TAS-137: Use get_input() for task context access (cross-language standard)
         ticket_id = context.get_input('ticket_id')
         order_ref = context.get_input('order_ref')
         customer_id = context.get_input('customer_id')
         refund_amount = context.get_input('refund_amount')
-        reason = context.get_input('reason')
+        reason = context.get_input('refund_reason')
 
         # Validate required fields
         missing = []
@@ -16,7 +17,7 @@ module CustomerSuccess
         missing << 'order_ref' if order_ref.blank?
         missing << 'customer_id' if customer_id.blank?
         missing << 'refund_amount' if refund_amount.nil?
-        missing << 'reason' if reason.blank?
+        missing << 'refund_reason' if reason.blank?
 
         unless missing.empty?
           raise TaskerCore::Errors::PermanentError.new(
@@ -56,12 +57,21 @@ module CustomerSuccess
 
         validation_id = "val_#{SecureRandom.hex(8)}"
 
+        customer_tier = order_data[:customer_tier]
+
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
-            validation_id: validation_id,
+            request_validated: true,
             ticket_id: ticket_id,
-            order_ref: order_ref,
             customer_id: customer_id,
+            ticket_status: 'open',
+            customer_tier: customer_tier,
+            original_purchase_date: order_data[:order_date],
+            payment_id: "pay_#{SecureRandom.hex(8)}",
+            validation_timestamp: Time.current.iso8601,
+            namespace: 'customer_success',
+            validation_id: validation_id,
+            order_ref: order_ref,
             refund_amount: amount,
             reason: reason,
             order_data: order_data,

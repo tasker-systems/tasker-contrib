@@ -2,20 +2,35 @@ module Payments
   module StepHandlers
     class NotifyCustomerHandler < TaskerCore::StepHandler::Base
       def call(context)
-        eligibility = context.get_dependency_field('validate_payment_eligibility', ['result'])
-        gateway_result = context.get_dependency_field('process_gateway_refund', ['result'])
-        records_result = context.get_dependency_field('update_payment_records', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        eligibility = context.get_dependency_result('validate_payment_eligibility')
+        eligibility = eligibility&.is_a?(Hash) ? eligibility : nil
+        gateway_result = context.get_dependency_result('process_gateway_refund')
+        gateway_result = gateway_result&.is_a?(Hash) ? gateway_result : nil
+        records_result = context.get_dependency_result('update_payment_records')
+        records_result = records_result&.is_a?(Hash) ? records_result : nil
+
+        # TAS-137: Use get_dependency_field() for nested field extraction
+        refund_id = context.get_dependency_field('process_gateway_refund', 'refund_id')
+        refund_amount_dep = context.get_dependency_field('process_gateway_refund', 'refund_amount')
+        payment_id = context.get_dependency_field('process_gateway_refund', 'payment_id')
+        estimated_arrival = context.get_dependency_field('process_gateway_refund', 'estimated_arrival')
+
+        # TAS-137: Use get_input() for task context access
+        customer_email = context.get_input('customer_email')
+        # TAS-137: Use get_input_or() for task context with default
+        refund_reason = context.get_input_or('refund_reason', 'customer_request')
 
         raise TaskerCore::Errors::PermanentError.new(
           'Upstream data not available for customer notification',
           error_code: 'MISSING_DEPENDENCIES'
         ) if eligibility.nil? || gateway_result.nil? || records_result.nil?
 
-        payment_id = eligibility['payment_id']
-        amount = gateway_result['refund_amount'].to_f
+        payment_id ||= eligibility['payment_id']
+        amount = (refund_amount_dep || gateway_result['refund_amount']).to_f
         currency = gateway_result['currency']
         settlement = gateway_result['settlement'] || {}
-        reason = eligibility['reason'] || 'refund_processed'
+        reason = refund_reason || eligibility['reason'] || 'refund_processed'
 
         notification_id = "notif_#{SecureRandom.hex(10)}"
         sent_at = Time.current
@@ -95,11 +110,21 @@ module Payments
 
         all_sent = notifications.all? { |n| %w[sent delivered created dispatched].include?(n[:status]) }
 
+        message_id = email_message_id
+
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            notification_sent: true,
+            customer_email: customer_email || 'customer@example.com',
+            message_id: message_id,
+            notification_type: 'refund_confirmation',
+            sent_at: sent_at.iso8601,
+            delivery_status: all_sent ? 'delivered' : 'partial',
+            refund_id: refund_id,
+            refund_amount: amount,
+            namespace: 'payments',
             notification_id: notification_id,
             payment_id: payment_id,
-            refund_amount: amount,
             currency: currency,
             notifications: notifications,
             total_notifications: notifications.size,
@@ -115,6 +140,9 @@ module Payments
           metadata: {
             handler: self.class.name,
             notification_id: notification_id,
+            message_id: message_id,
+            customer_email: customer_email,
+            notification_type: 'refund_confirmation',
             channels_used: notifications.map { |n| n[:channel] },
             all_sent: all_sent,
             amount: formatted_amount

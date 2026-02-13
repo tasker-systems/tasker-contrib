@@ -2,7 +2,8 @@ module DataPipeline
   module StepHandlers
     class TransformCustomersHandler < TaskerCore::StepHandler::Base
       def call(context)
-        extraction = context.get_dependency_field('extract_customer_data', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        extraction = context.get_dependency_result('extract_customer_data')
 
         raise TaskerCore::Errors::PermanentError.new(
           'Customer extraction data not available',
@@ -71,8 +72,33 @@ module DataPipeline
         at_risk = records.select { |r| r['days_since_last_order'].to_i > 90 }
         churn_rate = ((at_risk.size.to_f / records.size) * 100).round(1)
 
+        # Build tier_analysis and value_segments for source compatibility
+        tier_analysis = by_tier.transform_values do |tier_records|
+          {
+            customer_count: tier_records.count,
+            total_lifetime_value: tier_records.sum { |r| r['lifetime_value'].to_f },
+            avg_lifetime_value: tier_records.sum { |r| r['lifetime_value'].to_f } / tier_records.count.to_f
+          }
+        end
+
+        total_lifetime_value = records.sum { |r| r['lifetime_value'].to_f }
+        avg_customer_value = total_lifetime_value / records.count.to_f
+
+        value_segments = {
+          high_value: records.count { |r| r['lifetime_value'].to_f >= 10_000 },
+          medium_value: records.count { |r| r['lifetime_value'].to_f.between?(1000, 9999) },
+          low_value: records.count { |r| r['lifetime_value'].to_f < 1000 }
+        }
+
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            record_count: records.size,
+            tier_analysis: tier_analysis,
+            value_segments: value_segments,
+            total_lifetime_value: total_lifetime_value.round(2),
+            avg_customer_value: avg_customer_value.round(2),
+            transformation_type: 'customer_analytics',
+            source: 'extract_customer_data',
             transform_id: "tfm_cust_#{SecureRandom.hex(8)}",
             source_record_count: records.size,
             segment_metrics: segment_metrics,

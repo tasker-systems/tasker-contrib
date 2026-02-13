@@ -2,9 +2,10 @@ module DataPipeline
   module StepHandlers
     class AggregateMetricsHandler < TaskerCore::StepHandler::Base
       def call(context)
-        sales_transform = context.get_dependency_field('transform_sales', ['result'])
-        inventory_transform = context.get_dependency_field('transform_inventory', ['result'])
-        customer_transform = context.get_dependency_field('transform_customers', ['result'])
+        # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
+        sales_transform = context.get_dependency_result('transform_sales')
+        inventory_transform = context.get_dependency_result('transform_inventory')
+        customer_transform = context.get_dependency_result('transform_customers')
 
         raise TaskerCore::Errors::PermanentError.new(
           'One or more transform results are missing',
@@ -47,8 +48,24 @@ module DataPipeline
           { segment: sm['segment'], count: sm['customer_count'], avg_ltv: sm['average_lifetime_value'] }
         end
 
+        # Source-compatible flat keys
+        sales_record_count = sales_transform['record_count'] || sales_transform['source_record_count'] || 0
+        total_ltv = customer_transform['total_lifetime_value'] || 0
+        inventory_reorder_alerts = inventory_transform['reorder_alerts'] || 0
+        total_inventory_quantity = inventory_transform['total_quantity_on_hand'] || total_inventory_value
+
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
+            total_revenue: total_revenue,
+            total_inventory_quantity: total_inventory_quantity,
+            total_customers: total_customers,
+            total_customer_lifetime_value: total_ltv,
+            sales_transactions: sales_record_count,
+            inventory_reorder_alerts: inventory_reorder_alerts,
+            revenue_per_customer: revenue_per_customer,
+            inventory_turnover_indicator: inventory_to_revenue_ratio,
+            aggregation_complete: true,
+            sources_included: 3,
             aggregation_id: "agg_#{SecureRandom.hex(8)}",
             summary: {
               total_revenue: total_revenue,

@@ -10,50 +10,66 @@ import {
 // ---------------------------------------------------------------------------
 
 export class CreateUserHandler extends StepHandler {
-  static handlerName = 'Microservices.StepHandlers.CreateUserHandler';
+  static handlerName = 'Microservices.StepHandlers.CreateUserAccountHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const username = context.getInput<string>('username');
-      const email = context.getInput<string>('email');
-      const plan = context.getInput<string>('plan') || 'free';
+      // TAS-137: Use getInput() for task context access (matches source: reads user_info object)
+      const userInfo = (context.getInput('user_info') || {}) as {
+        email?: string;
+        name?: string;
+        plan?: string;
+        phone?: string;
+        source?: string;
+        preferences?: Record<string, unknown>;
+      };
 
-      if (!username || !email) {
+      if (!userInfo.email) {
         return this.failure(
-          'username and email are required',
-          ErrorType.VALIDATION_ERROR,
+          'Email is required but was not provided',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
+      }
+
+      if (!userInfo.name) {
+        return this.failure(
+          'Name is required but was not provided',
+          ErrorType.PERMANENT_ERROR,
           false,
         );
       }
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
+      if (!emailRegex.test(userInfo.email)) {
         return this.failure(
-          `Invalid email format: ${email}`,
-          ErrorType.VALIDATION_ERROR,
+          `Invalid email format: ${userInfo.email}`,
+          ErrorType.PERMANENT_ERROR,
           false,
         );
       }
 
+      const plan = userInfo.plan || 'free';
+      const source = userInfo.source || 'web';
+
       // Simulate user creation in auth service
       const userId = crypto.randomUUID();
+      const now = new Date().toISOString();
       const apiKey = `ak_${crypto.randomUUID().replace(/-/g, '').substring(0, 32)}`;
-      const passwordHash = crypto.randomUUID().replace(/-/g, '');
 
       return this.success(
         {
           user_id: userId,
-          username,
-          email,
+          email: userInfo.email,
+          name: userInfo.name,
           plan,
+          phone: userInfo.phone,
+          source,
+          status: 'created',
+          created_at: now,
           api_key: apiKey,
-          password_hash_algorithm: 'argon2id',
-          password_hash_preview: `$argon2id$v=19$...${passwordHash.substring(0, 8)}`,
-          email_verified: false,
-          account_status: 'pending_verification',
-          created_at: new Date().toISOString(),
           auth_provider: 'internal',
         },
         { user_creation_ms: Math.random() * 100 + 30 },
@@ -73,60 +89,69 @@ export class CreateUserHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class SetupBillingHandler extends StepHandler {
-  static handlerName = 'Microservices.StepHandlers.SetupBillingHandler';
+  static handlerName = 'Microservices.StepHandlers.SetupBillingProfileHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const userResult = context.getDependencyResult('create_user') as Record<string, unknown>;
+      const userData = context.getDependencyResult('create_user_account') as Record<string, unknown>;
 
-      if (!userResult) {
-        return this.failure('Missing user creation result', ErrorType.HANDLER_ERROR, true);
+      if (!userData) {
+        return this.failure(
+          'User data not found from create_user_account step',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
       }
 
-      const userId = userResult.user_id as string;
-      const plan = userResult.plan as string;
-      const email = userResult.email as string;
+      const userId = userData.user_id as string;
+      const plan = (userData.plan as string) || 'free';
 
-      // Simulate billing account creation with Stripe-like semantics
-      const customerId = `cus_${crypto.randomUUID().replace(/-/g, '').substring(0, 14)}`;
-      const subscriptionId = plan !== 'free'
-        ? `sub_${crypto.randomUUID().replace(/-/g, '').substring(0, 14)}`
-        : null;
-
-      const planPricing: Record<string, { monthly: number; trial_days: number }> = {
-        free: { monthly: 0, trial_days: 0 },
-        basic: { monthly: 9.99, trial_days: 14 },
-        standard: { monthly: 29.99, trial_days: 14 },
-        premium: { monthly: 99.99, trial_days: 30 },
+      // Billing tiers configuration
+      const billingTiers: Record<string, { price: number; features: string[]; billing_required: boolean }> = {
+        free: { price: 0, features: ['basic_features'], billing_required: false },
+        pro: { price: 29.99, features: ['basic_features', 'advanced_analytics'], billing_required: true },
+        enterprise: { price: 299.99, features: ['basic_features', 'advanced_analytics', 'priority_support', 'custom_integrations'], billing_required: true },
+        basic: { price: 9.99, features: ['basic_features'], billing_required: true },
+        standard: { price: 29.99, features: ['basic_features', 'advanced_analytics'], billing_required: true },
+        premium: { price: 99.99, features: ['basic_features', 'advanced_analytics', 'priority_support'], billing_required: true },
       };
 
-      const pricing = planPricing[plan] || planPricing.free;
-      const trialEnd = pricing.trial_days > 0
-        ? new Date(Date.now() + pricing.trial_days * 24 * 60 * 60 * 1000).toISOString()
-        : null;
+      const tierConfig = billingTiers[plan] || billingTiers.free;
 
-      return this.success(
-        {
-          customer_id: customerId,
-          user_id: userId,
-          email,
-          subscription_id: subscriptionId,
-          plan,
-          billing_status: subscriptionId ? 'trialing' : 'free_tier',
-          monthly_amount: pricing.monthly,
-          currency: 'usd',
-          trial_end: trialEnd,
-          payment_method_required: plan !== 'free',
-          invoice_settings: {
-            default_payment_method: null,
-            footer: `Account: ${customerId}`,
+      if (tierConfig.billing_required) {
+        // Paid plan - create billing profile
+        const now = new Date();
+        const nextBilling = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+        return this.success(
+          {
+            billing_id: `billing_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+            user_id: userId,
+            plan,
+            price: tierConfig.price,
+            currency: 'USD',
+            billing_cycle: 'monthly',
+            features: tierConfig.features,
+            status: 'active',
+            next_billing_date: nextBilling.toISOString(),
+            created_at: now.toISOString(),
           },
-          billing_provider: 'stripe_simulator',
-          created_at: new Date().toISOString(),
-        },
-        { billing_setup_ms: Math.random() * 200 + 80 },
-      );
+          { billing_setup_ms: Math.random() * 200 + 80 },
+        );
+      } else {
+        // Free plan - graceful degradation
+        return this.success(
+          {
+            user_id: userId,
+            plan,
+            billing_required: false,
+            status: 'skipped_free_plan',
+            message: 'Free plan users do not require billing setup',
+          },
+          { billing_setup_ms: Math.random() * 200 + 80 },
+        );
+      }
     } catch (error) {
       return this.failure(
         error instanceof Error ? error.message : String(error),
@@ -142,71 +167,79 @@ export class SetupBillingHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class InitPreferencesHandler extends StepHandler {
-  static handlerName = 'Microservices.StepHandlers.InitPreferencesHandler';
+  static handlerName = 'Microservices.StepHandlers.InitializePreferencesHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const userResult = context.getDependencyResult('create_user') as Record<string, unknown>;
-      const metadata = context.getInput<Record<string, unknown>>('metadata') || {};
+      const userData = context.getDependencyResult('create_user_account') as Record<string, unknown>;
 
-      if (!userResult) {
-        return this.failure('Missing user creation result', ErrorType.HANDLER_ERROR, true);
+      if (!userData) {
+        return this.failure(
+          'User data not found from create_user_account step',
+          ErrorType.PERMANENT_ERROR,
+          false,
+        );
       }
 
-      const userId = userResult.user_id as string;
-      const plan = userResult.plan as string;
+      const userId = userData.user_id as string;
+      const plan = (userData.plan as string) || 'free';
 
-      // Build default preferences based on plan tier
-      const featureFlags: Record<string, boolean> = {
-        dark_mode: true,
-        email_notifications: true,
-        push_notifications: plan !== 'free',
-        advanced_analytics: plan === 'premium' || plan === 'standard',
-        api_access: plan !== 'free',
-        custom_branding: plan === 'premium',
-        sso_enabled: plan === 'premium',
-        export_enabled: plan !== 'free',
-      };
+      // Get custom preferences from task input (matches source: reads user_info)
+      const userInfo = (context.getInput('user_info') || {}) as { preferences?: Record<string, unknown> };
+      const customPrefs = userInfo.preferences || {};
 
-      const notificationPreferences = {
-        email: {
-          marketing: false,
+      // Default preferences by plan
+      const defaultPreferences: Record<string, Record<string, unknown>> = {
+        free: {
+          email_notifications: true,
+          marketing_emails: false,
           product_updates: true,
-          security_alerts: true,
-          billing: true,
-          weekly_digest: plan !== 'free',
+          weekly_digest: false,
+          theme: 'light',
+          language: 'en',
+          timezone: 'UTC',
         },
-        in_app: {
-          mentions: true,
-          task_updates: true,
-          system_alerts: true,
+        pro: {
+          email_notifications: true,
+          marketing_emails: true,
+          product_updates: true,
+          weekly_digest: true,
+          theme: 'dark',
+          language: 'en',
+          timezone: 'UTC',
+          api_notifications: true,
+        },
+        enterprise: {
+          email_notifications: true,
+          marketing_emails: true,
+          product_updates: true,
+          weekly_digest: true,
+          theme: 'dark',
+          language: 'en',
+          timezone: 'UTC',
+          api_notifications: true,
+          audit_logs: true,
+          advanced_reports: true,
         },
       };
 
-      // Merge any custom preferences from metadata
-      const timezone = (metadata.timezone as string) || 'UTC';
-      const locale = (metadata.locale as string) || 'en-US';
+      const defaultPrefs = defaultPreferences[plan] || defaultPreferences.free;
+      const finalPrefs = { ...defaultPrefs, ...customPrefs };
+
+      const now = new Date().toISOString();
 
       return this.success(
         {
-          user_id: userId,
           preferences_id: crypto.randomUUID(),
-          feature_flags: featureFlags,
-          enabled_features_count: Object.values(featureFlags).filter(Boolean).length,
-          notification_preferences: notificationPreferences,
-          display: {
-            timezone,
-            locale,
-            date_format: locale.startsWith('en-US') ? 'MM/DD/YYYY' : 'DD/MM/YYYY',
-            theme: 'system',
-          },
-          onboarding: {
-            completed: false,
-            current_step: 1,
-            total_steps: 5,
-          },
-          created_at: new Date().toISOString(),
+          user_id: userId,
+          plan,
+          preferences: finalPrefs,
+          defaults_applied: Object.keys(defaultPrefs).length,
+          customizations: Object.keys(customPrefs).length,
+          status: 'active',
+          created_at: now,
+          updated_at: now,
         },
         { preferences_setup_ms: Math.random() * 60 + 15 },
       );
@@ -225,72 +258,60 @@ export class InitPreferencesHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class SendWelcomeHandler extends StepHandler {
-  static handlerName = 'Microservices.StepHandlers.SendWelcomeHandler';
+  static handlerName = 'Microservices.StepHandlers.SendWelcomeSequenceHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const userResult = context.getDependencyResult('create_user') as Record<string, unknown>;
-      const billingResult = context.getDependencyResult('setup_billing') as Record<string, unknown>;
-      const preferencesResult = context.getDependencyResult('init_preferences') as Record<string, unknown>;
+      const userData = context.getDependencyResult('create_user_account') as Record<string, unknown>;
+      const billingData = context.getDependencyResult('setup_billing_profile') as Record<string, unknown>;
+      const preferencesData = context.getDependencyResult('initialize_preferences') as Record<string, unknown>;
 
-      if (!userResult || !billingResult || !preferencesResult) {
+      // Validate all prior steps
+      const missing: string[] = [];
+      if (!userData) missing.push('create_user_account');
+      if (!billingData) missing.push('setup_billing_profile');
+      if (!preferencesData) missing.push('initialize_preferences');
+
+      if (missing.length > 0) {
         return this.failure(
-          'Missing required dependency results',
-          ErrorType.HANDLER_ERROR,
-          true,
+          `Missing results from steps: ${missing.join(', ')}`,
+          ErrorType.PERMANENT_ERROR,
+          false,
         );
       }
 
-      const email = userResult.email as string;
-      const username = userResult.username as string;
-      const plan = userResult.plan as string;
-      const trialEnd = billingResult.trial_end as string | null;
-      const enabledFeatures = preferencesResult.enabled_features_count as number;
+      const userId = userData!.user_id as string;
+      const email = userData!.email as string;
+      const plan = (userData!.plan as string) || 'free';
+      const prefs = (preferencesData!.preferences || {}) as Record<string, unknown>;
 
-      // Simulate sending multi-channel welcome messages
-      const emailMessageId = crypto.randomUUID();
-      const slackMessageTs = `${Date.now()}.${Math.floor(Math.random() * 1000000)}`;
+      const channelsUsed: string[] = [];
+      const now = new Date().toISOString();
 
-      const welcomeActions = [
-        {
-          channel: 'email',
-          message_id: emailMessageId,
-          template: 'welcome_v4',
-          subject: `Welcome to the platform, ${username}!`,
-          status: 'queued',
-        },
-        {
-          channel: 'in_app',
-          message_id: crypto.randomUUID(),
-          template: 'onboarding_checklist',
-          status: 'delivered',
-        },
-      ];
+      // Email (if enabled)
+      if (prefs.email_notifications !== false) {
+        channelsUsed.push('email');
+      }
 
-      if (plan !== 'free') {
-        welcomeActions.push({
-          channel: 'slack',
-          message_id: slackMessageTs,
-          template: 'premium_welcome',
-          subject: `New ${plan} customer: ${username}`,
-          status: 'queued',
-        });
+      // In-app notification (always)
+      channelsUsed.push('in_app');
+
+      // SMS (enterprise only)
+      if (plan === 'enterprise') {
+        channelsUsed.push('sms');
       }
 
       return this.success(
         {
+          user_id: userId,
+          plan,
+          channels_used: channelsUsed,
+          messages_sent: channelsUsed.length,
+          welcome_sequence_id: crypto.randomUUID(),
+          status: 'sent',
+          sent_at: now,
           recipient: email,
-          username,
-          welcome_actions: welcomeActions,
-          messages_sent: welcomeActions.length,
-          personalization: {
-            plan_name: plan,
-            trial_end: trialEnd,
-            features_enabled: enabledFeatures,
-            getting_started_url: `https://app.example.com/onboarding?user=${username}`,
-          },
-          sent_at: new Date().toISOString(),
         },
         { notification_dispatch_ms: Math.random() * 150 + 40 },
       );
@@ -309,54 +330,71 @@ export class SendWelcomeHandler extends StepHandler {
 // ---------------------------------------------------------------------------
 
 export class UpdateStatusHandler extends StepHandler {
-  static handlerName = 'Microservices.StepHandlers.UpdateStatusHandler';
+  static handlerName = 'Microservices.StepHandlers.UpdateUserStatusHandler';
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const userResult = context.getDependencyResult('create_user') as Record<string, unknown>;
-      const billingResult = context.getDependencyResult('setup_billing') as Record<string, unknown>;
-      const welcomeResult = context.getDependencyResult('send_welcome') as Record<string, unknown>;
+      // Collect results from all prior steps
+      const userData = context.getDependencyResult('create_user_account') as Record<string, unknown>;
+      const billingData = context.getDependencyResult('setup_billing_profile') as Record<string, unknown>;
+      const preferencesData = context.getDependencyResult('initialize_preferences') as Record<string, unknown>;
+      const welcomeData = context.getDependencyResult('send_welcome_sequence') as Record<string, unknown>;
 
-      if (!userResult || !billingResult || !welcomeResult) {
+      // Validate all prior steps completed
+      const missing: string[] = [];
+      if (!userData) missing.push('create_user_account');
+      if (!billingData) missing.push('setup_billing_profile');
+      if (!preferencesData) missing.push('initialize_preferences');
+      if (!welcomeData) missing.push('send_welcome_sequence');
+
+      if (missing.length > 0) {
         return this.failure(
-          'Missing required dependency results',
-          ErrorType.HANDLER_ERROR,
-          true,
+          `Cannot complete registration: missing results from steps: ${missing.join(', ')}`,
+          ErrorType.PERMANENT_ERROR,
+          false,
         );
       }
 
-      const userId = userResult.user_id as string;
-      const username = userResult.username as string;
-      const plan = userResult.plan as string;
-      const customerId = billingResult.customer_id as string;
-      const messagesSent = welcomeResult.messages_sent as number;
+      const userId = userData!.user_id as string;
+      const email = userData!.email as string;
+      const plan = (userData!.plan as string) || 'free';
 
-      // Simulate updating user status across all microservices
-      const statusUpdates = [
-        { service: 'auth_service', status: 'active', updated: true },
-        { service: 'billing_service', status: 'configured', updated: true },
-        { service: 'preferences_service', status: 'initialized', updated: true },
-        { service: 'notification_service', status: 'subscribed', updated: true },
-        { service: 'analytics_service', status: 'tracking', updated: true },
-      ];
+      // Build registration summary (matching source output keys)
+      const prefs = (preferencesData!.preferences || {}) as Record<string, unknown>;
+      const registrationSummary: Record<string, unknown> = {
+        user_id: userId,
+        email,
+        plan,
+        registration_status: 'complete',
+        preferences_count: Object.keys(prefs).length,
+        welcome_sent: true,
+        notification_channels: welcomeData!.channels_used,
+        user_created_at: userData!.created_at,
+        registration_completed_at: new Date().toISOString(),
+      };
+
+      if (plan !== 'free' && billingData!.billing_id) {
+        registrationSummary.billing_id = billingData!.billing_id;
+        registrationSummary.next_billing_date = billingData!.next_billing_date;
+      }
+
+      const now = new Date().toISOString();
 
       return this.success(
         {
           user_id: userId,
-          username,
-          final_status: 'active',
-          registration_complete: true,
-          service_statuses: statusUpdates,
-          services_updated: statusUpdates.length,
-          summary: {
-            plan,
-            billing_customer_id: customerId,
-            welcome_messages_sent: messagesSent,
-            account_ready: true,
-            login_url: `https://app.example.com/login`,
-          },
-          completed_at: new Date().toISOString(),
+          status: 'active',
+          plan,
+          registration_summary: registrationSummary,
+          activation_timestamp: now,
+          all_services_coordinated: true,
+          services_completed: [
+            'user_service',
+            'billing_service',
+            'preferences_service',
+            'notification_service',
+          ],
         },
         { status_update_ms: Math.random() * 100 + 20 },
       );
