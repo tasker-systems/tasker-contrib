@@ -1,0 +1,72 @@
+name: payments_process_refund
+namespace_name: payments
+version: 1.0.0
+
+task_handler:
+  callable: "Payments::ProcessRefundHandler"
+
+input_schema:
+  type: object
+  required:
+    - payment_id
+    - refund_amount
+    - currency
+    - reason
+  properties:
+    payment_id:
+      type: string
+    refund_amount:
+      type: number
+      minimum: 0.01
+    currency:
+      type: string
+      enum: [USD, EUR, GBP, CAD, AUD]
+      default: USD
+    reason:
+      type: string
+    original_transaction_id:
+      type: string
+    idempotency_key:
+      type: string
+    metadata:
+      type: object
+
+steps:
+  - name: validate_payment_eligibility
+    description: Verify the original payment exists and is eligible for refund
+    handler:
+      callable: "Payments::StepHandlers::ValidatePaymentEligibilityHandler"
+    dependencies: []
+    retry:
+      max_attempts: 2
+      backoff_seconds: [1, 5]
+
+  - name: process_gateway_refund
+    description: Submit refund to the payment gateway
+    handler:
+      callable: "Payments::StepHandlers::ProcessGatewayRefundHandler"
+    dependencies:
+      - validate_payment_eligibility
+    retry:
+      max_attempts: 3
+      backoff_seconds: [5, 15, 30]
+
+  - name: update_payment_records
+    description: Update internal payment and accounting records
+    handler:
+      callable: "Payments::StepHandlers::UpdatePaymentRecordsHandler"
+    dependencies:
+      - process_gateway_refund
+    retry:
+      max_attempts: 2
+      backoff_seconds: [2, 10]
+
+  - name: notify_customer
+    description: Send refund confirmation notification to the customer
+    handler:
+      callable: "Payments::StepHandlers::NotifyCustomerHandler"
+    dependencies:
+      - update_payment_records
+    retry:
+      max_attempts: 3
+      backoff_seconds: [5, 15, 30]

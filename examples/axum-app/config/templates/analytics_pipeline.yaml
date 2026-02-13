@@ -1,0 +1,107 @@
+name: analytics_pipeline
+namespace_name: data_pipeline_rs
+version: 1.0.0
+
+task_handler:
+  callable: "analytics_pipeline"
+
+input_schema:
+  type: object
+  properties:
+    job_name:
+      type: string
+    sources:
+      type: array
+      items:
+        type: string
+    date_range:
+      type: object
+      properties:
+        start_date:
+          type: string
+        end_date:
+          type: string
+
+steps:
+  # Extract Phase - 3 parallel steps with no dependencies
+  - name: extract_sales_data
+    description: Extract sales records from the sales database
+    handler:
+      callable: "data_pipeline_extract_sales"
+    dependencies: []
+    retry:
+      max_attempts: 3
+      backoff_seconds: [2, 10, 30]
+
+  - name: extract_inventory_data
+    description: Extract inventory records from the warehouse system
+    handler:
+      callable: "data_pipeline_extract_inventory"
+    dependencies: []
+    retry:
+      max_attempts: 3
+      backoff_seconds: [2, 10, 30]
+
+  - name: extract_customer_data
+    description: Extract customer records from the CRM
+    handler:
+      callable: "data_pipeline_extract_customers"
+    dependencies: []
+    retry:
+      max_attempts: 3
+      backoff_seconds: [2, 10, 30]
+
+  # Transform Phase - each depends on its corresponding extract
+  - name: transform_sales
+    description: Transform and aggregate sales data for analytics
+    handler:
+      callable: "data_pipeline_transform_sales"
+    dependencies:
+      - extract_sales_data
+    retry:
+      max_attempts: 2
+      backoff_seconds: [5, 15]
+
+  - name: transform_inventory
+    description: Transform and summarize inventory data for analytics
+    handler:
+      callable: "data_pipeline_transform_inventory"
+    dependencies:
+      - extract_inventory_data
+    retry:
+      max_attempts: 2
+      backoff_seconds: [5, 15]
+
+  - name: transform_customers
+    description: Transform and segment customer data for analytics
+    handler:
+      callable: "data_pipeline_transform_customers"
+    dependencies:
+      - extract_customer_data
+    retry:
+      max_attempts: 2
+      backoff_seconds: [5, 15]
+
+  # Aggregate Phase - DAG convergence point
+  - name: aggregate_metrics
+    description: Combine all transformed data sources into unified metrics
+    handler:
+      callable: "data_pipeline_aggregate_metrics"
+    dependencies:
+      - transform_sales
+      - transform_inventory
+      - transform_customers
+    retry:
+      max_attempts: 2
+      backoff_seconds: [5, 30]
+
+  # Insights Phase - final step
+  - name: generate_insights
+    description: Generate actionable business insights from aggregated metrics
+    handler:
+      callable: "data_pipeline_generate_insights"
+    dependencies:
+      - aggregate_metrics
+    retry:
+      max_attempts: 2
+      backoff_seconds: [5, 15]

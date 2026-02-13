@@ -1,0 +1,90 @@
+---
+# Microservices User Registration
+# 5 steps with diamond pattern:
+#   CreateUser -> (SetupBilling || InitPreferences) -> SendWelcome -> UpdateStatus
+
+name: user_registration
+namespace: microservices
+version: "1.0.0"
+description: "User registration with diamond dependency pattern for parallel billing and preferences setup"
+
+step_templates:
+  # Root of the diamond
+  - name: create_user_account
+    description: "Create the core user account"
+    handler:
+      callable: app.handlers.microservices.CreateUserAccountHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  # Left branch of the diamond (runs in parallel with right)
+  - name: setup_billing_profile
+    description: "Set up billing profile based on plan"
+    handler:
+      callable: app.handlers.microservices.SetupBillingProfileHandler
+      initialization: {}
+    depends_on_step_name:
+      - create_user_account
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  # Right branch of the diamond (runs in parallel with left)
+  - name: initialize_preferences
+    description: "Initialize user preferences and feature flags"
+    handler:
+      callable: app.handlers.microservices.InitializePreferencesHandler
+      initialization: {}
+    depends_on_step_name:
+      - create_user_account
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  # Convergence point (waits for both branches)
+  - name: send_welcome_sequence
+    description: "Send multi-channel welcome messages"
+    handler:
+      callable: app.handlers.microservices.SendWelcomeSequenceHandler
+      initialization: {}
+    depends_on_step_name:
+      - setup_billing_profile
+      - initialize_preferences
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  # Final step
+  - name: update_user_status
+    description: "Activate the user account"
+    handler:
+      callable: app.handlers.microservices.UpdateUserStatusHandler
+      initialization: {}
+    depends_on_step_name:
+      - send_welcome_sequence
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+input_schema:
+  type: object
+  properties:
+    user_id:
+      type: string
+    email:
+      type: string
+    full_name:
+      type: string
+    plan:
+      type: string
+  required:
+    - email
+    - full_name

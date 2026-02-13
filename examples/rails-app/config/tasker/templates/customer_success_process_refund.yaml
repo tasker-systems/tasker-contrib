@@ -1,0 +1,84 @@
+name: customer_success_process_refund
+namespace_name: customer_success
+version: 1.0.0
+
+task_handler:
+  callable: "CustomerSuccess::ProcessRefundHandler"
+
+input_schema:
+  type: object
+  required:
+    - ticket_id
+    - order_ref
+    - customer_id
+    - refund_amount
+    - reason
+  properties:
+    ticket_id:
+      type: string
+    order_ref:
+      type: string
+    customer_id:
+      type: string
+    refund_amount:
+      type: number
+      minimum: 0.01
+    reason:
+      type: string
+      enum: [defective, not_as_described, changed_mind, late_delivery, duplicate_charge]
+    agent_id:
+      type: string
+    priority:
+      type: string
+      enum: [low, normal, high, urgent]
+      default: normal
+
+steps:
+  - name: validate_refund_request
+    description: Validate the refund request data and check order existence
+    handler:
+      callable: "CustomerSuccess::StepHandlers::ValidateRefundRequestHandler"
+    dependencies: []
+    retry:
+      max_attempts: 2
+      backoff_seconds: [1, 5]
+
+  - name: check_refund_policy
+    description: Verify the request complies with refund policies
+    handler:
+      callable: "CustomerSuccess::StepHandlers::CheckRefundPolicyHandler"
+    dependencies:
+      - validate_refund_request
+    retry:
+      max_attempts: 2
+      backoff_seconds: [1, 5]
+
+  - name: get_manager_approval
+    description: Route for manager approval if amount exceeds threshold
+    handler:
+      callable: "CustomerSuccess::StepHandlers::GetManagerApprovalHandler"
+    dependencies:
+      - check_refund_policy
+    retry:
+      max_attempts: 3
+      backoff_seconds: [5, 15, 30]
+
+  - name: execute_refund_workflow
+    description: Coordinate the actual refund execution across systems
+    handler:
+      callable: "CustomerSuccess::StepHandlers::ExecuteRefundWorkflowHandler"
+    dependencies:
+      - get_manager_approval
+    retry:
+      max_attempts: 3
+      backoff_seconds: [10, 30, 60]
+
+  - name: update_ticket_status
+    description: Update the support ticket with refund outcome
+    handler:
+      callable: "CustomerSuccess::StepHandlers::UpdateTicketStatusHandler"
+    dependencies:
+      - execute_refund_workflow
+    retry:
+      max_attempts: 2
+      backoff_seconds: [2, 10]

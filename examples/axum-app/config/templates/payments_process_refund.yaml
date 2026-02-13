@@ -1,0 +1,67 @@
+name: payments_process_refund
+namespace_name: payments_rs
+version: 1.0.0
+
+task_handler:
+  callable: "payments_process_refund"
+
+input_schema:
+  type: object
+  required:
+    - order_id
+    - customer_email
+    - refund_amount
+  properties:
+    order_id:
+      type: string
+    customer_email:
+      type: string
+      format: email
+    refund_amount:
+      type: number
+      minimum: 0
+    payment_method:
+      type: string
+      default: original_method
+    reason:
+      type: string
+
+steps:
+  - name: validate_eligibility
+    description: Validate that the payment is eligible for a refund
+    handler:
+      callable: "team_scaling_payments_validate_eligibility"
+    dependencies: []
+    retry:
+      max_attempts: 2
+      backoff_seconds: [1, 5]
+
+  - name: process_gateway_refund
+    description: Process the refund through the payment gateway
+    handler:
+      callable: "team_scaling_payments_process_gateway_refund"
+    dependencies:
+      - validate_eligibility
+    retry:
+      max_attempts: 3
+      backoff_seconds: [5, 15, 30]
+
+  - name: update_records
+    description: Update internal payment records and audit trail
+    handler:
+      callable: "team_scaling_payments_update_records"
+    dependencies:
+      - process_gateway_refund
+    retry:
+      max_attempts: 3
+      backoff_seconds: [2, 10, 30]
+
+  - name: notify_customer
+    description: Send refund notification to the customer
+    handler:
+      callable: "team_scaling_payments_notify_customer"
+    dependencies:
+      - update_records
+    retry:
+      max_attempts: 3
+      backoff_seconds: [5, 15, 30]

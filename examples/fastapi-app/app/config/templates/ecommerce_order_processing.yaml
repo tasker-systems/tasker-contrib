@@ -1,0 +1,85 @@
+---
+# E-commerce Order Processing
+# 5 sequential steps: validate -> pay -> inventory -> order -> confirm
+
+name: ecommerce_order_processing
+namespace: ecommerce
+version: "1.0.0"
+description: "Process an e-commerce order through validation, payment, inventory, creation, and confirmation"
+
+step_templates:
+  - name: validate_cart
+    description: "Validate cart items and calculate totals"
+    handler:
+      callable: app.handlers.ecommerce.ValidateCartHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: process_payment
+    description: "Process payment through gateway"
+    handler:
+      callable: app.handlers.ecommerce.ProcessPaymentHandler
+      initialization: {}
+    depends_on_step_name:
+      - validate_cart
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  - name: update_inventory
+    description: "Create inventory reservations"
+    handler:
+      callable: app.handlers.ecommerce.UpdateInventoryHandler
+      initialization: {}
+    depends_on_step_name:
+      - validate_cart
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: create_order
+    description: "Create the consolidated order record"
+    handler:
+      callable: app.handlers.ecommerce.CreateOrderHandler
+      initialization: {}
+    depends_on_step_name:
+      - validate_cart
+      - process_payment
+      - update_inventory
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: send_confirmation
+    description: "Send order confirmation email"
+    handler:
+      callable: app.handlers.ecommerce.SendConfirmationHandler
+      initialization: {}
+    depends_on_step_name:
+      - create_order
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+input_schema:
+  type: object
+  properties:
+    customer_email:
+      type: string
+    items:
+      type: array
+    payment_token:
+      type: string
+    shipping_address:
+      type: string
+  required:
+    - customer_email
+    - items

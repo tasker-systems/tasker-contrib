@@ -1,0 +1,82 @@
+---
+# E-commerce Order Processing (Blog Post 1)
+# 5 sequential steps demonstrating a linear workflow pipeline.
+
+name: ecommerce_order_processing
+namespace: default
+version: "1.0.0"
+description: "Process an e-commerce order through validation, payment, inventory, order creation, and confirmation"
+
+step_templates:
+  - name: validate_cart
+    description: "Validate cart items, calculate pricing breakdown (subtotal, tax, shipping)"
+    handler:
+      callable: Ecommerce.StepHandlers.ValidateCartHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: process_payment
+    description: "Authorize payment via payment gateway"
+    handler:
+      callable: Ecommerce.StepHandlers.ProcessPaymentHandler
+      initialization: {}
+    depends_on_step_name:
+      - validate_cart
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  - name: update_inventory
+    description: "Reserve inventory in warehouse management system"
+    handler:
+      callable: Ecommerce.StepHandlers.UpdateInventoryHandler
+      initialization: {}
+    depends_on_step_name:
+      - validate_cart
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: create_order
+    description: "Create finalized order record with all details"
+    handler:
+      callable: Ecommerce.StepHandlers.CreateOrderHandler
+      initialization: {}
+    depends_on_step_name:
+      - process_payment
+      - update_inventory
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: send_confirmation
+    description: "Send order confirmation email to customer"
+    handler:
+      callable: Ecommerce.StepHandlers.SendConfirmationHandler
+      initialization: {}
+    depends_on_step_name:
+      - create_order
+    retry:
+      max_attempts: 5
+      backoff_strategy: exponential
+      backoff_base_seconds: 3
+
+input_schema:
+  type: object
+  properties:
+    customer_email:
+      type: string
+    cart_items:
+      type: array
+    payment_info:
+      type: object
+  required:
+    - customer_email
+    - cart_items

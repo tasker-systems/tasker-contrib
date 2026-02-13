@@ -1,0 +1,78 @@
+name: customer_success_process_refund
+namespace_name: customer_success_rs
+version: 1.0.0
+
+task_handler:
+  callable: "customer_success_process_refund"
+
+input_schema:
+  type: object
+  required:
+    - ticket_id
+    - customer_email
+    - order_id
+    - refund_amount
+    - reason
+  properties:
+    ticket_id:
+      type: string
+    customer_email:
+      type: string
+      format: email
+    order_id:
+      type: string
+    refund_amount:
+      type: number
+      minimum: 0
+    reason:
+      type: string
+
+steps:
+  - name: validate_refund_request
+    description: Validate refund request data and enrich with order details
+    handler:
+      callable: "team_scaling_cs_validate_refund_request"
+    dependencies: []
+    retry:
+      max_attempts: 2
+      backoff_seconds: [1, 5]
+
+  - name: check_refund_policy
+    description: Evaluate request against company refund policies
+    handler:
+      callable: "team_scaling_cs_check_refund_policy"
+    dependencies:
+      - validate_refund_request
+    retry:
+      max_attempts: 2
+      backoff_seconds: [2, 10]
+
+  - name: get_manager_approval
+    description: Route for manager approval if required by policy
+    handler:
+      callable: "team_scaling_cs_get_manager_approval"
+    dependencies:
+      - check_refund_policy
+    retry:
+      max_attempts: 2
+      backoff_seconds: [5, 15]
+
+  - name: execute_refund_workflow
+    description: Coordinate the actual refund execution
+    handler:
+      callable: "team_scaling_cs_execute_refund_workflow"
+    dependencies:
+      - get_manager_approval
+    retry:
+      max_attempts: 3
+      backoff_seconds: [5, 15, 30]
+
+  - name: update_ticket_status
+    description: Update support ticket with final refund outcome
+    handler:
+      callable: "team_scaling_cs_update_ticket_status"
+    dependencies:
+      - execute_refund_workflow
+    retry:
+      max_attempts: 3
+      backoff_seconds: [2, 10, 30]

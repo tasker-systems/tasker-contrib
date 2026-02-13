@@ -1,0 +1,101 @@
+name: ecommerce_order_processing
+namespace_name: ecommerce
+version: 1.0.0
+
+task_handler:
+  callable: "Ecommerce::OrderProcessingHandler"
+
+input_schema:
+  type: object
+  required:
+    - customer_email
+    - cart_items
+    - payment_token
+    - shipping_address
+  properties:
+    customer_email:
+      type: string
+      format: email
+    cart_items:
+      type: array
+      items:
+        type: object
+        required: [sku, name, quantity, unit_price]
+        properties:
+          sku:
+            type: string
+          name:
+            type: string
+          quantity:
+            type: integer
+            minimum: 1
+          unit_price:
+            type: number
+            minimum: 0
+    payment_token:
+      type: string
+    shipping_address:
+      type: object
+      required: [street, city, state, zip, country]
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        zip:
+          type: string
+        country:
+          type: string
+
+steps:
+  - name: validate_cart
+    description: Validate cart items, check availability, and calculate pricing
+    handler:
+      callable: "Ecommerce::StepHandlers::ValidateCartHandler"
+    dependencies: []
+    retry:
+      max_attempts: 2
+      backoff_seconds: [1, 5]
+
+  - name: process_payment
+    description: Process payment through the payment gateway
+    handler:
+      callable: "Ecommerce::StepHandlers::ProcessPaymentHandler"
+    dependencies:
+      - validate_cart
+    retry:
+      max_attempts: 3
+      backoff_seconds: [2, 10, 30]
+
+  - name: update_inventory
+    description: Reserve inventory for the validated cart items
+    handler:
+      callable: "Ecommerce::StepHandlers::UpdateInventoryHandler"
+    dependencies:
+      - validate_cart
+    retry:
+      max_attempts: 3
+      backoff_seconds: [1, 5, 15]
+
+  - name: create_order
+    description: Create the order record aggregating upstream results
+    handler:
+      callable: "Ecommerce::StepHandlers::CreateOrderHandler"
+    dependencies:
+      - process_payment
+      - update_inventory
+    retry:
+      max_attempts: 2
+      backoff_seconds: [2, 10]
+
+  - name: send_confirmation
+    description: Send order confirmation email to the customer
+    handler:
+      callable: "Ecommerce::StepHandlers::SendConfirmationHandler"
+    dependencies:
+      - create_order
+    retry:
+      max_attempts: 3
+      backoff_seconds: [5, 15, 30]

@@ -1,0 +1,76 @@
+# Shared infrastructure for Tasker example applications
+# Uses published GHCR images to mimic a real deployment
+#
+# Usage:
+#   docker-compose up -d                    # Start all infrastructure
+#   docker-compose up -d postgres dragonfly # Start minimal (PGMQ-only)
+#   docker-compose down -v                  # Stop and remove volumes
+#
+# Each example app connects to this shared infrastructure and runs its own
+# app-specific database for domain models (orders, analytics_jobs, etc.).
+
+services:
+  postgres:
+    image: ghcr.io/tasker-systems/tasker-postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: tasker
+      POSTGRES_PASSWORD: tasker
+      POSTGRES_DB: tasker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init-app-dbs.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tasker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  orchestration:
+    image: ghcr.io/tasker-systems/tasker-orchestration:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgresql://tasker:tasker@postgres:5432/tasker
+      REDIS_URL: redis://dragonfly:6379
+      TASKER_ENV: development
+      RUST_LOG: info
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -1,0 +1,73 @@
+---
+# Payments Refund Processing
+# 4 sequential steps owned by the Payments team
+# Namespace: payments
+
+name: payments_process_refund
+namespace: payments
+version: "1.0.0"
+description: "Payments team refund workflow: validate eligibility, process gateway, update records, notify customer"
+
+step_templates:
+  - name: pay_validate_eligibility
+    description: "Validate refund eligibility from the Payments perspective"
+    handler:
+      callable: app.handlers.payments.ValidateEligibilityHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: pay_process_gateway
+    description: "Process the refund through the payment gateway"
+    handler:
+      callable: app.handlers.payments.ProcessGatewayHandler
+      initialization: {}
+    depends_on_step_name:
+      - pay_validate_eligibility
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  - name: pay_update_records
+    description: "Update financial records and ledger entries"
+    handler:
+      callable: app.handlers.payments.UpdateRecordsHandler
+      initialization: {}
+    depends_on_step_name:
+      - pay_process_gateway
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: pay_notify_customer
+    description: "Send refund confirmation to customer"
+    handler:
+      callable: app.handlers.payments.NotifyCustomerHandler
+      initialization: {}
+    depends_on_step_name:
+      - pay_update_records
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+input_schema:
+  type: object
+  properties:
+    order_ref:
+      type: string
+    reason:
+      type: string
+    amount:
+      type: number
+    customer_email:
+      type: string
+  required:
+    - order_ref
+    - amount
+    - customer_email

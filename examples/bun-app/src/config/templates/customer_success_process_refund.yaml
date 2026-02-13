@@ -1,0 +1,82 @@
+---
+# Customer Success Refund Processing (Blog Post 4 - Team Scaling)
+# 5 steps in the customer_success namespace demonstrating namespace isolation.
+# Operates alongside a parallel payments namespace task sharing a parent_correlation_id.
+
+name: customer_success_process_refund
+namespace: customer_success
+version: "1.0.0"
+description: "Customer success team refund workflow: validate, check eligibility, calculate, notify, update CRM"
+
+step_templates:
+  - name: validate_refund_request
+    description: "Validate refund request against order data and policy rules"
+    handler:
+      callable: CustomerSuccess.StepHandlers.ValidateRefundRequestHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: check_refund_eligibility
+    description: "Check customer eligibility based on history, tier, and policies"
+    handler:
+      callable: CustomerSuccess.StepHandlers.CheckRefundEligibilityHandler
+      initialization: {}
+    depends_on_step_name:
+      - validate_refund_request
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: calculate_refund_amount
+    description: "Calculate refund amount with restocking fees and loyalty adjustments"
+    handler:
+      callable: CustomerSuccess.StepHandlers.CalculateRefundAmountHandler
+      initialization: {}
+    depends_on_step_name:
+      - check_refund_eligibility
+    retry:
+      max_attempts: 2
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: notify_customer_success
+    description: "Send refund decision notifications to customer and CS team"
+    handler:
+      callable: CustomerSuccess.StepHandlers.NotifyCustomerSuccessHandler
+      initialization: {}
+    depends_on_step_name:
+      - calculate_refund_amount
+    retry:
+      max_attempts: 5
+      backoff_strategy: exponential
+      backoff_base_seconds: 3
+
+  - name: update_crm_record
+    description: "Update CRM with refund case resolution and customer metrics"
+    handler:
+      callable: CustomerSuccess.StepHandlers.UpdateCrmRecordHandler
+      initialization: {}
+    depends_on_step_name:
+      - notify_customer_success
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+input_schema:
+  type: object
+  properties:
+    order_id:
+      type: string
+    customer_email:
+      type: string
+    refund_reason:
+      type: string
+  required:
+    - order_id
+    - customer_email

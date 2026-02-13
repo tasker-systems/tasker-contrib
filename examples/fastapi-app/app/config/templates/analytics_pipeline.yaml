@@ -1,0 +1,124 @@
+---
+# Data Pipeline Analytics
+# 8 steps with DAG pattern: 3 parallel extracts -> 3 transforms -> aggregate -> insights
+
+name: analytics_pipeline
+namespace: analytics
+version: "1.0.0"
+description: "Multi-source data pipeline with parallel extraction, transformation, aggregation, and insight generation"
+
+step_templates:
+  # Layer 1: Parallel extraction (no dependencies)
+  - name: extract_sales_data
+    description: "Extract sales transaction records"
+    handler:
+      callable: app.handlers.data_pipeline.ExtractSalesDataHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  - name: extract_web_traffic
+    description: "Extract web traffic analytics"
+    handler:
+      callable: app.handlers.data_pipeline.ExtractWebTrafficHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  - name: extract_inventory
+    description: "Extract inventory level data"
+    handler:
+      callable: app.handlers.data_pipeline.ExtractInventoryHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  # Layer 2: Transform (each depends on its extract)
+  - name: transform_sales_data
+    description: "Aggregate sales by category and region"
+    handler:
+      callable: app.handlers.data_pipeline.TransformSalesDataHandler
+      initialization: {}
+    depends_on_step_name:
+      - extract_sales_data
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: transform_web_traffic
+    description: "Aggregate web traffic by source and page"
+    handler:
+      callable: app.handlers.data_pipeline.TransformWebTrafficHandler
+      initialization: {}
+    depends_on_step_name:
+      - extract_web_traffic
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: transform_inventory
+    description: "Aggregate inventory by warehouse and category"
+    handler:
+      callable: app.handlers.data_pipeline.TransformInventoryHandler
+      initialization: {}
+    depends_on_step_name:
+      - extract_inventory
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  # Layer 3: Aggregate (depends on all 3 transforms)
+  - name: aggregate_metrics
+    description: "Combine all transform results into unified metrics"
+    handler:
+      callable: app.handlers.data_pipeline.AggregateMetricsHandler
+      initialization: {}
+    depends_on_step_name:
+      - transform_sales_data
+      - transform_web_traffic
+      - transform_inventory
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  # Layer 4: Insights (depends on aggregate)
+  - name: generate_insights
+    description: "Generate business insights and health score"
+    handler:
+      callable: app.handlers.data_pipeline.GenerateInsightsHandler
+      initialization: {}
+    depends_on_step_name:
+      - aggregate_metrics
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+input_schema:
+  type: object
+  properties:
+    source:
+      type: string
+    dataset_url:
+      type: string
+    date_range_start:
+      type: string
+    date_range_end:
+      type: string
+    granularity:
+      type: string
+  required:
+    - source

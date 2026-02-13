@@ -1,0 +1,89 @@
+---
+# Microservices User Registration (Blog Post 3)
+# 5 steps with diamond pattern: CreateUser -> (SetupBilling || InitPreferences) -> SendWelcome -> UpdateStatus.
+
+name: user_registration
+namespace: default
+version: "1.0.0"
+description: "Microservices user registration with parallel billing and preferences setup"
+
+step_templates:
+  # Step 1: Create user account (no dependencies)
+  - name: create_user
+    description: "Create user account in auth service"
+    handler:
+      callable: Microservices.StepHandlers.CreateUserHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  # Step 2a: Setup billing (parallel with Step 2b)
+  - name: setup_billing
+    description: "Create billing account and subscription via payment provider"
+    handler:
+      callable: Microservices.StepHandlers.SetupBillingHandler
+      initialization: {}
+    depends_on_step_name:
+      - create_user
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  # Step 2b: Init preferences (parallel with Step 2a)
+  - name: init_preferences
+    description: "Initialize user preferences, feature flags, and notification settings"
+    handler:
+      callable: Microservices.StepHandlers.InitPreferencesHandler
+      initialization: {}
+    depends_on_step_name:
+      - create_user
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  # Step 3: Send welcome (diamond convergence -- depends on both parallel steps)
+  - name: send_welcome
+    description: "Send multi-channel welcome messages to new user"
+    handler:
+      callable: Microservices.StepHandlers.SendWelcomeHandler
+      initialization: {}
+    depends_on_step_name:
+      - setup_billing
+      - init_preferences
+    retry:
+      max_attempts: 5
+      backoff_strategy: exponential
+      backoff_base_seconds: 3
+
+  # Step 4: Update status (final step)
+  - name: update_status
+    description: "Update user status across all microservices to active"
+    handler:
+      callable: Microservices.StepHandlers.UpdateStatusHandler
+      initialization: {}
+    depends_on_step_name:
+      - send_welcome
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+input_schema:
+  type: object
+  properties:
+    username:
+      type: string
+    email:
+      type: string
+    plan:
+      type: string
+    metadata:
+      type: object
+  required:
+    - username
+    - email

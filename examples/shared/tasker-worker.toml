@@ -1,0 +1,222 @@
+# Base Tasker Worker Configuration for Example Applications
+#
+# Each example app extends this configuration with its own worker name.
+# The key settings: web and gRPC servers are DISABLED because each app
+# provides its own framework-native web server (Rails, FastAPI, Hono, Axum).
+
+[worker]
+worker_id = "example-worker-001"
+worker_type = "general"
+
+# Disable tasker's built-in web server — the framework's own server handles HTTP
+[worker.web]
+enabled = false
+
+# Disable tasker's built-in gRPC server
+[worker.grpc]
+enabled = false
+
+# How the worker connects to the orchestration service
+[worker.orchestration_client]
+base_url = "http://localhost:8080"
+transport = "rest"
+timeout_ms = 30000
+max_retries = 3
+
+# Event system configuration
+[worker.event_systems.worker]
+system_id = "example-worker-event-system"
+deployment_mode = "Hybrid"
+
+[worker.event_systems.worker.timing]
+health_check_interval_seconds = 30
+fallback_polling_interval_seconds = 2
+visibility_timeout_seconds = 30
+processing_timeout_seconds = 60
+claim_timeout_seconds = 300
+
+[worker.event_systems.worker.processing]
+max_concurrent_operations = 50
+batch_size = 10
+max_retries = 3
+
+[worker.event_systems.worker.processing.backoff]
+initial_delay_ms = 100
+max_delay_ms = 10000
+multiplier = 2.0
+jitter_percent = 0.1
+
+[worker.event_systems.worker.health]
+enabled = true
+performance_monitoring_enabled = true
+max_consecutive_errors = 10
+error_rate_threshold_per_minute = 20
+
+[worker.event_systems.worker.metadata.in_process_events]
+ffi_integration_enabled = true
+deduplication_cache_size = 5000
+
+[worker.event_systems.worker.metadata.listener]
+retry_interval_seconds = 5
+max_retry_attempts = 5
+event_timeout_seconds = 60
+batch_processing = true
+connection_timeout_seconds = 30
+
+[worker.event_systems.worker.metadata.fallback_poller]
+enabled = true
+polling_interval_ms = 1000
+batch_size = 10
+age_threshold_seconds = 5
+max_age_hours = 24
+visibility_timeout_seconds = 30
+supported_namespaces = []
+
+# MPSC channel configuration
+[worker.mpsc_channels.command_processor]
+command_buffer_size = 1000
+
+[worker.mpsc_channels.event_systems]
+event_channel_buffer_size = 1000
+
+[worker.mpsc_channels.event_subscribers]
+completion_buffer_size = 500
+result_buffer_size = 500
+
+[worker.mpsc_channels.in_process_events]
+broadcast_buffer_size = 1000
+log_subscriber_errors = true
+dispatch_timeout_ms = 5000
+
+[worker.mpsc_channels.event_listeners]
+pgmq_event_buffer_size = 5000
+
+[worker.mpsc_channels.domain_events]
+command_buffer_size = 500
+shutdown_drain_timeout_ms = 5000
+log_dropped_events = true
+
+[worker.mpsc_channels.handler_dispatch]
+dispatch_buffer_size = 500
+completion_buffer_size = 500
+max_concurrent_handlers = 10
+handler_timeout_ms = 30000
+
+[worker.mpsc_channels.handler_dispatch.load_shedding]
+enabled = true
+capacity_threshold_percent = 80.0
+warning_threshold_percent = 70.0
+
+[worker.mpsc_channels.ffi_dispatch]
+dispatch_buffer_size = 500
+completion_timeout_ms = 30000
+callback_timeout_ms = 5000
+starvation_warning_threshold_ms = 10000
+completion_send_timeout_ms = 10000
+
+# FFI completion circuit breaker
+[worker.circuit_breakers.ffi_completion_send]
+failure_threshold = 5
+recovery_timeout_seconds = 5
+success_threshold = 2
+slow_send_threshold_ms = 100
+
+# Common configuration
+[common.database]
+url = "${DATABASE_URL:-postgresql://tasker:tasker@localhost:5432/tasker}"
+
+[common.database.pool]
+max_connections = 15
+min_connections = 3
+acquire_timeout_seconds = 10
+idle_timeout_seconds = 300
+max_lifetime_seconds = 1800
+slow_acquire_threshold_ms = 100
+
+[common.pgmq_database]
+url = ""
+enabled = true
+
+[common.pgmq_database.pool]
+max_connections = 10
+min_connections = 2
+acquire_timeout_seconds = 5
+idle_timeout_seconds = 300
+max_lifetime_seconds = 1800
+slow_acquire_threshold_ms = 100
+
+[common.queues]
+backend = "pgmq"
+orchestration_namespace = "orchestration"
+worker_namespace = "worker"
+default_visibility_timeout_seconds = 30
+naming_pattern = "{namespace}_{name}_queue"
+
+[common.queues.orchestration_queues]
+task_requests = "orchestration_task_requests"
+task_finalizations = "orchestration_task_finalizations"
+step_results = "orchestration_step_results"
+
+[common.queues.pgmq]
+poll_interval_ms = 500
+
+[common.queues.pgmq.queue_depth_thresholds]
+critical_threshold = 5000
+overflow_threshold = 10000
+
+[common.circuit_breakers.global_settings]
+metrics_collection_interval_seconds = 30
+min_state_transition_interval_seconds = 5.0
+
+[common.circuit_breakers.default_config]
+failure_threshold = 5
+timeout_seconds = 30
+success_threshold = 2
+
+[common.circuit_breakers.component_configs.task_readiness]
+failure_threshold = 10
+success_threshold = 3
+
+[common.circuit_breakers.component_configs.messaging]
+failure_threshold = 5
+success_threshold = 2
+
+[common.circuit_breakers.component_configs.web]
+failure_threshold = 5
+success_threshold = 2
+
+[common.circuit_breakers.component_configs.cache]
+failure_threshold = 5
+success_threshold = 2
+
+[common.system]
+default_dependent_system = "default"
+
+[common.execution]
+step_enqueue_batch_size = 50
+environment = "development"
+
+[common.backoff]
+default_backoff_seconds = [1, 5, 15, 30, 60]
+max_backoff_seconds = 3600
+backoff_multiplier = 2.0
+jitter_enabled = true
+jitter_max_percentage = 0.15
+
+[common.cache]
+enabled = false
+
+[common.mpsc_channels.event_publisher]
+event_queue_buffer_size = 2000
+
+[common.mpsc_channels.ffi]
+ruby_event_buffer_size = 500
+
+[common.mpsc_channels.overflow_policy]
+log_warning_threshold = 0.8
+
+[common.mpsc_channels.overflow_policy.metrics]
+saturation_check_interval_seconds = 30
+
+[common.task_templates]
+search_paths = ["config/tasks/**/*.{yml,yaml}"]

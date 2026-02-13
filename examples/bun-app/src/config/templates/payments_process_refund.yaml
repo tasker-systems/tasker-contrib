@@ -1,0 +1,70 @@
+---
+# Payments Refund Processing (Blog Post 4 - Team Scaling)
+# 4 steps in the payments namespace demonstrating namespace isolation.
+# Operates alongside a parallel customer_success namespace task
+# sharing a parent_correlation_id for cross-namespace traceability.
+
+name: payments_process_refund
+namespace: payments
+version: "1.0.0"
+description: "Payments team refund workflow: process payment, update ledger, reconcile, generate receipt"
+
+step_templates:
+  - name: process_refund_payment
+    description: "Process the refund through the payment gateway"
+    handler:
+      callable: Payments.StepHandlers.ProcessRefundPaymentHandler
+      initialization: {}
+    depends_on_step_name: []
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 5
+
+  - name: update_ledger
+    description: "Create double-entry bookkeeping journal entries for the refund"
+    handler:
+      callable: Payments.StepHandlers.UpdateLedgerHandler
+      initialization: {}
+    depends_on_step_name:
+      - process_refund_payment
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+  - name: reconcile_account
+    description: "Run reconciliation checks: ledger balance, gateway confirmation, compliance"
+    handler:
+      callable: Payments.StepHandlers.ReconcileAccountHandler
+      initialization: {}
+    depends_on_step_name:
+      - update_ledger
+    retry:
+      max_attempts: 2
+      backoff_strategy: exponential
+      backoff_base_seconds: 3
+
+  - name: generate_refund_receipt
+    description: "Generate and deliver refund receipt with compliance documentation"
+    handler:
+      callable: Payments.StepHandlers.GenerateRefundReceiptHandler
+      initialization: {}
+    depends_on_step_name:
+      - reconcile_account
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      backoff_base_seconds: 2
+
+input_schema:
+  type: object
+  properties:
+    refund_amount:
+      type: string
+    payment_method:
+      type: string
+    original_transaction_id:
+      type: string
+  required:
+    - refund_amount
