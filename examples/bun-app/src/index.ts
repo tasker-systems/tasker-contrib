@@ -80,9 +80,10 @@ try {
   console.warn('App will start without Tasker integration. Ensure infrastructure is running.');
 }
 
-console.log('Bun + Hono example app listening on http://localhost:3000');
+const port = parseInt(process.env.PORT || '3002', 10);
+console.log(`Bun + Hono example app listening on http://localhost:${port}`);
 
 export default {
-  port: 3000,
+  port,
   fetch: app.fetch,
 };
