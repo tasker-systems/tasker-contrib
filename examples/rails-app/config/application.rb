@@ -5,14 +5,16 @@ require 'active_model/railtie'
 require 'active_record/railtie'
 require 'action_controller/railtie'
 require 'action_view/railtie'
-require 'rails/test_unit/railtie'
+require 'active_job/railtie'
+# require 'rails/test_unit/railtie'  # Using RSpec instead
 
-# Load environment variables from .env before anything else
-Dotenv::Railtie.load if defined?(Dotenv)
+# Load environment variables from .env (dotenv ~> 2.8 via tasker-rb)
+require 'dotenv'
+Dotenv.load
 
 module TaskerExampleRails
   class Application < Rails::Application
-    config.load_defaults 7.1
+    config.load_defaults 8.0
     config.api_only = true
 
     # Autoload handler paths
