@@ -2,8 +2,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { analyticsJobs } from '../db/schema';
-import { FfiLayer } from '@tasker-systems/tasker';
-import type { ClientTaskRequest } from '@tasker-systems/tasker';
+import { FfiLayer, TaskerClient } from '@tasker-systems/tasker';
 
 export const analyticsRoute = new Hono();
 
@@ -37,12 +36,10 @@ analyticsRoute.post('/', async (c) => {
   try {
     const ffiLayer = new FfiLayer();
     await ffiLayer.load();
-    const runtime = ffiLayer.getRuntime();
+    const client = new TaskerClient(ffiLayer);
 
-    const taskRequest: ClientTaskRequest = {
+    const task = client.createTask({
       name: 'analytics_pipeline',
-      namespace: 'default',
-      version: '1.0.0',
       context: {
         job_id: job.id,
         job_name,
@@ -54,28 +51,18 @@ analyticsRoute.post('/', async (c) => {
         },
       },
       initiator: 'bun-app',
-      source_system: 'example-bun-app',
+      sourceSystem: 'example-bun-app',
       reason: `Run analytics pipeline: ${job_name}`,
       tags: ['analytics', 'pipeline'],
-      requested_at: new Date().toISOString(),
-      options: null,
-      priority: null,
-      correlation_id: crypto.randomUUID(),
-      parent_correlation_id: null,
-      idempotency_key: `analytics-${job.id}`,
-    };
+      idempotencyKey: `analytics-${job.id}`,
+    });
 
-    const result = runtime.clientCreateTask(JSON.stringify(taskRequest));
+    taskUuid = task.task_uuid;
 
-    if (result.success && result.data) {
-      const taskData = result.data as { task_uuid: string };
-      taskUuid = taskData.task_uuid;
-
-      await db
-        .update(analyticsJobs)
-        .set({ taskUuid, status: 'processing', updatedAt: new Date() })
-        .where(eq(analyticsJobs.id, job.id));
-    }
+    await db
+      .update(analyticsJobs)
+      .set({ taskUuid, status: 'processing', updatedAt: new Date() })
+      .where(eq(analyticsJobs.id, job.id));
   } catch (error) {
     console.error('Failed to create Tasker task for analytics job:', error);
   }
@@ -116,12 +103,8 @@ analyticsRoute.get('/:id', async (c) => {
     try {
       const ffiLayer = new FfiLayer();
       await ffiLayer.load();
-      const runtime = ffiLayer.getRuntime();
-      const result = runtime.clientGetTask(job.taskUuid);
-
-      if (result.success && result.data) {
-        taskStatus = result.data;
-      }
+      const client = new TaskerClient(ffiLayer);
+      taskStatus = client.getTask(job.taskUuid);
     } catch (error) {
       console.error('Failed to fetch task status:', error);
     }

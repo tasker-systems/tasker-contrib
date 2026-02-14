@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -33,7 +32,7 @@ async def create_order(
     to orchestrate the 5-step processing pipeline: validate cart, process
     payment, update inventory, create order, send confirmation.
     """
-    from tasker_core._tasker_core import client_create_task
+    from tasker_core.client import TaskerClient
 
     # Create the domain record
     order = Order(
@@ -45,25 +44,21 @@ async def create_order(
     await db.flush()
 
     # Create the tasker task
-    task_request: dict[str, Any] = {
-        "name": "ecommerce_order_processing",
-        "namespace": "ecommerce",
-        "version": "1.0.0",
-        "context": {
-            "order_id": order.id,
-            "customer_email": request.customer_email,
-            "items": [item.model_dump() for item in request.items],
-            "payment_token": request.payment_token,
-            "shipping_address": request.shipping_address,
-        },
-        "initiator": "fastapi-example",
-        "source_system": "fastapi-example",
-        "reason": "E-commerce order processing",
-    }
-
+    client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
     try:
-        task_result = client_create_task(task_request)
-        task_uuid = uuid.UUID(task_result["task_uuid"])
+        task_response = client.create_task(
+            "ecommerce_order_processing",
+            namespace="ecommerce",
+            context={
+                "order_id": order.id,
+                "customer_email": request.customer_email,
+                "items": [item.model_dump() for item in request.items],
+                "payment_token": request.payment_token,
+                "shipping_address": request.shipping_address,
+            },
+            reason="E-commerce order processing",
+        )
+        task_uuid = uuid.UUID(task_response.task_uuid)
         order.task_uuid = task_uuid
         order.status = "processing"
         logger.info("Created task %s for order %d", task_uuid, order.id)
@@ -92,7 +87,7 @@ async def get_order(
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
     """Get order details with current workflow task status."""
-    from tasker_core._tasker_core import client_get_task
+    from tasker_core.client import TaskerClient
 
     result = await db.execute(select(Order).where(Order.id == order_id))
     order = result.scalar_one_or_none()
@@ -102,7 +97,8 @@ async def get_order(
     task_status = None
     if order.task_uuid:
         try:
-            task_status = client_get_task(str(order.task_uuid))
+            client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
+            task_status = client.get_task(str(order.task_uuid))
         except Exception:
             logger.exception("Failed to fetch task status for order %d", order.id)
 

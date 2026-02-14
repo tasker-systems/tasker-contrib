@@ -2,8 +2,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { serviceRequests } from '../db/schema';
-import { FfiLayer } from '@tasker-systems/tasker';
-import type { ClientTaskRequest } from '@tasker-systems/tasker';
+import { FfiLayer, TaskerClient } from '@tasker-systems/tasker';
 
 export const servicesRoute = new Hono();
 
@@ -38,12 +37,10 @@ servicesRoute.post('/', async (c) => {
   try {
     const ffiLayer = new FfiLayer();
     await ffiLayer.load();
-    const runtime = ffiLayer.getRuntime();
+    const client = new TaskerClient(ffiLayer);
 
-    const taskRequest: ClientTaskRequest = {
+    const task = client.createTask({
       name: 'user_registration',
-      namespace: 'default',
-      version: '1.0.0',
       context: {
         request_id: request.id,
         username,
@@ -52,28 +49,18 @@ servicesRoute.post('/', async (c) => {
         metadata: metadata || {},
       },
       initiator: 'bun-app',
-      source_system: 'example-bun-app',
+      sourceSystem: 'example-bun-app',
       reason: `Register user: ${username}`,
       tags: ['microservices', 'registration'],
-      requested_at: new Date().toISOString(),
-      options: null,
-      priority: null,
-      correlation_id: crypto.randomUUID(),
-      parent_correlation_id: null,
-      idempotency_key: `registration-${request.id}`,
-    };
+      idempotencyKey: `registration-${request.id}`,
+    });
 
-    const result = runtime.clientCreateTask(JSON.stringify(taskRequest));
+    taskUuid = task.task_uuid;
 
-    if (result.success && result.data) {
-      const taskData = result.data as { task_uuid: string };
-      taskUuid = taskData.task_uuid;
-
-      await db
-        .update(serviceRequests)
-        .set({ taskUuid, status: 'processing', updatedAt: new Date() })
-        .where(eq(serviceRequests.id, request.id));
-    }
+    await db
+      .update(serviceRequests)
+      .set({ taskUuid, status: 'processing', updatedAt: new Date() })
+      .where(eq(serviceRequests.id, request.id));
   } catch (error) {
     console.error('Failed to create Tasker task for service request:', error);
   }
@@ -114,12 +101,8 @@ servicesRoute.get('/:id', async (c) => {
     try {
       const ffiLayer = new FfiLayer();
       await ffiLayer.load();
-      const runtime = ffiLayer.getRuntime();
-      const result = runtime.clientGetTask(request.taskUuid);
-
-      if (result.success && result.data) {
-        taskStatus = result.data;
-      }
+      const client = new TaskerClient(ffiLayer);
+      taskStatus = client.getTask(request.taskUuid);
     } catch (error) {
       console.error('Failed to fetch task status:', error);
     }

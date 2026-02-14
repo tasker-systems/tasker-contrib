@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -42,7 +41,7 @@ async def create_compliance_check(
     Payments (4 steps) workflow is started. Each namespace has its own
     handlers, demonstrating team scaling with independent ownership.
     """
-    from tasker_core._tasker_core import client_create_task
+    from tasker_core.client import TaskerClient
 
     check = ComplianceCheck(
         order_ref=request.order_ref,
@@ -60,25 +59,21 @@ async def create_compliance_check(
             f"Valid: {', '.join(TEMPLATE_MAP.keys())}",
         )
 
-    task_request: dict[str, Any] = {
-        "name": template_name,
-        "namespace": request.namespace,
-        "version": "1.0.0",
-        "context": {
-            "check_id": check.id,
-            "order_ref": request.order_ref,
-            "reason": request.reason,
-            "amount": request.amount,
-            "customer_email": request.customer_email,
-        },
-        "initiator": "fastapi-example",
-        "source_system": "fastapi-example",
-        "reason": f"Compliance check for order {request.order_ref}",
-    }
-
+    client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
     try:
-        task_result = client_create_task(task_request)
-        task_uuid = uuid.UUID(task_result["task_uuid"])
+        task_response = client.create_task(
+            template_name,
+            namespace=request.namespace,
+            context={
+                "check_id": check.id,
+                "order_ref": request.order_ref,
+                "reason": request.reason,
+                "amount": request.amount,
+                "customer_email": request.customer_email,
+            },
+            reason=f"Compliance check for order {request.order_ref}",
+        )
+        task_uuid = uuid.UUID(task_response.task_uuid)
         check.task_uuid = task_uuid
         check.status = "processing"
         logger.info("Created task %s for compliance check %d", task_uuid, check.id)
@@ -108,7 +103,7 @@ async def get_compliance_check(
     db: AsyncSession = Depends(get_db),
 ) -> ComplianceCheckResponse:
     """Get compliance check details with current workflow task status."""
-    from tasker_core._tasker_core import client_get_task
+    from tasker_core.client import TaskerClient
 
     result = await db.execute(
         select(ComplianceCheck).where(ComplianceCheck.id == check_id)
@@ -120,7 +115,8 @@ async def get_compliance_check(
     task_status = None
     if check.task_uuid:
         try:
-            task_status = client_get_task(str(check.task_uuid))
+            client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
+            task_status = client.get_task(str(check.task_uuid))
         except Exception:
             logger.exception(
                 "Failed to fetch task status for compliance check %d", check.id

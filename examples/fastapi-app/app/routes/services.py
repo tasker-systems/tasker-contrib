@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -32,7 +31,7 @@ async def create_service_request(
     Creates a domain record then creates a Tasker task for the 5-step pipeline:
     CreateUser -> (SetupBilling || InitPreferences) -> SendWelcome -> UpdateStatus.
     """
-    from tasker_core._tasker_core import client_create_task
+    from tasker_core.client import TaskerClient
 
     svc_request = ServiceRequest(
         user_id=request.user_id,
@@ -42,25 +41,21 @@ async def create_service_request(
     db.add(svc_request)
     await db.flush()
 
-    task_request: dict[str, Any] = {
-        "name": "user_registration",
-        "namespace": "microservices",
-        "version": "1.0.0",
-        "context": {
-            "request_id": svc_request.id,
-            "user_id": request.user_id,
-            "email": request.email,
-            "full_name": request.full_name,
-            "plan": request.plan,
-        },
-        "initiator": "fastapi-example",
-        "source_system": "fastapi-example",
-        "reason": "User registration",
-    }
-
+    client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
     try:
-        task_result = client_create_task(task_request)
-        task_uuid = uuid.UUID(task_result["task_uuid"])
+        task_response = client.create_task(
+            "user_registration",
+            namespace="microservices",
+            context={
+                "request_id": svc_request.id,
+                "user_id": request.user_id,
+                "email": request.email,
+                "full_name": request.full_name,
+                "plan": request.plan,
+            },
+            reason="User registration",
+        )
+        task_uuid = uuid.UUID(task_response.task_uuid)
         svc_request.task_uuid = task_uuid
         svc_request.status = "processing"
         logger.info(
@@ -93,7 +88,7 @@ async def get_service_request(
     db: AsyncSession = Depends(get_db),
 ) -> ServiceRequestResponse:
     """Get service request details with current workflow task status."""
-    from tasker_core._tasker_core import client_get_task
+    from tasker_core.client import TaskerClient
 
     result = await db.execute(
         select(ServiceRequest).where(ServiceRequest.id == request_id)
@@ -105,7 +100,8 @@ async def get_service_request(
     task_status = None
     if svc_request.task_uuid:
         try:
-            task_status = client_get_task(str(svc_request.task_uuid))
+            client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
+            task_status = client.get_task(str(svc_request.task_uuid))
         except Exception:
             logger.exception(
                 "Failed to fetch task status for service request %d", svc_request.id

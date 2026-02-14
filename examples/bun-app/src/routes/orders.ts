@@ -2,8 +2,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { orders } from '../db/schema';
-import { FfiLayer } from '@tasker-systems/tasker';
-import type { ClientTaskRequest } from '@tasker-systems/tasker';
+import { FfiLayer, TaskerClient } from '@tasker-systems/tasker';
 
 export const ordersRoute = new Hono();
 
@@ -44,12 +43,10 @@ ordersRoute.post('/', async (c) => {
   try {
     const ffiLayer = new FfiLayer();
     await ffiLayer.load();
-    const runtime = ffiLayer.getRuntime();
+    const client = new TaskerClient(ffiLayer);
 
-    const taskRequest: ClientTaskRequest = {
+    const task = client.createTask({
       name: 'ecommerce_order_processing',
-      namespace: 'default',
-      version: '1.0.0',
       context: {
         order_id: order.id,
         customer_email,
@@ -57,29 +54,19 @@ ordersRoute.post('/', async (c) => {
         payment_info: payment_info || {},
       },
       initiator: 'bun-app',
-      source_system: 'example-bun-app',
+      sourceSystem: 'example-bun-app',
       reason: `Process order #${order.id}`,
       tags: ['ecommerce', 'order'],
-      requested_at: new Date().toISOString(),
-      options: null,
-      priority: null,
-      correlation_id: crypto.randomUUID(),
-      parent_correlation_id: null,
-      idempotency_key: `order-${order.id}`,
-    };
+      idempotencyKey: `order-${order.id}`,
+    });
 
-    const result = runtime.clientCreateTask(JSON.stringify(taskRequest));
+    taskUuid = task.task_uuid;
 
-    if (result.success && result.data) {
-      const taskData = result.data as { task_uuid: string };
-      taskUuid = taskData.task_uuid;
-
-      // Update order with task UUID
-      await db
-        .update(orders)
-        .set({ taskUuid, status: 'processing', updatedAt: new Date() })
-        .where(eq(orders.id, order.id));
-    }
+    // Update order with task UUID
+    await db
+      .update(orders)
+      .set({ taskUuid, status: 'processing', updatedAt: new Date() })
+      .where(eq(orders.id, order.id));
   } catch (error) {
     console.error('Failed to create Tasker task for order:', error);
   }
@@ -120,12 +107,8 @@ ordersRoute.get('/:id', async (c) => {
     try {
       const ffiLayer = new FfiLayer();
       await ffiLayer.load();
-      const runtime = ffiLayer.getRuntime();
-      const result = runtime.clientGetTask(order.taskUuid);
-
-      if (result.success && result.data) {
-        taskStatus = result.data;
-      }
+      const client = new TaskerClient(ffiLayer);
+      taskStatus = client.getTask(order.taskUuid);
     } catch (error) {
       console.error('Failed to fetch task status:', error);
     }

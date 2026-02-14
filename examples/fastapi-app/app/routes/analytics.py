@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -32,7 +31,7 @@ async def create_analytics_job(
     Creates a domain record then creates a Tasker task for the 8-step pipeline:
     3 parallel extracts -> 3 transforms -> aggregate metrics -> generate insights.
     """
-    from tasker_core._tasker_core import client_create_task
+    from tasker_core.client import TaskerClient
 
     job = AnalyticsJob(
         source=request.source,
@@ -42,26 +41,22 @@ async def create_analytics_job(
     db.add(job)
     await db.flush()
 
-    task_request: dict[str, Any] = {
-        "name": "analytics_pipeline",
-        "namespace": "analytics",
-        "version": "1.0.0",
-        "context": {
-            "job_id": job.id,
-            "source": request.source,
-            "dataset_url": request.dataset_url,
-            "date_range_start": request.date_range_start,
-            "date_range_end": request.date_range_end,
-            "granularity": request.granularity,
-        },
-        "initiator": "fastapi-example",
-        "source_system": "fastapi-example",
-        "reason": "Data pipeline analytics job",
-    }
-
+    client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
     try:
-        task_result = client_create_task(task_request)
-        task_uuid = uuid.UUID(task_result["task_uuid"])
+        task_response = client.create_task(
+            "analytics_pipeline",
+            namespace="analytics",
+            context={
+                "job_id": job.id,
+                "source": request.source,
+                "dataset_url": request.dataset_url,
+                "date_range_start": request.date_range_start,
+                "date_range_end": request.date_range_end,
+                "granularity": request.granularity,
+            },
+            reason="Data pipeline analytics job",
+        )
+        task_uuid = uuid.UUID(task_response.task_uuid)
         job.task_uuid = task_uuid
         job.status = "processing"
         logger.info("Created task %s for analytics job %d", task_uuid, job.id)
@@ -89,7 +84,7 @@ async def get_analytics_job(
     db: AsyncSession = Depends(get_db),
 ) -> AnalyticsJobResponse:
     """Get analytics job details with current workflow task status."""
-    from tasker_core._tasker_core import client_get_task
+    from tasker_core.client import TaskerClient
 
     result = await db.execute(select(AnalyticsJob).where(AnalyticsJob.id == job_id))
     job = result.scalar_one_or_none()
@@ -99,7 +94,8 @@ async def get_analytics_job(
     task_status = None
     if job.task_uuid:
         try:
-            task_status = client_get_task(str(job.task_uuid))
+            client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
+            task_status = client.get_task(str(job.task_uuid))
         except Exception:
             logger.exception(
                 "Failed to fetch task status for analytics job %d", job.id
