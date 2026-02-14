@@ -1,0 +1,85 @@
+# Test Environment - Common Configuration Overrides
+
+# Database overrides - must include ALL top-level database fields for proper merging
+# Note: DATABASE_URL environment variable takes precedence (used in Docker: postgres:5432)
+[common.database]
+url = "${DATABASE_URL:-postgresql://tasker:tasker@localhost:5432/tasker_rust_test}"
+
+[common.database.pool]
+# Test environment: balanced pool for CI/cluster with postgres max_connections=500
+# Allocation for cluster mode (10 services):
+# - 10 services × 30 main pool = 300
+# - Web API pools = ~50
+# - Total: ~350 connections, leaves 150 headroom out of 500
+#
+# Bootstrap Strategy:
+# - Start with min_connections=2 for faster warmup under load
+# - Pool grows to max_connections=30 as needed under concurrent requests
+# - acquire_timeout_seconds=30 provides buffer for high-concurrency scenarios
+max_connections = 30
+min_connections = 2
+acquire_timeout_seconds = 30
+idle_timeout_seconds = 60
+max_lifetime_seconds = 3600
+slow_acquire_threshold_ms = 500
+
+# PGMQ Database (uses main database by default in tests)
+[common.pgmq_database]
+url = "${PGMQ_DATABASE_URL:-}"
+enabled = true
+
+[common.pgmq_database.pool]
+max_connections = 10
+min_connections = 1
+acquire_timeout_seconds = 5
+idle_timeout_seconds = 60
+max_lifetime_seconds = 3600
+slow_acquire_threshold_ms = 500
+
+[common.queues.pgmq]
+poll_interval_ms = 250
+
+# TAS-75 Phase 3: Lower thresholds for test environment
+[common.queues.pgmq.queue_depth_thresholds]
+critical_threshold = 500   # Test: lower critical threshold
+overflow_threshold = 1000  # Test: lower overflow threshold
+
+# RabbitMQ test configuration (TAS-133d)
+# Matches docker/docker-compose.test.yml rabbitmq service
+[common.queues.rabbitmq]
+url = "${RABBITMQ_URL:-amqp://tasker:tasker@localhost:5672/%2F}"
+prefetch_count = 10
+heartbeat_seconds = 30
+
+[common.circuit_breakers.global_settings]
+metrics_collection_interval_seconds = 10
+
+[common.mpsc_channels.event_publisher]
+event_queue_buffer_size = 100
+
+[common.mpsc_channels.ffi]
+ruby_event_buffer_size = 100
+
+[common.mpsc_channels.overflow_policy.metrics]
+saturation_check_interval_seconds = 10
+
+[common.execution]
+step_enqueue_batch_size = 10
+environment = "test"
+
+[common.backoff]
+default_backoff_seconds = [1, 2, 4]
+max_backoff_seconds = 10
+
+# Redis cache enabled for integration/E2E tests (TAS-156)
+[common.cache]
+enabled = true
+template_ttl_seconds = 300
+analytics_ttl_seconds = 30
+
+[common.cache.redis]
+url = "${REDIS_URL:-redis://localhost:6379}"
+
+[common.task_templates]
+search_paths = ["config/task_templates/*.{yml,yaml}"]
+

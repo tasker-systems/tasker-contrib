@@ -1,0 +1,40 @@
+# Production Environment - Worker Configuration Overrides
+
+[worker]
+worker_id = "prod-worker-001"
+
+# Production orchestration client - points to orchestration service
+[worker.orchestration_client]
+base_url = "http://orchestration:8080"
+
+[worker.mpsc_channels.command_processor]
+command_buffer_size = 5000
+
+[worker.mpsc_channels.event_systems]
+event_channel_buffer_size = 5000
+
+# TAS-65: In-process event bus - large buffers for production throughput
+[worker.mpsc_channels.in_process_events]
+broadcast_buffer_size = 5000
+log_subscriber_errors = false
+dispatch_timeout_ms = 10000
+
+# TAS-65/TAS-69: Domain Event System - large buffers for production throughput
+[worker.mpsc_channels.domain_events]
+command_buffer_size = 5000
+shutdown_drain_timeout_ms = 10000
+log_dropped_events = false
+
+# TAS-67: Handler Dispatch System - large buffers for production throughput
+[worker.mpsc_channels.handler_dispatch]
+dispatch_buffer_size = 5000
+completion_buffer_size = 5000
+max_concurrent_handlers = 50
+handler_timeout_ms = 60000
+
+# TAS-67: FFI Dispatch Channel - large buffers for production throughput
+[worker.mpsc_channels.ffi_dispatch]
+dispatch_buffer_size = 5000
+completion_timeout_ms = 60000
+# TAS-67 Risk Mitigation: Longer timeout for production robustness
+callback_timeout_ms = 10000
