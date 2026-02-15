@@ -63,7 +63,7 @@ export class ProcessRefundPaymentHandler extends StepHandler {
           gateway_provider: 'MockPaymentGateway',
           eligibility_status: 'eligible',
           validation_timestamp: now,
-          namespace: 'payments',
+          namespace: 'payments_ts',
         },
         { gateway_response_ms: Math.random() * 300 + 200 },
       );
@@ -115,7 +115,7 @@ export class UpdateLedgerHandler extends StepHandler {
           gateway_provider: 'MockPaymentGateway',
           processed_at: now.toISOString(),
           estimated_arrival: estimatedArrival,
-          namespace: 'payments',
+          namespace: 'payments_ts',
         },
         { ledger_update_ms: Math.random() * 80 + 20 },
       );
@@ -165,7 +165,7 @@ export class ReconcileAccountHandler extends StepHandler {
           refund_status: 'completed',
           history_entries_created: 2,
           updated_at: now,
-          namespace: 'payments',
+          namespace: 'payments_ts',
         },
         { reconciliation_time_ms: Math.random() * 200 + 50 },
       );
@@ -224,7 +224,7 @@ export class GenerateRefundReceiptHandler extends StepHandler {
           delivery_status: 'delivered',
           refund_id: refundId,
           refund_amount: refundAmount,
-          namespace: 'payments',
+          namespace: 'payments_ts',
         },
         { receipt_generation_ms: Math.random() * 300 + 80 },
       );

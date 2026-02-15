@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { orders } from '../db/schema';
-import { FfiLayer, TaskerClient } from '@tasker-systems/tasker';
+import { getTaskerClient } from '../tasker-client';
 
 export const ordersRoute = new Hono();
 
@@ -41,12 +41,11 @@ ordersRoute.post('/', async (c) => {
   // Create Tasker task for order processing
   let taskUuid: string | null = null;
   try {
-    const ffiLayer = new FfiLayer();
-    await ffiLayer.load();
-    const client = new TaskerClient(ffiLayer);
+    const client = await getTaskerClient();
 
     const task = client.createTask({
       name: 'ecommerce_order_processing',
+      namespace: 'ecommerce_ts',
       context: {
         order_id: order.id,
         customer_email,
@@ -105,9 +104,7 @@ ordersRoute.get('/:id', async (c) => {
   let taskStatus = null;
   if (order.taskUuid) {
     try {
-      const ffiLayer = new FfiLayer();
-      await ffiLayer.load();
-      const client = new TaskerClient(ffiLayer);
+      const client = await getTaskerClient();
       taskStatus = client.getTask(order.taskUuid);
     } catch (error) {
       console.error('Failed to fetch task status:', error);

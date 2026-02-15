@@ -100,7 +100,7 @@ module CustomerSuccess
             updated_at: Time.current.iso8601,
             refund_completed: was_executed,
             delegated_task_id: delegated_task_id,
-            namespace: 'customer_success',
+            namespace: 'customer_success_rb',
             update_id: "upd_#{SecureRandom.hex(8)}",
             ticket_status: ticket_status,
             resolution_category: resolution_category,

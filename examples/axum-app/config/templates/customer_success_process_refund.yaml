@@ -18,7 +18,7 @@
 #
 ---
 name: process_refund
-namespace_name: customer_success
+namespace_name: customer_success_rs
 version: 1.0.0
 description: "Process customer service refunds with approval workflow - Team Scaling"
 metadata:

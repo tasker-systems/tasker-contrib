@@ -8,4 +8,14 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #6432 | 7:25 AM | 🔵 | Structural alignment audit reveals critical handler mismatches across 4 workflow groups | ~640 |
+
+### Feb 15, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7355 | 12:54 PM | 🔵 | Bun templates use TypeScript-specific namespace suffixes (_ts) | ~317 |
+| #7268 | 11:44 AM | ✅ | Updated template input schemas to match flat context structure | ~324 |
+| #7261 | 10:16 AM | ✅ | Bun e-commerce template namespace updated from ecommerce to ecommerce_ts | ~459 |
+| #7255 | 10:14 AM | 🔵 | Bun user registration template demonstrates diamond dependency pattern with parallel microservice coordination | ~602 |
+| #7253 | " | 🔵 | Bun template uses DataPipeline.StepHandlers namespace convention for TypeScript handlers | ~615 |
 </claude-mem-context>

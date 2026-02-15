@@ -17,20 +17,12 @@
 //! - Tasker worker runs in the background for workflow step execution
 //! - Tasker client communicates with orchestration for task creation
 
-mod db;
-mod handler_registry;
-mod handlers;
-mod models;
-mod routes;
-
 use std::sync::Arc;
 
-use axum::{Extension, Router};
 use sqlx::postgres::PgPoolOptions;
-use tower_http::cors::CorsLayer;
-use tower_http::trace::TraceLayer;
 use tracing::info;
 
+use example_axum_app::{create_app, db, handler_registry};
 use tasker_worker::worker::handlers::{HandlerDispatchConfig, HandlerDispatchService, NoOpCallback};
 
 #[tokio::main]
@@ -93,14 +85,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Build the Axum router with all route modules
-    let app = Router::new()
-        .merge(routes::orders::router())
-        .merge(routes::analytics::router())
-        .merge(routes::services::router())
-        .merge(routes::compliance::router())
-        .layer(Extension(app_db))
-        .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive());
+    let app = create_app(app_db);
 
     // Bind and serve
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());

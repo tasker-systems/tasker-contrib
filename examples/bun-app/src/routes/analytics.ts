@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { analyticsJobs } from '../db/schema';
-import { FfiLayer, TaskerClient } from '@tasker-systems/tasker';
+import { getTaskerClient } from '../tasker-client';
 
 export const analyticsRoute = new Hono();
 
@@ -34,12 +34,11 @@ analyticsRoute.post('/', async (c) => {
   // Create Tasker task for analytics pipeline
   let taskUuid: string | null = null;
   try {
-    const ffiLayer = new FfiLayer();
-    await ffiLayer.load();
-    const client = new TaskerClient(ffiLayer);
+    const client = await getTaskerClient();
 
     const task = client.createTask({
       name: 'analytics_pipeline',
+      namespace: 'data_pipeline_ts',
       context: {
         job_id: job.id,
         job_name,
@@ -101,9 +100,7 @@ analyticsRoute.get('/:id', async (c) => {
   let taskStatus = null;
   if (job.taskUuid) {
     try {
-      const ffiLayer = new FfiLayer();
-      await ffiLayer.load();
-      const client = new TaskerClient(ffiLayer);
+      const client = await getTaskerClient();
       taskStatus = client.getTask(job.taskUuid);
     } catch (error) {
       console.error('Failed to fetch task status:', error);

@@ -23,12 +23,6 @@ interface PaymentInfo {
   amount: number;
 }
 
-interface CustomerInfo {
-  email: string;
-  name: string;
-  phone?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Step 1: ValidateCart
 // ---------------------------------------------------------------------------
@@ -256,14 +250,15 @@ export class CreateOrderHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const customerInfo = context.getInput<CustomerInfo>('customer_info');
+      // TAS-137: Read flat fields from task context (matches route)
+      const customerEmail = context.getInput('customer_email') as string | undefined;
       const cartResult = context.getDependencyResult('validate_cart') as Record<string, unknown>;
       const paymentResult = context.getDependencyResult('process_payment') as Record<string, unknown>;
       const inventoryResult = context.getDependencyResult('update_inventory') as Record<string, unknown>;
 
-      if (!customerInfo) {
+      if (!customerEmail) {
         return this.failure(
-          'Customer information is required but was not provided',
+          'Customer email is required but was not provided',
           ErrorType.PERMANENT_ERROR,
           false,
         );
@@ -297,7 +292,7 @@ export class CreateOrderHandler extends StepHandler {
           order_number: orderNumber,
           status: 'confirmed',
           total_amount: cartResult.total,
-          customer_email: customerInfo.email,
+          customer_email: customerEmail,
           created_at: now,
           estimated_delivery: estimatedDelivery,
           items: cartResult.validated_items,
@@ -329,11 +324,12 @@ export class SendConfirmationHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      const customerInfo = context.getInput<CustomerInfo>('customer_info');
+      // TAS-137: Read flat fields from task context (matches route)
+      const customerEmail = context.getInput('customer_email') as string | undefined;
       const orderResult = context.getDependencyResult('create_order') as Record<string, unknown>;
       const cartResult = context.getDependencyResult('validate_cart') as Record<string, unknown>;
 
-      if (!customerInfo || !customerInfo.email) {
+      if (!customerEmail) {
         return this.failure(
           'Customer email is required but was not provided',
           ErrorType.PERMANENT_ERROR,
@@ -361,13 +357,13 @@ export class SendConfirmationHandler extends StepHandler {
       return this.success(
         {
           email_id: emailId,
-          recipient: customerInfo.email,
+          recipient: customerEmail,
           subject: `Order Confirmation - ${orderNumber}`,
           status: 'sent',
           sent_at: now,
           template: 'order_confirmation',
           template_data: {
-            customer_name: customerInfo.name,
+            customer_name: customerEmail,
             order_number: orderNumber,
             total_amount: totalAmount,
             estimated_delivery: estimatedDelivery,

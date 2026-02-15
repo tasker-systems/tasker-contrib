@@ -8,4 +8,16 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #6442 | 7:26 AM | 🔄 | Axum Handler Alignment with Source Contracts | ~836 |
+
+### Feb 15, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7349 | 12:50 PM | 🔵 | Axum compliance route creates dual-namespace refund workflow tasks | ~527 |
+| #7333 | 12:42 PM | 🔵 | Axum routes use submit_task_to_orchestration helper for task creation | ~397 |
+| #7331 | 12:39 PM | 🔵 | Axum app creates tasks via orchestration REST API instead of client library | ~417 |
+| #7306 | 12:22 PM | 🔵 | Axum example uses direct REST API calls instead of FFI worker | ~404 |
+| #7264 | 11:44 AM | 🔴 | Fixed handler context mismatches in Axum app | ~389 |
+| #7232 | 10:11 AM | 🔵 | Axum App Uses data_pipeline_rs Namespace Instead of data_pipeline | ~411 |
+| #7203 | 9:46 AM | ✅ | Massive refactoring removes 3,108 lines of handler code from Rails app | ~605 |
 </claude-mem-context>

@@ -7,5 +7,13 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #6830 | 9:07 PM | 🔵 | Rails AggregateMetricsHandler demonstrates DAG convergence pattern aggregating three parallel transform branches | ~704 |
+| #6829 | " | 🔵 | Rails ExtractSalesDataHandler demonstrates parallel extraction pattern with simulated data source | ~595 |
 | #6458 | 7:30 AM | 🔄 | Rails Handler Key Alignment Across All 27 Workflow Handlers | ~898 |
+
+### Feb 15, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7161 | 8:55 AM | 🔵 | Extract handlers generate realistic sample data with simulated transient failures | ~463 |
 </claude-mem-context>

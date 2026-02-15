@@ -90,7 +90,7 @@ module CustomerSuccess
             requires_approval: requires_manager,
             max_allowed_amount: policy[:auto_approve_threshold] == Float::INFINITY ? 999_999 : policy[:auto_approve_threshold],
             policy_checked_at: Time.current.iso8601,
-            namespace: 'customer_success',
+            namespace: 'customer_success_rb',
             check_id: check_id,
             policy_passed: policy_passed,
             violations: violations,

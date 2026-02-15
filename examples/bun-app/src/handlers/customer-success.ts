@@ -63,7 +63,7 @@ export class ValidateRefundRequestHandler extends StepHandler {
           original_purchase_date: purchaseDate,
           payment_id: `pay_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
           validation_timestamp: now,
-          namespace: 'customer_success',
+          namespace: 'customer_success_ts',
         },
         { validation_time_ms: Math.random() * 80 + 20 },
       );
@@ -129,7 +129,7 @@ export class CheckRefundEligibilityHandler extends StepHandler {
           requires_approval: policy.requires_approval,
           max_allowed_amount: policy.max_amount,
           policy_checked_at: now,
-          namespace: 'customer_success',
+          namespace: 'customer_success_ts',
         },
         { eligibility_check_ms: Math.random() * 120 + 30 },
       );
@@ -181,7 +181,7 @@ export class CalculateRefundAmountHandler extends StepHandler {
             manager_id: `mgr_${Math.floor(Math.random() * 5) + 1}`,
             manager_notes: `Approved refund request for customer ${customerId}`,
             approved_at: now,
-            namespace: 'customer_success',
+            namespace: 'customer_success_ts',
           },
           { calculation_time_ms: Math.random() * 40 + 10 },
         );
@@ -196,7 +196,7 @@ export class CalculateRefundAmountHandler extends StepHandler {
             manager_id: null,
             manager_notes: `Auto-approved for customer tier ${customerTier}`,
             approved_at: now,
-            namespace: 'customer_success',
+            namespace: 'customer_success_ts',
           },
           { calculation_time_ms: Math.random() * 40 + 10 },
         );
@@ -252,13 +252,13 @@ export class NotifyCustomerSuccessHandler extends StepHandler {
       return this.success(
         {
           task_delegated: true,
-          target_namespace: 'payments',
+          target_namespace: 'payments_ts',
           target_workflow: 'process_refund',
           delegated_task_id: taskId,
           delegated_task_status: 'created',
           delegation_timestamp: now,
           correlation_id: correlationId,
-          namespace: 'customer_success',
+          namespace: 'customer_success_ts',
         },
         { notification_dispatch_ms: Math.random() * 100 + 30 },
       );
@@ -311,7 +311,7 @@ export class UpdateCrmRecordHandler extends StepHandler {
           updated_at: now,
           refund_completed: true,
           delegated_task_id: delegatedTaskId,
-          namespace: 'customer_success',
+          namespace: 'customer_success_ts',
         },
         { crm_update_ms: Math.random() * 150 + 40 },
       );

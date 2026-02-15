@@ -71,7 +71,7 @@ async fn create_refund_check(
     //   - customer_id (required by validate_refund_request - source handler contract)
     //   - refund_amount (required by validate_refund_request and read by check_refund_policy, update_ticket_status)
     let cs_task_payload = serde_json::json!({
-        "name": "customer_success_process_refund",
+        "name": "process_refund",
         "namespace": "customer_success_rs",
         "version": "1.0.0",
         "initiator": "axum-example-app",
@@ -94,7 +94,7 @@ async fn create_refund_check(
     //   - customer_email (read by notify_customer from context)
     let payment_id = format!("pay_{}", req.order_id.replace('-', ""));
     let payments_task_payload = serde_json::json!({
-        "name": "payments_process_refund",
+        "name": "process_refund",
         "namespace": "payments_rs",
         "version": "1.0.0",
         "initiator": "axum-example-app",
@@ -123,7 +123,7 @@ async fn create_refund_check(
         }
     };
 
-    let _payments_task_uuid = match submit_task_to_orchestration(&payments_task_payload).await {
+    let payments_task_uuid = match submit_task_to_orchestration(&payments_task_payload).await {
         Ok(uuid) => Some(uuid),
         Err(e) => {
             error!("Failed to submit payments task to orchestration: {}", e);
@@ -155,6 +155,7 @@ async fn create_refund_check(
             "pending".to_string()
         },
         task_uuid,
+        payments_task_uuid,
         created_at: check.created_at,
     };
 

@@ -56,8 +56,8 @@ async fn create_registration(
     );
 
     // Build the Tasker task request for the microservices user registration workflow.
-    // Context uses `user_info` object to match the source handler contract:
-    //   create_user_account reads context["user_info"].{email, name, plan, phone, source}
+    // Context uses flat fields to match the handler contract:
+    //   create_user_account reads context["email"], context["full_name"], context["plan"], etc.
     let task_payload = serde_json::json!({
         "name": "user_registration",
         "namespace": "microservices_rs",
@@ -66,12 +66,10 @@ async fn create_registration(
         "source_system": "example-axum",
         "reason": format!("User registration for {}", req.user_email),
         "context": {
-            "user_info": {
-                "email": req.user_email,
-                "name": req.user_name,
-                "plan": req.plan.as_deref().unwrap_or("free"),
-                "source": "axum-example-app"
-            },
+            "email": req.user_email,
+            "full_name": req.user_name,
+            "plan": req.plan.as_deref().unwrap_or("free"),
+            "source": "axum-example-app",
             "app_service_request_id": service_req.id
         }
     });

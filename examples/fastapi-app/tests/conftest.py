@@ -2,6 +2,7 @@
 
 Provides:
 - tasker_worker: Session-scoped fixture that bootstraps the tasker worker
+  and starts the event processing pipeline
 - client: Async HTTP client for testing FastAPI endpoints
 - db_session: Async database session for direct DB assertions
 """
@@ -21,18 +22,54 @@ from app.database import async_session_factory
 
 @pytest.fixture(scope="session")
 def tasker_worker() -> Any:
-    """Bootstrap the tasker worker for the entire test session.
+    """Bootstrap the tasker worker and event processing for the test session.
 
-    Starts the worker system (which initializes the orchestration client)
-    and stops it after all tests complete.
+    Sets up the full pipeline:
+    1. Bootstrap the Rust worker (database, messaging, orchestration client)
+    2. Discover step handlers from app.handlers package
+    3. Start EventBridge, StepExecutionSubscriber, and EventPoller
+
+    Stops everything after all tests complete.
     """
-    from tasker_core import bootstrap_worker, stop_worker
+    from tasker_core import (
+        EventBridge,
+        EventPoller,
+        HandlerRegistry,
+        StepExecutionSubscriber,
+        bootstrap_worker,
+        stop_worker,
+    )
 
+    # 1. Bootstrap the Rust worker system
     result = bootstrap_worker()
     assert result.status == "started", f"Worker bootstrap failed: {result}"
 
+    # 2. Discover step handlers
+    registry = HandlerRegistry.instance()
+    count = registry.discover_handlers("app.handlers")
+    assert count > 0, "No step handlers discovered"
+
+    # 3. Start event processing pipeline
+    bridge = EventBridge.instance()
+    bridge.start()
+
+    subscriber = StepExecutionSubscriber(
+        event_bridge=bridge,
+        handler_registry=registry,
+        worker_id=result.worker_id,
+    )
+    subscriber.start()
+
+    poller = EventPoller()
+    poller.on_step_event(lambda event: bridge.publish("step.execution.received", event))
+    poller.start()
+
     yield result
 
+    # Shutdown
+    poller.stop()
+    subscriber.stop()
+    bridge.stop()
     stop_worker()
 
 

@@ -42,14 +42,14 @@ class ValidateRefundRequestHandler(StepHandler):
     MAX_REFUND_AMOUNT = 10000.00
 
     def call(self, context: StepContext) -> StepHandlerResult:
-        # Source-aligned: read ticket_id, customer_id, refund_amount, refund_reason
-        ticket_id = context.get_input("ticket_id")
+        # TAS-137: Use get_input() for task context access (cross-language standard)
+        # Support both direct field names and app-specific context keys
+        ticket_id = context.get_input("ticket_id") or context.get_input("order_ref")
         customer_id = context.get_input("customer_id")
-        refund_amount = context.get_input("refund_amount")
-        refund_reason = context.get_input("refund_reason")
+        refund_amount = context.get_input("refund_amount") or context.get_input("amount")
+        refund_reason = context.get_input("refund_reason") or context.get_input("reason")
 
-        # Map to local variables for validation logic
-        order_ref = ticket_id  # Use ticket_id as order reference
+        order_ref = ticket_id
         amount = refund_amount
         reason = refund_reason
         customer_email = context.get_input("customer_email")
@@ -116,7 +116,7 @@ class ValidateRefundRequestHandler(StepHandler):
                 "original_purchase_date": original_purchase_date,
                 "payment_id": payment_id,
                 "validation_timestamp": now,
-                "namespace": "customer_success",
+                "namespace": "customer_success_py",
                 "request_id": request_id,
                 "order_ref": order_ref,
                 "amount": amount,
@@ -158,9 +158,8 @@ class CheckRefundPolicyHandler(StepHandler):
         customer_tier = context.get_dependency_field("validate_refund_request", "customer_tier") or "standard"
         original_purchase_date = context.get_dependency_field("validate_refund_request", "original_purchase_date")
 
-        # Source-aligned: read from task context
-        refund_amount = context.get_input("refund_amount")
-        _refund_reason = context.get_input("refund_reason")
+        # TAS-137: read from task context with fallbacks
+        refund_amount = context.get_input("refund_amount") or context.get_input("amount")
 
         amount = refund_amount or validation.get("amount", 0.0)
         reason = validation.get("reason", "customer_request")
@@ -206,7 +205,7 @@ class CheckRefundPolicyHandler(StepHandler):
                 "requires_approval": requires_approval,
                 "max_allowed_amount": self.MAX_REFUND_AMOUNT,
                 "policy_checked_at": now,
-                "namespace": "customer_success",
+                "namespace": "customer_success_py",
                 "policy_id": policy_id,
                 "request_id": request_id,
                 "approval_path": approval_path,
@@ -253,9 +252,8 @@ class ApproveRefundHandler(StepHandler):
         ticket_id = context.get_dependency_field("validate_refund_request", "ticket_id")
         customer_id = context.get_dependency_field("validate_refund_request", "customer_id")
 
-        # Source-aligned: read from task context
-        refund_amount = context.get_input("refund_amount")
-        refund_reason = context.get_input("refund_reason")
+        # TAS-137: read from task context with fallbacks
+        refund_amount = context.get_input("refund_amount") or context.get_input("amount")
 
         validation = context.get_dependency_result("validate_refund_request")
         request_id = (validation or {}).get("request_id")
@@ -278,7 +276,7 @@ class ApproveRefundHandler(StepHandler):
                     "manager_id": manager_id,
                     "manager_notes": manager_notes,
                     "approved_at": now,
-                    "namespace": "customer_success",
+                    "namespace": "customer_success_py",
                     "request_id": request_id,
                     "approved": True,
                     "approver": manager_id,
@@ -298,7 +296,7 @@ class ApproveRefundHandler(StepHandler):
                     "manager_id": None,
                     "manager_notes": f"Auto-approved for customer tier {customer_tier}",
                     "approved_at": now,
-                    "namespace": "customer_success",
+                    "namespace": "customer_success_py",
                     "request_id": request_id,
                     "approved": True,
                     "approver": "system",
@@ -336,11 +334,11 @@ class ExecuteRefundHandler(StepHandler):
         payment_id = context.get_dependency_field("validate_refund_request", "payment_id")
         approval_id = context.get_dependency_field("get_manager_approval", "approval_id")
 
-        # Source-aligned: read from task context
-        refund_amount = context.get_input("refund_amount")
-        refund_reason = context.get_input("refund_reason") or "customer_request"
+        # TAS-137: read from task context with fallbacks
+        refund_amount = context.get_input("refund_amount") or context.get_input("amount")
+        refund_reason = context.get_input("refund_reason") or context.get_input("reason") or "customer_request"
         customer_email = context.get_input("customer_email") or "customer@example.com"
-        ticket_id = context.get_input("ticket_id")
+        ticket_id = context.get_input("ticket_id") or context.get_input("order_ref")
         correlation_id = context.get_input("correlation_id") or f"cs-{uuid.uuid4().hex[:16]}"
 
         validation = context.get_dependency_result("validate_refund_request")
@@ -356,13 +354,13 @@ class ExecuteRefundHandler(StepHandler):
         return StepHandlerResult.success(
             result={
                 "task_delegated": True,
-                "target_namespace": "payments",
+                "target_namespace": "payments_py",
                 "target_workflow": "process_refund",
                 "delegated_task_id": delegated_task_id,
                 "delegated_task_status": "created",
                 "delegation_timestamp": now,
                 "correlation_id": correlation_id,
-                "namespace": "customer_success",
+                "namespace": "customer_success_py",
                 "refund_id": refund_id,
                 "transaction_ref": transaction_ref,
                 "request_id": request_id,
@@ -404,9 +402,8 @@ class UpdateTicketHandler(StepHandler):
         delegated_task_id = context.get_dependency_field("execute_refund_workflow", "delegated_task_id")
         correlation_id = context.get_dependency_field("execute_refund_workflow", "correlation_id")
 
-        # Source-aligned: read from task context
-        refund_amount = context.get_input("refund_amount")
-        _refund_reason = context.get_input("refund_reason")
+        # TAS-137: read from task context with fallbacks
+        refund_amount = context.get_input("refund_amount") or context.get_input("amount")
 
         validation = context.get_dependency_result("validate_refund_request")
         request_id = (validation or {}).get("request_id")
@@ -435,7 +432,7 @@ class UpdateTicketHandler(StepHandler):
                 "updated_at": now,
                 "refund_completed": True,
                 "delegated_task_id": delegated_task_id,
-                "namespace": "customer_success",
+                "namespace": "customer_success_py",
                 "request_id": request_id,
                 "resolution": "refund_completed",
                 "customer_notified": True,

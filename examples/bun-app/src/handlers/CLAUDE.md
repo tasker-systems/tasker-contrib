@@ -8,5 +8,4 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #6437 | 7:25 AM | 🔄 | Handler Key Alignment Across Five Workflow Files | ~614 |
-| #6432 | " | 🔵 | Structural alignment audit reveals critical handler mismatches across 4 workflow groups | ~640 |
 </claude-mem-context>

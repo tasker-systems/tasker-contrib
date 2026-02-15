@@ -9,7 +9,7 @@ module CustomerSuccess
         order_ref = context.get_input('order_ref')
         customer_id = context.get_input('customer_id')
         refund_amount = context.get_input('refund_amount')
-        reason = context.get_input('refund_reason')
+        reason = context.get_input('refund_reason') || context.get_input('reason')
 
         # Validate required fields
         missing = []
@@ -69,7 +69,7 @@ module CustomerSuccess
             original_purchase_date: order_data[:order_date],
             payment_id: "pay_#{SecureRandom.hex(8)}",
             validation_timestamp: Time.current.iso8601,
-            namespace: 'customer_success',
+            namespace: 'customer_success_rb',
             validation_id: validation_id,
             order_ref: order_ref,
             refund_amount: amount,

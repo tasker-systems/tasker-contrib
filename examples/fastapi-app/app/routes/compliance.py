@@ -25,8 +25,8 @@ router = APIRouter()
 
 
 TEMPLATE_MAP = {
-    "customer_success": "customer_success_process_refund",
-    "payments": "payments_process_refund",
+    "customer_success_py": "process_refund",
+    "payments_py": "process_refund",
 }
 
 
@@ -116,7 +116,7 @@ async def get_compliance_check(
     if check.task_uuid:
         try:
             client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
-            task_status = client.get_task(str(check.task_uuid))
+            task_status = client.get_task(str(check.task_uuid)).__dict__
         except Exception:
             logger.exception(
                 "Failed to fetch task status for compliance check %d", check.id

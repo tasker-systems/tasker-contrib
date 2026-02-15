@@ -119,7 +119,7 @@ pub fn validate_refund_request(context: &Value) -> Result<Value, String> {
         "original_purchase_date": purchase_date,
         "payment_id": payment_id,
         "validation_timestamp": now,
-        "namespace": "customer_success",
+        "namespace": "customer_success_rs",
         "customer_email": customer_email,
         "order_id": order_id,
         "refund_amount": refund_amount,
@@ -205,7 +205,7 @@ pub fn check_refund_policy(context: &Value, dependency_results: &HashMap<String,
         "requires_approval": requires_approval,
         "max_allowed_amount": max_amount,
         "policy_checked_at": now,
-        "namespace": "customer_success"
+        "namespace": "customer_success_rs"
     }))
 }
 
@@ -284,7 +284,7 @@ pub fn get_manager_approval(dependency_results: &HashMap<String, Value>) -> Resu
             "manager_id": manager_id,
             "manager_notes": format!("Approved refund request for customer {}", customer_id),
             "approved_at": now,
-            "namespace": "customer_success"
+            "namespace": "customer_success_rs"
         }))
     } else {
         info!(
@@ -300,7 +300,7 @@ pub fn get_manager_approval(dependency_results: &HashMap<String, Value>) -> Resu
             "manager_id": null,
             "manager_notes": format!("Auto-approved for customer tier {}", customer_tier),
             "approved_at": now,
-            "namespace": "customer_success"
+            "namespace": "customer_success_rs"
         }))
     }
 }
@@ -359,13 +359,13 @@ pub fn execute_refund_workflow(dependency_results: &HashMap<String, Value>) -> R
     // delegated_task_id, delegated_task_status, delegation_timestamp, correlation_id, namespace
     Ok(json!({
         "task_delegated": true,
-        "target_namespace": "payments",
+        "target_namespace": "payments_rs",
         "target_workflow": "process_refund",
         "delegated_task_id": task_id,
         "delegated_task_status": "created",
         "delegation_timestamp": now,
         "correlation_id": correlation_id,
-        "namespace": "customer_success"
+        "namespace": "customer_success_rs"
     }))
 }
 
@@ -446,6 +446,6 @@ pub fn update_ticket_status(context: &Value, dependency_results: &HashMap<String
         "updated_at": now,
         "refund_completed": true,
         "delegated_task_id": delegated_task_id,
-        "namespace": "customer_success"
+        "namespace": "customer_success_rs"
     }))
 }

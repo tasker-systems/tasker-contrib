@@ -16,7 +16,7 @@ module Payments
         refund_amount = context.get_input('refund_amount')
         currency = context.get_input('currency') || 'USD'
         # TAS-137: Source uses 'refund_reason' not 'reason'
-        reason = context.get_input('refund_reason')
+        reason = context.get_input('refund_reason') || context.get_input('reason')
         idempotency_key = context.get_input('idempotency_key')
         # TAS-137: Source reads partial_refund with default
         partial_refund = context.get_input_or('partial_refund', false)
@@ -83,7 +83,7 @@ module Payments
             gateway_provider: gateway,
             eligibility_status: (within_window && !is_duplicate) ? 'eligible' : 'ineligible',
             validation_timestamp: Time.current.iso8601,
-            namespace: 'payments',
+            namespace: 'payments_rb',
             eligibility_id: eligibility_id,
             eligible: within_window && !is_duplicate,
             currency: currency,

@@ -122,7 +122,7 @@ module Payments
             delivery_status: all_sent ? 'delivered' : 'partial',
             refund_id: refund_id,
             refund_amount: amount,
-            namespace: 'payments',
+            namespace: 'payments_rb',
             notification_id: notification_id,
             payment_id: payment_id,
             currency: currency,

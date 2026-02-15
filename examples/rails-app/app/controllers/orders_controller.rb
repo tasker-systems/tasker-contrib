@@ -9,17 +9,17 @@ class OrdersController < ApplicationController
     # Submit the e-commerce workflow to Tasker
     task = TaskerCore::Client.create_task(
       name:      'ecommerce_order_processing',
-      namespace: 'ecommerce',
+      namespace: 'ecommerce_rb',
       context:   {
-        customer_email:   order_params[:customer_email],
+        customer_email:    order_params[:customer_email],
         cart_items:        order_params[:cart_items],
-        payment_token:     order_params[:payment_token],
+        payment_info:      { token: order_params[:payment_token], method: 'card' },
         shipping_address:  order_params[:shipping_address],
         domain_record_id:  order.id
       }
     )
 
-    order.update!(task_uuid: task['id'], status: 'processing')
+    order.update!(task_uuid: task.task_uuid, status: 'processing')
 
     render json: {
       id:        order.id,

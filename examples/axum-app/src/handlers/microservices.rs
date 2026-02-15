@@ -23,19 +23,16 @@ use uuid::Uuid;
 /// Validates the user email, checks for duplicates, and creates a new user account.
 /// Generates a unique user ID and sets initial account state.
 ///
-/// Context keys (aligned with source): `user_info` (object with email, name, plan, phone, source)
+/// Context keys (flat): email, full_name, plan, phone, source
 pub fn create_user_account(context: &Value) -> Result<Value, String> {
-    // Source reads context key "user_info" as an object with email, name, plan, phone, source
-    let user_info = context.get("user_info")
-        .ok_or("Missing user_info in context")?;
-
-    let email = user_info.get("email")
+    // Route sends flat fields: email, full_name, plan, phone, source
+    let email = context.get("email")
         .and_then(|v| v.as_str())
-        .ok_or("Missing email in user_info")?;
+        .ok_or("Missing email in context")?;
 
-    let name = user_info.get("name")
+    let name = context.get("full_name")
         .and_then(|v| v.as_str())
-        .ok_or("Missing name in user_info")?;
+        .ok_or("Missing full_name in context")?;
 
     // Validate email format (basic check)
     if !email.contains('@') || !email.contains('.') || email.len() < 5 {
@@ -49,10 +46,10 @@ pub fn create_user_account(context: &Value) -> Result<Value, String> {
 
     let user_id = format!("usr_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
     let account_number = format!("ACC-{}", &Uuid::new_v4().to_string().replace('-', "")[..8].to_uppercase());
-    let plan = user_info.get("plan")
+    let plan = context.get("plan")
         .and_then(|v| v.as_str())
         .unwrap_or("free");
-    let source = user_info.get("source")
+    let source = context.get("source")
         .and_then(|v| v.as_str())
         .unwrap_or("web");
 
@@ -97,7 +94,7 @@ pub fn create_user_account(context: &Value) -> Result<Value, String> {
     });
 
     // Include phone if provided (matches source behavior)
-    if let Some(phone) = user_info.get("phone").and_then(|v| v.as_str()) {
+    if let Some(phone) = context.get("phone").and_then(|v| v.as_str()) {
         result["phone"] = json!(phone);
     }
 
@@ -211,9 +208,8 @@ pub fn initialize_preferences(context: &Value, dependency_results: &HashMap<Stri
         .and_then(|v| v.as_str())
         .unwrap_or("free");
 
-    // Source reads custom preferences from user_info in task context
-    let custom_prefs = context.get("user_info")
-        .and_then(|u| u.get("preferences"));
+    // Route sends flat field: preferences (optional)
+    let custom_prefs = context.get("preferences");
 
     // Set plan-specific feature flags
     let (advanced_analytics, api_access, custom_branding, priority_support) = match plan {

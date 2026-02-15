@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { serviceRequests } from '../db/schema';
-import { FfiLayer, TaskerClient } from '@tasker-systems/tasker';
+import { getTaskerClient } from '../tasker-client';
 
 export const servicesRoute = new Hono();
 
@@ -35,12 +35,11 @@ servicesRoute.post('/', async (c) => {
   // Create Tasker task for user registration
   let taskUuid: string | null = null;
   try {
-    const ffiLayer = new FfiLayer();
-    await ffiLayer.load();
-    const client = new TaskerClient(ffiLayer);
+    const client = await getTaskerClient();
 
     const task = client.createTask({
       name: 'user_registration',
+      namespace: 'microservices_ts',
       context: {
         request_id: request.id,
         username,
@@ -99,9 +98,7 @@ servicesRoute.get('/:id', async (c) => {
   let taskStatus = null;
   if (request.taskUuid) {
     try {
-      const ffiLayer = new FfiLayer();
-      await ffiLayer.load();
-      const client = new TaskerClient(ffiLayer);
+      const client = await getTaskerClient();
       taskStatus = client.getTask(request.taskUuid);
     } catch (error) {
       console.error('Failed to fetch task status:', error);

@@ -28,7 +28,7 @@
 #
 ---
 name: user_registration
-namespace_name: microservices
+namespace_name: microservices_rs
 version: 1.0.0
 description: "User registration workflow with microservices coordination - Post 03 Microservices"
 metadata:
@@ -58,25 +58,27 @@ system_dependencies:
 domain_events: []
 input_schema:
   type: object
+  required:
+    - email
+    - full_name
   properties:
-    user_info:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        name:
-          type: string
-        plan:
-          type: string
-          enum: [free, pro, enterprise]
-        phone:
-          type: string
-        source:
-          type: string
-      required:
-        - email
-        - name
+    email:
+      type: string
+      format: email
+      description: "User email address"
+    full_name:
+      type: string
+      description: "User full name"
+    plan:
+      type: string
+      enum: [free, pro, enterprise]
+      description: "Subscription plan tier"
+    phone:
+      type: string
+      description: "User phone number"
+    source:
+      type: string
+      description: "Registration source"
 steps:
   # SEQUENTIAL PHASE - User creation must complete first
   - name: create_user_account

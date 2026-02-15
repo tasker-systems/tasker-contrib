@@ -31,7 +31,7 @@
 #
 ---
 name: analytics_pipeline
-namespace_name: data_pipeline
+namespace_name: data_pipeline_rs
 version: 1.0.0
 description: "Analytics ETL pipeline with parallel extraction and aggregation - Post 02 Data Pipeline"
 metadata:

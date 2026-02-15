@@ -7,5 +7,22 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #6825 | 9:05 PM | 🔵 | Payments refund YAML template demonstrates direct gateway integration in isolated namespace | ~618 |
+| #6824 | " | 🔵 | Customer success refund YAML template demonstrates namespace isolation and cross-namespace workflow delegation | ~672 |
+| #6823 | " | 🔵 | Microservices user registration YAML template demonstrates diamond topology with parallel service calls | ~681 |
+| #6822 | 9:04 PM | 🔵 | Data pipeline analytics YAML template demonstrates DAG pattern with parallel execution | ~654 |
+| #6821 | " | 🔵 | E-commerce order processing YAML template structure analyzed for blog post 01 | ~584 |
 | #6433 | 7:25 AM | 🔵 | Rails Handler Alignment Audit Reveals Systematic API Divergence | ~594 |
+
+### Feb 15, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7249 | 10:13 AM | 🟣 | Systematic Rails Namespace Qualification with _rb Suffix Completed | ~550 |
+| #7243 | " | 🔴 | Analytics pipeline namespace changed to data_pipeline_rb for language-specific isolation | ~446 |
+| #7240 | 10:12 AM | ✅ | Changed Payments Template Namespace from payments to payments_rb | ~354 |
+| #7239 | " | 🔵 | Handler implementation files deleted from Rails app while templates and infrastructure remain intact | ~632 |
+| #7237 | " | 🔵 | E-commerce template defines 5-step linear workflow with handler class paths and retry configuration | ~638 |
+| #7236 | " | 🔵 | Rails Microservices Template Uses Module::StepHandlers::HandlerClass Naming Pattern | ~507 |
+| #7224 | 10:03 AM | 🔵 | E-commerce Template Defines Linear 5-Step Dependency Chain | ~572 |
 </claude-mem-context>

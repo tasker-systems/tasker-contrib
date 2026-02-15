@@ -184,5 +184,6 @@ pub struct ComplianceCheckResponse {
     pub namespace: String,
     pub status: String,
     pub task_uuid: Option<Uuid>,
+    pub payments_task_uuid: Option<Uuid>,
     pub created_at: NaiveDateTime,
 }

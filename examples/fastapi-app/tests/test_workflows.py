@@ -9,6 +9,8 @@ Run with: pytest tests/ -v
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from httpx import AsyncClient
 
@@ -190,12 +192,12 @@ class TestTeamScalingWorkflow:
 
     @pytest.mark.asyncio
     async def test_create_customer_success_check(self, client: AsyncClient) -> None:
-        """POST /compliance/checks/ with customer_success namespace."""
+        """POST /compliance/checks/ with customer_success_py namespace."""
         response = await client.post(
             "/compliance/checks/",
             json={
                 "order_ref": "ORD-ABC123",
-                "namespace": "customer_success",
+                "namespace": "customer_success_py",
                 "reason": "defective_product",
                 "amount": 75.50,
                 "customer_email": "refund@example.com",
@@ -205,18 +207,18 @@ class TestTeamScalingWorkflow:
         assert response.status_code == 201
         data = response.json()
         assert data["order_ref"] == "ORD-ABC123"
-        assert data["namespace"] == "customer_success"
+        assert data["namespace"] == "customer_success_py"
         assert data["status"] in ("pending", "processing", "task_creation_failed")
         assert "id" in data
 
     @pytest.mark.asyncio
     async def test_create_payments_check(self, client: AsyncClient) -> None:
-        """POST /compliance/checks/ with payments namespace."""
+        """POST /compliance/checks/ with payments_py namespace."""
         response = await client.post(
             "/compliance/checks/",
             json={
                 "order_ref": "ORD-XYZ789",
-                "namespace": "payments",
+                "namespace": "payments_py",
                 "reason": "duplicate_charge",
                 "amount": 199.99,
                 "customer_email": "billing@example.com",
@@ -226,7 +228,7 @@ class TestTeamScalingWorkflow:
         assert response.status_code == 201
         data = response.json()
         assert data["order_ref"] == "ORD-XYZ789"
-        assert data["namespace"] == "payments"
+        assert data["namespace"] == "payments_py"
         assert data["status"] in ("pending", "processing", "task_creation_failed")
 
     @pytest.mark.asyncio
@@ -251,7 +253,7 @@ class TestTeamScalingWorkflow:
             "/compliance/checks/",
             json={
                 "order_ref": "ORD-GET-TEST",
-                "namespace": "customer_success",
+                "namespace": "customer_success_py",
                 "reason": "customer_request",
                 "amount": 25.00,
                 "customer_email": "gettest@example.com",
@@ -284,3 +286,216 @@ class TestHealthEndpoint:
         data = response.json()
         assert "status" in data
         assert "worker_running" in data
+
+
+@pytest.mark.completion
+@pytest.mark.skipif(
+    not os.environ.get("RUN_COMPLETION_TESTS"),
+    reason="Set RUN_COMPLETION_TESTS=1 to run completion verification tests",
+)
+class TestTaskCompletionVerification:
+    """Verify end-to-end task dispatch through the orchestration loop.
+
+    These tests create tasks via app endpoints, poll the orchestration API,
+    and confirm steps were dispatched and processed. Tasks reach a terminal
+    status (complete or blocked_by_failures) which proves the infrastructure
+    loop works.
+
+    Run with: pytest tests/ -v -m completion
+    """
+
+    @pytest.mark.asyncio
+    async def test_ecommerce_order_dispatches_and_processes(
+        self, client: AsyncClient
+    ) -> None:
+        """E-commerce order: task created, steps dispatched, reaches terminal status."""
+        from tests.helpers import wait_for_task_completion
+
+        response = await client.post(
+            "/orders/",
+            json={
+                "customer_email": "completion-test@example.com",
+                "items": [
+                    {
+                        "sku": "COMPLETION-001",
+                        "name": "Completion Widget",
+                        "quantity": 1,
+                        "unit_price": 19.99,
+                    }
+                ],
+                "payment_token": "tok_test_completion",
+                "shipping_address": "1 Test Ln, Testville, US 97201",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        task_uuid = data.get("task_uuid")
+        assert task_uuid, "Expected task_uuid in response"
+
+        task = await wait_for_task_completion(task_uuid)
+
+        # Task reached a terminal status (infrastructure loop works)
+        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["total_steps"] == 5
+
+        # At least the first step was attempted (handler dispatch works)
+        steps = task["steps"]
+        assert len(steps) == 5
+        validate_step = next(
+            (s for s in steps if s["name"] == "validate_cart"), None
+        )
+        assert validate_step is not None
+        assert validate_step["attempts"] >= 1
+
+        completed = sum(1 for s in steps if s["current_state"] == "complete")
+        print(f"  E-commerce task: {task['status']} ({completed}/5 steps complete)")
+
+    @pytest.mark.asyncio
+    async def test_analytics_pipeline_dispatches_and_processes(
+        self, client: AsyncClient
+    ) -> None:
+        """Analytics pipeline: parallel branches dispatched, reaches terminal status."""
+        from tests.helpers import wait_for_task_completion
+
+        response = await client.post(
+            "/analytics/jobs/",
+            json={
+                "source": "web_traffic",
+                "date_range_start": "2026-01-01",
+                "date_range_end": "2026-01-07",
+                "granularity": "daily",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        task_uuid = data.get("task_uuid")
+        assert task_uuid, "Expected task_uuid in response"
+
+        task = await wait_for_task_completion(task_uuid)
+
+        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["total_steps"] == 8
+
+        steps = task["steps"]
+        step_names = {s["name"] for s in steps}
+
+        # Verify the 3 parallel extract steps exist
+        for name in (
+            "extract_sales_data",
+            "extract_inventory_data",
+            "extract_customer_data",
+        ):
+            assert name in step_names, f"Expected step '{name}' to be present"
+
+        # At least one extract step was attempted (parallel dispatch works)
+        extract_steps = [s for s in steps if s["name"].startswith("extract_")]
+        attempted = sum(1 for s in extract_steps if s["attempts"] > 0)
+        assert attempted >= 1, "Expected at least one extract step to be attempted"
+
+        completed = sum(1 for s in steps if s["current_state"] == "complete")
+        print(f"  Analytics task: {task['status']} ({completed}/8 steps complete)")
+
+    @pytest.mark.asyncio
+    async def test_user_registration_dispatches_and_processes(
+        self, client: AsyncClient
+    ) -> None:
+        """User registration: diamond dependency pattern dispatched, reaches terminal status."""
+        from tests.helpers import wait_for_task_completion
+
+        response = await client.post(
+            "/services/requests/",
+            json={
+                "user_id": "completion_user_001",
+                "email": "completion-reg@example.com",
+                "full_name": "Completion Tester",
+                "plan": "professional",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        task_uuid = data.get("task_uuid")
+        assert task_uuid, "Expected task_uuid in response"
+
+        task = await wait_for_task_completion(task_uuid)
+
+        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["total_steps"] == 5
+
+        steps = task["steps"]
+        step_names = {s["name"] for s in steps}
+        for name in (
+            "create_user_account",
+            "setup_billing_profile",
+            "initialize_preferences",
+            "send_welcome_sequence",
+            "update_user_status",
+        ):
+            assert name in step_names, f"Expected step '{name}' to be present"
+
+        completed = sum(1 for s in steps if s["current_state"] == "complete")
+        print(f"  User registration task: {task['status']} ({completed}/5 steps complete)")
+
+    @pytest.mark.asyncio
+    async def test_customer_success_refund_dispatches_and_processes(
+        self, client: AsyncClient
+    ) -> None:
+        """Customer success refund: task dispatched, reaches terminal status."""
+        from tests.helpers import wait_for_task_completion
+
+        response = await client.post(
+            "/compliance/checks/",
+            json={
+                "order_ref": "ORD-COMP-CS-001",
+                "namespace": "customer_success_py",
+                "reason": "defective_product",
+                "amount": 99.99,
+                "customer_email": "cs-completion@example.com",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        task_uuid = data.get("task_uuid")
+        assert task_uuid, "Expected task_uuid in response"
+
+        task = await wait_for_task_completion(task_uuid)
+
+        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["total_steps"] == 5
+
+        completed = sum(1 for s in task["steps"] if s["current_state"] == "complete")
+        print(f"  Customer success refund task: {task['status']} ({completed}/5 steps complete)")
+
+    @pytest.mark.asyncio
+    async def test_payments_refund_dispatches_and_processes(
+        self, client: AsyncClient
+    ) -> None:
+        """Payments refund: task dispatched, reaches terminal status."""
+        from tests.helpers import wait_for_task_completion
+
+        response = await client.post(
+            "/compliance/checks/",
+            json={
+                "order_ref": "ORD-COMP-PAY-001",
+                "namespace": "payments_py",
+                "reason": "duplicate_charge",
+                "amount": 50.00,
+                "customer_email": "pay-completion@example.com",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        task_uuid = data.get("task_uuid")
+        assert task_uuid, "Expected task_uuid in response"
+
+        task = await wait_for_task_completion(task_uuid)
+
+        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["total_steps"] == 4
+
+        completed = sum(1 for s in task["steps"] if s["current_state"] == "complete")
+        print(f"  Payments refund task: {task['status']} ({completed}/4 steps complete)")

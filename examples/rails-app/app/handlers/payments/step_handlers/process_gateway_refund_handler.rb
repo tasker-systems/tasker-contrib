@@ -84,7 +84,7 @@ module Payments
             gateway_provider: gateway,
             processed_at: processing_completed_at.iso8601,
             estimated_arrival: estimated_settlement.iso8601,
-            namespace: 'payments',
+            namespace: 'payments_rb',
             gateway_request_id: gateway_request_id,
             gateway: gateway,
             gateway_fee: gateway_fee,

@@ -8,7 +8,7 @@ module Analytics
 
       task = TaskerCore::Client.create_task(
         name:      'analytics_pipeline',
-        namespace: 'data_pipeline',
+        namespace: 'data_pipeline_rb',
         context:   {
           source:           job_params[:source],
           date_range:       job_params[:date_range],
@@ -17,7 +17,7 @@ module Analytics
         }
       )
 
-      job.update!(task_uuid: task['id'], status: 'running')
+      job.update!(task_uuid: task.task_uuid, status: 'running')
 
       render json: {
         id:        job.id,

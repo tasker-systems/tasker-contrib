@@ -16,7 +16,7 @@
 #
 ---
 name: process_refund
-namespace_name: payments
+namespace_name: payments_ts
 version: 1.0.0
 description: "Process payment gateway refunds with direct API integration - Post 04 Team Scaling"
 metadata:

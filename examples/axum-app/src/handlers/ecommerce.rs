@@ -128,14 +128,12 @@ pub fn validate_cart(context: &Value) -> Result<Value, String> {
 /// - `tok_test_insufficient_funds`: insufficient funds (permanent error)
 /// - `tok_test_network_error`: gateway unreachable (retryable error)
 pub fn process_payment(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let payment_info = context.get("payment_info")
-        .ok_or("Missing payment_info in task context")?;
-
-    let token = payment_info.get("token")
+    // Route sends flat fields: payment_token, payment_method
+    let token = context.get("payment_token")
         .and_then(|v| v.as_str())
         .unwrap_or("tok_test_success");
 
-    let method = payment_info.get("method")
+    let method = context.get("payment_method")
         .and_then(|v| v.as_str())
         .unwrap_or("credit_card");
 
@@ -235,14 +233,12 @@ pub fn update_inventory(dependency_results: &HashMap<String, Value>) -> Result<V
 /// Aggregates data from cart validation, payment processing, and inventory reservation
 /// to create a complete order record. Generates an order ID in the format ORD-{date}-{hex}.
 pub fn create_order(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let customer_info = context.get("customer_info")
-        .ok_or("Missing customer_info in task context")?;
-
-    let customer_email = customer_info.get("email")
+    // Route sends flat fields: customer_email, customer_name
+    let customer_email = context.get("customer_email")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown@example.com");
 
-    let customer_name = customer_info.get("name")
+    let customer_name = context.get("customer_name")
         .and_then(|v| v.as_str())
         .unwrap_or("Unknown Customer");
 
@@ -301,10 +297,8 @@ pub fn create_order(context: &Value, dependency_results: &HashMap<String, Value>
 /// Simulates sending an order confirmation email to the customer.
 /// Generates a unique email ID and includes order summary details.
 pub fn send_confirmation(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let customer_info = context.get("customer_info")
-        .ok_or("Missing customer_info in task context")?;
-
-    let customer_email = customer_info.get("email")
+    // Route sends flat field: customer_email
+    let customer_email = context.get("customer_email")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown@example.com");
 

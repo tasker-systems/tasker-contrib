@@ -45,7 +45,7 @@ async def create_service_request(
     try:
         task_response = client.create_task(
             "user_registration",
-            namespace="microservices",
+            namespace="microservices_py",
             context={
                 "request_id": svc_request.id,
                 "user_id": request.user_id,
@@ -101,7 +101,7 @@ async def get_service_request(
     if svc_request.task_uuid:
         try:
             client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
-            task_status = client.get_task(str(svc_request.task_uuid))
+            task_status = client.get_task(str(svc_request.task_uuid)).__dict__
         except Exception:
             logger.exception(
                 "Failed to fetch task status for service request %d", svc_request.id

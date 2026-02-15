@@ -73,16 +73,11 @@ async fn create_order(
                     "quantity": item.quantity
                 })
             }).collect::<Vec<_>>(),
-            "customer_info": {
-                "email": req.customer_email,
-                "name": req.customer_email.split('@').next().unwrap_or("Customer"),
-                "phone": null
-            },
-            "payment_info": {
-                "method": "credit_card",
-                "token": req.payment_token,
-                "amount": total
-            },
+            "customer_email": req.customer_email,
+            "customer_name": req.customer_email.split('@').next().unwrap_or("Customer"),
+            "payment_method": "credit_card",
+            "payment_token": req.payment_token,
+            "payment_amount": total,
             "shipping_address": req.shipping_address,
             "app_order_id": order.id
         }

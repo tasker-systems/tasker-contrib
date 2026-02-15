@@ -5,14 +5,11 @@ module Microservices
       BLOCKED_DOMAINS = %w[tempmail.com throwaway.email mailinator.com].freeze
 
       def call(context)
-        # TAS-137: Use get_input_or() for task context with default values
-        user_info = context.get_input_or('user_info', {})
-        user_info = user_info.deep_symbolize_keys if user_info.is_a?(Hash)
-
-        email = user_info[:email]
-        name = user_info[:name]
-        plan = user_info[:plan] || 'free'
-        referral_code = user_info[:referral_code]
+        # TAS-137: Use get_input() for task context access (cross-language standard)
+        email = context.get_input('email')
+        name = context.get_input('name')
+        plan = context.get_input('plan') || 'free'
+        referral_code = context.get_input('referral_code')
 
         # Validate email
         raise TaskerCore::Errors::PermanentError.new(

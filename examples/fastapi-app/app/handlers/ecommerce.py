@@ -33,7 +33,7 @@ class ValidateCartHandler(StepHandler):
     STANDARD_SHIPPING = 9.99
 
     def call(self, context: StepContext) -> StepHandlerResult:
-        cart_items = context.get_input("cart_items")
+        cart_items = context.get_input("items") or context.get_input("cart_items")
         if not cart_items or not isinstance(cart_items, list):
             return StepHandlerResult.failure(
                 message="Cart is empty or items field is missing",
@@ -123,8 +123,8 @@ class ProcessPaymentHandler(StepHandler):
     ERROR_TOKENS = {"tok_test_gateway_error", "tok_test_timeout"}
 
     def call(self, context: StepContext) -> StepHandlerResult:
-        payment_info = context.get_input("payment_info")
-        payment_token = (payment_info or {}).get("token", "tok_test_success")
+        # TAS-137: Use get_input() for task context access (cross-language standard)
+        payment_token = context.get_input("payment_token") or "tok_test_success"
 
         cart_result = context.get_dependency_result("validate_cart")
         if cart_result is None:
@@ -197,8 +197,6 @@ class UpdateInventoryHandler(StepHandler):
                 retryable=False,
             )
 
-        customer_info = context.get_input("customer_info")
-
         validated_items = cart_result.get("validated_items", [])
         updated_products: list[dict[str, Any]] = []
         inventory_changes: list[dict[str, Any]] = []
@@ -256,7 +254,8 @@ class CreateOrderHandler(StepHandler):
     handler_version = "1.0.0"
 
     def call(self, context: StepContext) -> StepHandlerResult:
-        customer_info = context.get_input("customer_info")
+        # TAS-137: Use get_input() for task context access (cross-language standard)
+        customer_email = context.get_input("customer_email")
 
         cart_result = context.get_dependency_result("validate_cart")
         payment_result = context.get_dependency_result("process_payment")
@@ -271,7 +270,6 @@ class CreateOrderHandler(StepHandler):
 
         order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
         order_number = f"ORD-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
-        customer_email = (customer_info or {}).get("email")
         total_amount = cart_result["total"]
 
         from datetime import timedelta
@@ -316,7 +314,8 @@ class SendConfirmationHandler(StepHandler):
     handler_version = "1.0.0"
 
     def call(self, context: StepContext) -> StepHandlerResult:
-        customer_info = context.get_input("customer_info")
+        # TAS-137: Use get_input() for task context access (cross-language standard)
+        customer_email = context.get_input("customer_email")
 
         order_result = context.get_dependency_result("create_order")
         cart_validation = context.get_dependency_result("validate_cart")
@@ -329,7 +328,7 @@ class SendConfirmationHandler(StepHandler):
             )
 
         message_id = f"msg_{uuid.uuid4().hex[:16]}"
-        customer_email = (customer_info or {}).get("email", order_result.get("customer_email", "unknown@example.com"))
+        customer_email = customer_email or order_result.get("customer_email", "unknown@example.com")
         order_id = order_result.get("order_id", "UNKNOWN")
         total = order_result.get("total", 0.0)
         item_count = order_result.get("item_count", 0)

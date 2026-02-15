@@ -15,17 +15,13 @@ export class CreateUserHandler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      // TAS-137: Use getInput() for task context access (matches source: reads user_info object)
-      const userInfo = (context.getInput('user_info') || {}) as {
-        email?: string;
-        name?: string;
-        plan?: string;
-        phone?: string;
-        source?: string;
-        preferences?: Record<string, unknown>;
-      };
+      // TAS-137: Use getInput() for task context access (matches flat fields from route)
+      const email = context.getInput('email') as string | undefined;
+      const username = context.getInput('username') as string | undefined;
+      const plan = (context.getInput('plan') as string) || 'free';
+      const metadata = (context.getInput('metadata') || {}) as Record<string, unknown>;
 
-      if (!userInfo.email) {
+      if (!email) {
         return this.failure(
           'Email is required but was not provided',
           ErrorType.PERMANENT_ERROR,
@@ -33,9 +29,9 @@ export class CreateUserHandler extends StepHandler {
         );
       }
 
-      if (!userInfo.name) {
+      if (!username) {
         return this.failure(
-          'Name is required but was not provided',
+          'Username is required but was not provided',
           ErrorType.PERMANENT_ERROR,
           false,
         );
@@ -43,16 +39,15 @@ export class CreateUserHandler extends StepHandler {
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(userInfo.email)) {
+      if (!emailRegex.test(email)) {
         return this.failure(
-          `Invalid email format: ${userInfo.email}`,
+          `Invalid email format: ${email}`,
           ErrorType.PERMANENT_ERROR,
           false,
         );
       }
 
-      const plan = userInfo.plan || 'free';
-      const source = userInfo.source || 'web';
+      const source = (metadata.referral_source as string) || 'web';
 
       // Simulate user creation in auth service
       const userId = crypto.randomUUID();
@@ -62,10 +57,10 @@ export class CreateUserHandler extends StepHandler {
       return this.success(
         {
           user_id: userId,
-          email: userInfo.email,
-          name: userInfo.name,
+          email,
+          name: username,
           plan,
-          phone: userInfo.phone,
+          phone: null,
           source,
           status: 'created',
           created_at: now,
@@ -185,9 +180,9 @@ export class InitPreferencesHandler extends StepHandler {
       const userId = userData.user_id as string;
       const plan = (userData.plan as string) || 'free';
 
-      // Get custom preferences from task input (matches source: reads user_info)
-      const userInfo = (context.getInput('user_info') || {}) as { preferences?: Record<string, unknown> };
-      const customPrefs = userInfo.preferences || {};
+      // Get custom preferences from task input (matches flat fields from route)
+      const metadata = (context.getInput('metadata') || {}) as Record<string, unknown>;
+      const customPrefs = (metadata.preferences || {}) as Record<string, unknown>;
 
       // Default preferences by plan
       const defaultPreferences: Record<string, Record<string, unknown>> = {

@@ -2,10 +2,8 @@ module Ecommerce
   module StepHandlers
     class SendConfirmationHandler < TaskerCore::StepHandler::Base
       def call(context)
-        # TAS-137: Use get_input() for task context access (cross-language standard)
-        customer_info = context.get_input('customer_info')
-        customer_info = customer_info&.deep_symbolize_keys || {}
-        customer_email = customer_info[:email]
+        # Read top-level context field (matching what the controller sends)
+        customer_email = context.get_input('customer_email')
 
         # TAS-137: Use get_dependency_result() for upstream step results (auto-unwraps)
         order_result = context.get_dependency_result('create_order')

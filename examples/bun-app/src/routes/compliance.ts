@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { complianceChecks } from '../db/schema';
-import { FfiLayer, TaskerClient } from '@tasker-systems/tasker';
+import { getTaskerClient } from '../tasker-client';
 
 export const complianceRoute = new Hono();
 
@@ -40,23 +40,23 @@ complianceRoute.post('/', async (c) => {
   const parentCorrelationId = crypto.randomUUID();
 
   try {
-    const ffiLayer = new FfiLayer();
-    await ffiLayer.load();
-    const client = new TaskerClient(ffiLayer);
+    const client = await getTaskerClient();
 
-    // Create customer success task (namespace: customer_success)
+    // Create customer success task (namespace: customer_success_ts)
     const csTask = client.createTask({
-      name: 'customer_success_process_refund',
-      namespace: 'customer_success',
+      name: 'process_refund',
+      namespace: 'customer_success_ts',
       context: {
         check_id: check.id,
         check_type,
         entity_type,
         entity_id,
-        parameters: parameters || {},
+        ticket_id: parameters?.ticket_id || `TKT-${check.id}`,
+        customer_id: parameters?.customer_id || entity_id,
         customer_email: parameters?.customer_email || 'customer@example.com',
-        order_id: parameters?.order_id || entity_id,
+        refund_amount: parseFloat(parameters?.refund_amount) || 0,
         refund_reason: parameters?.reason || 'Customer request',
+        correlation_id: parentCorrelationId,
       },
       initiator: 'bun-app',
       sourceSystem: 'example-bun-app',
@@ -67,19 +67,20 @@ complianceRoute.post('/', async (c) => {
     });
     customerSuccessTaskUuid = csTask.task_uuid;
 
-    // Create payments task (namespace: payments)
+    // Create payments task (namespace: payments_ts)
     const payTask = client.createTask({
-      name: 'payments_process_refund',
-      namespace: 'payments',
+      name: 'process_refund',
+      namespace: 'payments_ts',
       context: {
         check_id: check.id,
         check_type,
         entity_type,
         entity_id,
-        parameters: parameters || {},
-        refund_amount: parameters?.refund_amount || '0.00',
-        payment_method: parameters?.payment_method || 'credit_card',
-        original_transaction_id: parameters?.transaction_id || crypto.randomUUID(),
+        payment_id: parameters?.payment_id || `pay_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
+        refund_amount: parseFloat(parameters?.refund_amount) || 0,
+        customer_email: parameters?.customer_email || 'customer@example.com',
+        partial_refund: parameters?.partial_refund || false,
+        correlation_id: parentCorrelationId,
       },
       initiator: 'bun-app',
       sourceSystem: 'example-bun-app',
@@ -114,8 +115,8 @@ complianceRoute.post('/', async (c) => {
       parameters: check.parameters,
       status: customerSuccessTaskUuid ? 'processing' : 'pending',
       task_uuids: {
-        customer_success: customerSuccessTaskUuid,
-        payments: paymentsTaskUuid,
+        customer_success_ts: customerSuccessTaskUuid,
+        payments_ts: paymentsTaskUuid,
       },
       parent_correlation_id: parentCorrelationId,
       created_at: check.createdAt,
@@ -144,9 +145,7 @@ complianceRoute.get('/:id', async (c) => {
   let taskStatus = null;
   if (check.taskUuid) {
     try {
-      const ffiLayer = new FfiLayer();
-      await ffiLayer.load();
-      const client = new TaskerClient(ffiLayer);
+      const client = await getTaskerClient();
       taskStatus = client.getTask(check.taskUuid);
     } catch (error) {
       console.error('Failed to fetch task status:', error);

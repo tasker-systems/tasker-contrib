@@ -12,6 +12,8 @@
 services:
   tasker-postgres:
     image: ghcr.io/tasker-systems/tasker-postgres:latest
+    # TODO: Remove platform override once GHCR images are built multi-arch (linux/amd64 + linux/arm64)
+    platform: linux/amd64
     container_name: tasker-postgres
     ports:
       - "5432:5432"
@@ -33,6 +35,8 @@ services:
 
   tasker-orchestration:
     image: ghcr.io/tasker-systems/tasker-orchestration:latest
+    # TODO: Remove platform override once GHCR images are built multi-arch (linux/amd64 + linux/arm64)
+    platform: linux/amd64
     container_name: tasker-orchestration
     depends_on:
       tasker-postgres:
@@ -45,6 +49,7 @@ services:
       - "8080:8080"
     environment:
       DATABASE_URL: postgresql://tasker:tasker@tasker-postgres:5432/tasker
+      DATABASE_HOST: tasker-postgres
       REDIS_URL: redis://dragonfly:6379
       TASKER_ENV: development
       RUST_LOG: info

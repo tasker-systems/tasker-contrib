@@ -34,15 +34,14 @@ class CreateUserAccountHandler(StepHandler):
     RESERVED_USERNAMES = {"admin", "root", "system", "support", "test"}
 
     def call(self, context: StepContext) -> StepHandlerResult:
-        user_info = context.get_input("user_info") or {}
-
-        email = user_info.get("email")
-        name = user_info.get("name")
-        full_name = name  # App uses full_name internally
-        plan = user_info.get("plan", "starter")
-        phone = user_info.get("phone")
-        source = user_info.get("source", "web")
-        user_id_input = user_info.get("user_id")
+        # TAS-137: Use get_input() for task context access (cross-language standard)
+        email = context.get_input("email")
+        full_name = context.get_input("full_name") or context.get_input("name")
+        name = full_name
+        plan = context.get_input("plan") or "starter"
+        phone = context.get_input("phone")
+        source = context.get_input("source") or "web"
+        user_id_input = context.get_input("user_id")
 
         if not email or "@" not in email:
             return StepHandlerResult.failure(
@@ -204,9 +203,8 @@ class InitializePreferencesHandler(StepHandler):
         plan = context.get_dependency_field("create_user_account", "plan") or "starter"
         internal_id = user_data.get("internal_id")
 
-        # Source-aligned: read user_info from task context for custom preferences
-        user_info = context.get_input("user_info") or {}
-        custom_prefs = user_info.get("preferences", {})
+        # TAS-137: Use get_input() for task context access (cross-language standard)
+        custom_prefs = context.get_input("preferences") or {}
 
         notifications = {
             "email_updates": True,

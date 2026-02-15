@@ -1,11 +1,6 @@
 import 'dotenv/config';
-import { Hono } from 'hono';
-import { logger } from 'hono/logger';
-import { FfiLayer, WorkerServer } from '@tasker-systems/tasker';
-import { ordersRoute } from './routes/orders';
-import { analyticsRoute } from './routes/analytics';
-import { servicesRoute } from './routes/services';
-import { complianceRoute } from './routes/compliance';
+import { WorkerServer } from '@tasker-systems/tasker';
+import { createApp } from './app';
 
 // Import handlers so they register with the handler system
 import { ValidateCartHandler, ProcessPaymentHandler, UpdateInventoryHandler, CreateOrderHandler, SendConfirmationHandler } from './handlers/ecommerce';
@@ -14,19 +9,7 @@ import { CreateUserHandler, SetupBillingHandler, InitPreferencesHandler, SendWel
 import { ValidateRefundRequestHandler, CheckRefundEligibilityHandler, CalculateRefundAmountHandler, NotifyCustomerSuccessHandler, UpdateCrmRecordHandler } from './handlers/customer-success';
 import { ProcessRefundPaymentHandler, UpdateLedgerHandler, ReconcileAccountHandler, GenerateRefundReceiptHandler } from './handlers/payments';
 
-const app = new Hono();
-
-// Middleware
-app.use('*', logger());
-
-// Health check
-app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
-
-// Mount routes
-app.route('/orders', ordersRoute);
-app.route('/analytics/jobs', analyticsRoute);
-app.route('/services/requests', servicesRoute);
-app.route('/compliance/checks', complianceRoute);
+const app = createApp();
 
 // Bootstrap tasker worker at startup
 const server = new WorkerServer();

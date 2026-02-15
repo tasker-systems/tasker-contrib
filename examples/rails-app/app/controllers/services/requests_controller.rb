@@ -9,7 +9,7 @@ module Services
 
       task = TaskerCore::Client.create_task(
         name:      'user_registration',
-        namespace: 'microservices',
+        namespace: 'microservices_rb',
         context:   {
           email:             request_params[:email],
           name:              request_params[:name],
@@ -20,7 +20,7 @@ module Services
         }
       )
 
-      service_request.update!(task_uuid: task['id'], status: 'in_progress')
+      service_request.update!(task_uuid: task.task_uuid, status: 'in_progress')
 
       render json: {
         id:           service_request.id,

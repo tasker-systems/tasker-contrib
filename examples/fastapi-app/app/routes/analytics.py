@@ -45,7 +45,7 @@ async def create_analytics_job(
     try:
         task_response = client.create_task(
             "analytics_pipeline",
-            namespace="analytics",
+            namespace="data_pipeline_py",
             context={
                 "job_id": job.id,
                 "source": request.source,
@@ -95,7 +95,7 @@ async def get_analytics_job(
     if job.task_uuid:
         try:
             client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
-            task_status = client.get_task(str(job.task_uuid))
+            task_status = client.get_task(str(job.task_uuid)).__dict__
         except Exception:
             logger.exception(
                 "Failed to fetch task status for analytics job %d", job.id

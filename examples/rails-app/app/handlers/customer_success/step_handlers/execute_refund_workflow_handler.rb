@@ -103,13 +103,13 @@ module CustomerSuccess
         TaskerCore::Types::StepHandlerCallResult.success(
           result: {
             task_delegated: true,
-            target_namespace: 'payments',
+            target_namespace: 'payments_rb',
             target_workflow: 'process_refund',
             delegated_task_id: delegated_task_id,
             delegated_task_status: 'created',
             delegation_timestamp: Time.current.iso8601,
             correlation_id: correlation_id,
-            namespace: 'customer_success',
+            namespace: 'customer_success_rb',
             execution_id: execution_id,
             executed: all_completed,
             refund_transaction_id: refund_transaction_id,
@@ -129,7 +129,7 @@ module CustomerSuccess
             refund_transaction_id: refund_transaction_id,
             amount: amount,
             steps_completed: steps_executed.count { |s| s[:status] == 'completed' },
-            target_namespace: 'payments',
+            target_namespace: 'payments_rb',
             target_workflow: 'process_refund',
             delegated_task_id: delegated_task_id,
             correlation_id: correlation_id

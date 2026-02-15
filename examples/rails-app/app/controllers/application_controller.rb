@@ -25,8 +25,8 @@ class ApplicationController < ActionController::API
     begin
       task = TaskerCore::Client.get_task(record.task_uuid)
       base.merge(
-        'task_status' => task['state'],
-        'task_steps'  => task['steps']&.map { |s| { name: s['name'], state: s['state'] } }
+        'task_status' => task.status,
+        'task_steps'  => task.steps&.map { |s| { name: s['name'], state: s['current_state'] } }
       )
     rescue StandardError => e
       Rails.logger.warn("Failed to fetch task status for #{record.task_uuid}: #{e.message}")

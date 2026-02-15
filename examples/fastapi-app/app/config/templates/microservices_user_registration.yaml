@@ -27,7 +27,7 @@
 #
 ---
 name: user_registration
-namespace_name: microservices
+namespace_name: microservices_py
 version: 1.0.0
 description: "User registration workflow with microservices coordination - Microservices"
 metadata:
@@ -56,24 +56,21 @@ domain_events: []
 input_schema:
   type: object
   properties:
-    user_info:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        name:
-          type: string
-        plan:
-          type: string
-          enum: [free, pro, enterprise]
-        phone:
-          type: string
-        source:
-          type: string
-      required:
-        - email
-        - name
+    email:
+      type: string
+      format: email
+    full_name:
+      type: string
+    plan:
+      type: string
+      enum: [starter, professional, enterprise]
+    phone:
+      type: string
+    source:
+      type: string
+  required:
+    - email
+    - full_name
 steps:
   # SEQUENTIAL PHASE - User creation must complete first
   - name: create_user_account

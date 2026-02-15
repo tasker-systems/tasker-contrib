@@ -5,6 +5,10 @@ edition = "2021"
 publish = false
 description = "Axum example application demonstrating Tasker workflow orchestration patterns"
 
+[lib]
+name = "example_axum_app"
+path = "src/lib.rs"
+
 [[bin]]
 name = "example-axum-app"
 path = "src/main.rs"

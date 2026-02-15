@@ -9,8 +9,7 @@ module Compliance
 
       # Route to the correct template based on namespace
       template_name = case check_params[:namespace]
-                      when 'customer_success' then 'customer_success_process_refund'
-                      when 'payments'         then 'payments_process_refund'
+                      when 'customer_success_rb', 'payments_rb' then 'process_refund'
                       else
                         raise ArgumentError, "Unknown namespace: #{check_params[:namespace]}"
                       end
@@ -21,7 +20,7 @@ module Compliance
         context:   check_params.to_h.merge(domain_record_id: check.id)
       )
 
-      check.update!(task_uuid: task['id'], status: 'in_progress')
+      check.update!(task_uuid: task.task_uuid, status: 'in_progress')
 
       render json: {
         id:        check.id,

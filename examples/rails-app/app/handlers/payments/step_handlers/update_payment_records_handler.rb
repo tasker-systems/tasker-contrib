@@ -110,7 +110,7 @@ module Payments
             refund_status: 'completed',
             history_entries_created: records_updated.size,
             updated_at: Time.current.iso8601,
-            namespace: 'payments',
+            namespace: 'payments_rb',
             record_update_id: record_update_id,
             records_updated_details: records_updated,
             total_records: records_updated.size,

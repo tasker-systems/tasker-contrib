@@ -43,11 +43,8 @@ module Microservices
         user_id_field = context.get_dependency_field('create_user_account', 'user_id')
         plan_field = context.get_dependency_field('create_user_account', 'plan') || 'free'
 
-        # TAS-137: Use get_input_or() for task context access
-        user_info = context.get_input_or('user_info', {})
-        user_info = user_info.deep_symbolize_keys if user_info.is_a?(Hash)
-        custom_prefs = user_info[:preferences] || {}
-        marketing_consent = custom_prefs[:marketing_consent]
+        # TAS-137: Use get_input() for task context access (cross-language standard)
+        marketing_consent = context.get_input('marketing_consent')
 
         raise TaskerCore::Errors::PermanentError.new(
           'User account data not available',
@@ -83,7 +80,7 @@ module Microservices
             plan: plan,
             preferences: preferences,
             defaults_applied: defaults.keys.count,
-            customizations: custom_prefs.keys.count,
+            customizations: 0,
             status: 'active',
             created_at: Time.current.iso8601,
             updated_at: Time.current.iso8601,

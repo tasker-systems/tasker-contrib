@@ -48,7 +48,7 @@ async def create_order(
     try:
         task_response = client.create_task(
             "ecommerce_order_processing",
-            namespace="ecommerce",
+            namespace="ecommerce_py",
             context={
                 "order_id": order.id,
                 "customer_email": request.customer_email,
@@ -98,7 +98,7 @@ async def get_order(
     if order.task_uuid:
         try:
             client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
-            task_status = client.get_task(str(order.task_uuid))
+            task_status = client.get_task(str(order.task_uuid)).__dict__
         except Exception:
             logger.exception("Failed to fetch task status for order %d", order.id)
 
