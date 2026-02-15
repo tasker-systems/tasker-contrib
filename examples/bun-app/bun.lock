@@ -5,19 +5,19 @@
     "": {
       "name": "tasker-example-bun-app",
       "dependencies": {
-        "@hono/node-server": "^1.13.0",
-        "@tasker-systems/tasker": "^0.1.1",
-        "dotenv": "^16.4.0",
-        "drizzle-kit": "^0.30.0",
-        "drizzle-orm": "^0.38.0",
-        "hono": "^4.6.0",
+        "@hono/node-server": "^1.19.9",
+        "@tasker-systems/tasker": "^0.1.3",
+        "dotenv": "^16.6.1",
+        "drizzle-kit": "^0.30.6",
+        "drizzle-orm": "^0.38.4",
+        "hono": "^4.11.9",
         "pino-pretty": "^13.1.3",
-        "postgres": "^3.4.0",
+        "postgres": "^3.4.8",
       },
       "devDependencies": {
-        "@types/bun": "^1.3.0",
-        "bun-types": "^1.3.0",
-        "typescript": "^5.7.0",
+        "@types/bun": "^1.3.9",
+        "bun-types": "^1.3.9",
+        "typescript": "^5.9.3",
       },
     },
   },
@@ -80,7 +80,7 @@
 
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
 
-    "@tasker-systems/tasker": ["@tasker-systems/tasker@0.1.1", "", { "dependencies": { "eventemitter3": "^5.0.1", "pino": "^10.1.0" }, "optionalDependencies": { "koffi": "^2.9.0" } }, "sha512-5OU1nmlcYcsk/ohtQV4ApuLxmnlHNx2D4dag8YJ8wPyYDN6+UIHcbKfUL7cBHJKJOw6kGl2k42vSy0+NvGQx6w=="],
+    "@tasker-systems/tasker": ["@tasker-systems/tasker@0.1.3", "", { "dependencies": { "eventemitter3": "^5.0.1", "pino": "^10.1.0" }, "optionalDependencies": { "koffi": "^2.9.0" } }, "sha512-OvnTDUw2ePM0ixpIoFvQ9OGyqeRhU4HYz/gCPsC3+ASutqEGmdJyeOOLgwOKFqsMq+7rf5TjEGYoXygYUppgOg=="],
 
     "@types/bun": ["@types/bun@1.3.9", "", { "dependencies": { "bun-types": "1.3.9" } }, "sha512-KQ571yULOdWJiMH+RIWIOZ7B2RXQGpL1YQrBtLIV3FqDcCu6FsbFUBwhdKUlCKUpS3PJDsHlJ1QKlpxoVR+xtw=="],
 
