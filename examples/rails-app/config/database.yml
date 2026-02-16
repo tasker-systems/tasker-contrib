@@ -1,0 +1,16 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS", 5) %>
+
+development:
+  <<: *default
+  url: <%= ENV.fetch("APP_DATABASE_URL", "postgresql://tasker:tasker@localhost:5432/example_rails") %>
+
+test:
+  <<: *default
+  url: <%= ENV.fetch("APP_DATABASE_URL", "postgresql://tasker:tasker@localhost:5432/example_rails") %>
+
+production:
+  <<: *default
+  url: <%= ENV["APP_DATABASE_URL"] %>

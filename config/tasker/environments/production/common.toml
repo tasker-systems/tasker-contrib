@@ -1,0 +1,20 @@
+# Production Environment - Common Configuration Overrides
+
+[common.database.pool]
+max_connections = 50
+min_connections = 10
+slow_acquire_threshold_ms = 50
+
+[common.pgmq_database.pool]
+max_connections = 25
+min_connections = 5
+slow_acquire_threshold_ms = 50
+
+# TAS-156: Distributed cache enabled for production
+[common.cache]
+enabled = true
+template_ttl_seconds = 3600
+analytics_ttl_seconds = 120
+
+[common.execution]
+environment = "production"

@@ -20,6 +20,21 @@ target
 .venv/
 __pycache__/
 
+# Example app local config (contains machine-specific paths)
+examples/**/.env
+# Keep .env.template checked in as reference
+!examples/**/.env.template
+
+# Example app build artifacts
+examples/rails-app/Gemfile.lock
+examples/rails-app/tmp/
+examples/rails-app/log/
+examples/fastapi-app/*.egg-info/
+examples/bun-app/node_modules/
+examples/bun-app/bun.lockb
+examples/bun-app/dist/
+examples/axum-app/target/
+
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

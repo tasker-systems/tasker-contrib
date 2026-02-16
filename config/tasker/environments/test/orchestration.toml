@@ -1,0 +1,66 @@
+# Test Environment - Orchestration Configuration Overrides
+
+[orchestration]
+enable_performance_logging = false
+# TAS-228: Short shutdown timeout for tests
+shutdown_timeout_ms = 5000
+
+[orchestration.mpsc_channels.command_processor]
+command_buffer_size = 100
+
+[orchestration.mpsc_channels.event_systems]
+event_channel_buffer_size = 100
+
+[orchestration.mpsc_channels.event_listeners]
+pgmq_event_buffer_size = 100
+
+[orchestration.web]
+# Increased from 5000ms to 30000ms to support complex task creation operations
+# which can involve template parsing, step creation, DB saves, and PGMQ messaging
+request_timeout_ms = 30000
+# Enable config endpoint for debugging in test environment
+config_endpoint_enabled = true
+
+[orchestration.web.database_pools]
+web_api_pool_size = 10
+web_api_max_connections = 15
+max_total_connections_hint = 30
+
+# TAS-49: DLQ Configuration Overrides for Test Environment
+[orchestration.dlq.staleness_detection]
+detection_interval_seconds = 60  # Faster detection for tests (1 minute)
+batch_size = 10                  # Smaller batch for test
+dry_run = false                  # Actually transition in tests
+
+[orchestration.dlq.staleness_detection.thresholds]
+waiting_for_dependencies_minutes = 5  # Short timeout for tests
+waiting_for_retry_minutes = 2         # Short timeout for tests
+steps_in_process_minutes = 5
+task_max_lifetime_hours = 1
+
+# TAS-59: Batch Processing Configuration Overrides for Test Environment
+# TAS-125: Removed checkpoint_interval_default - handlers decide when to checkpoint
+[orchestration.batch_processing]
+enabled = true                  # Enable batch processing for tests
+max_parallel_batches = 10       # Smaller for tests
+default_batch_size = 100        # Smaller batches for faster tests
+checkpoint_stall_minutes = 2    # Faster stall detection for tests
+
+# TAS-64: Fast Retry Cycle Configuration for E2E Testing
+# These settings enable fast polling and short backoff for retry tests
+[orchestration.event_systems.orchestration.timing]
+fallback_polling_interval_seconds = 1  # Fast polling for retry discovery
+
+[orchestration.event_systems.task_readiness.timing]
+fallback_polling_interval_seconds = 1  # Fast polling for step readiness
+
+[orchestration.event_systems.orchestration.processing.backoff]
+initial_delay_ms = 50    # Very short initial backoff for tests
+max_delay_ms = 500       # Cap backoff at 500ms for fast test cycles
+multiplier = 1.5         # Exponential growth factor
+
+# TAS-177: gRPC Configuration Overrides for Test Environment
+[orchestration.grpc]
+enabled = true
+enable_reflection = true         # Enable reflection for test tooling
+enable_health_service = true     # Enable health checks for test verification
