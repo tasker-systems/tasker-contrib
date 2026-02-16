@@ -26,11 +26,13 @@ use uuid::Uuid;
 /// Context keys (flat): email, full_name, plan, phone, source
 pub fn create_user_account(context: &Value) -> Result<Value, String> {
     // Route sends flat fields: email, full_name, plan, phone, source
-    let email = context.get("email")
+    let email = context
+        .get("email")
         .and_then(|v| v.as_str())
         .ok_or("Missing email in context")?;
 
-    let name = context.get("full_name")
+    let name = context
+        .get("full_name")
         .and_then(|v| v.as_str())
         .ok_or("Missing full_name in context")?;
 
@@ -45,11 +47,16 @@ pub fn create_user_account(context: &Value) -> Result<Value, String> {
     }
 
     let user_id = format!("usr_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
-    let account_number = format!("ACC-{}", &Uuid::new_v4().to_string().replace('-', "")[..8].to_uppercase());
-    let plan = context.get("plan")
+    let account_number = format!(
+        "ACC-{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..8].to_uppercase()
+    );
+    let plan = context
+        .get("plan")
         .and_then(|v| v.as_str())
         .unwrap_or("free");
-    let source = context.get("source")
+    let source = context
+        .get("source")
         .and_then(|v| v.as_str())
         .unwrap_or("web");
 
@@ -62,7 +69,10 @@ pub fn create_user_account(context: &Value) -> Result<Value, String> {
 
     // Check for existing user (idempotency - simulated)
     if email == "existing@example.com" {
-        info!("User {} already exists - returning idempotent success", email);
+        info!(
+            "User {} already exists - returning idempotent success",
+            email
+        );
         return Ok(json!({
             "user_id": "user_existing_001",
             "email": email,
@@ -112,23 +122,42 @@ pub fn create_user_account(context: &Value) -> Result<Value, String> {
 /// Output keys (aligned with source): billing_id, user_id, plan, price, currency, billing_cycle,
 ///   features, status, next_billing_date, created_at (paid) OR user_id, plan, billing_required,
 ///   status, message (free)
-pub fn setup_billing_profile(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let user_result = dependency_results.get("create_user_account")
+#[allow(unused_variables)]
+pub fn setup_billing_profile(
+    context: &Value,
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
+    let user_result = dependency_results
+        .get("create_user_account")
         .ok_or("Missing create_user_account dependency")?;
 
-    let user_id = user_result.get("user_id")
+    let user_id = user_result
+        .get("user_id")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
-    let plan = user_result.get("plan")
+    let plan = user_result
+        .get("plan")
         .and_then(|v| v.as_str())
         .unwrap_or("free");
 
-    let billing_id = format!("bill_{}", &Uuid::new_v4().to_string().replace('-', "")[..10]);
+    let billing_id = format!(
+        "bill_{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..10]
+    );
 
     // Configure billing based on plan (source uses get_billing_tier)
     let (price, features, billing_required): (f64, Vec<&str>, bool) = match plan {
-        "enterprise" => (299.99, vec!["basic_features", "advanced_analytics", "priority_support", "custom_integrations"], true),
+        "enterprise" => (
+            299.99,
+            vec![
+                "basic_features",
+                "advanced_analytics",
+                "priority_support",
+                "custom_integrations",
+            ],
+            true,
+        ),
         "pro" => (29.99, vec!["basic_features", "advanced_analytics"], true),
         _ => (0.0, vec!["basic_features"], false),
     };
@@ -196,15 +225,21 @@ pub fn setup_billing_profile(context: &Value, dependency_results: &HashMap<Strin
 /// Context reads (aligned with source): user_info -> preferences (optional)
 /// Output keys (aligned with source): preferences_id, user_id, plan, preferences,
 ///   defaults_applied, customizations, status, created_at, updated_at
-pub fn initialize_preferences(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let user_result = dependency_results.get("create_user_account")
+pub fn initialize_preferences(
+    context: &Value,
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
+    let user_result = dependency_results
+        .get("create_user_account")
         .ok_or("Missing create_user_account dependency")?;
 
-    let user_id = user_result.get("user_id")
+    let user_id = user_result
+        .get("user_id")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
-    let plan = user_result.get("plan")
+    let plan = user_result
+        .get("plan")
         .and_then(|v| v.as_str())
         .unwrap_or("free");
 
@@ -309,21 +344,40 @@ pub fn initialize_preferences(context: &Value, dependency_results: &HashMap<Stri
 ///   initialize_preferences -> preferences.email_notifications
 /// Output keys (aligned with source): user_id, plan, channels_used, messages_sent (count),
 ///   welcome_sequence_id, status, sent_at, highlights, upgrade_prompt, billing_id
-pub fn send_welcome_sequence(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let user_result = dependency_results.get("create_user_account")
+#[allow(unused_variables)]
+pub fn send_welcome_sequence(
+    context: &Value,
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
+    let user_result = dependency_results
+        .get("create_user_account")
         .ok_or("Missing create_user_account dependency")?;
 
-    let billing_result = dependency_results.get("setup_billing_profile")
+    let billing_result = dependency_results
+        .get("setup_billing_profile")
         .ok_or("Missing setup_billing_profile dependency")?;
 
-    let preferences_result = dependency_results.get("initialize_preferences")
+    let preferences_result = dependency_results
+        .get("initialize_preferences")
         .ok_or("Missing initialize_preferences dependency")?;
 
     // Source reads: user_id, email, plan from create_user_account
-    let user_id = user_result.get("user_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let email = user_result.get("email").and_then(|v| v.as_str()).unwrap_or("unknown@example.com");
-    let name = user_result.get("name").and_then(|v| v.as_str()).unwrap_or("User");
-    let plan = user_result.get("plan").and_then(|v| v.as_str()).unwrap_or("free");
+    let user_id = user_result
+        .get("user_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let email = user_result
+        .get("email")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown@example.com");
+    let name = user_result
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("User");
+    let plan = user_result
+        .get("plan")
+        .and_then(|v| v.as_str())
+        .unwrap_or("free");
 
     // Source reads: billing_id from setup_billing_profile (optional for free plans)
     let billing_id = billing_result.get("billing_id").and_then(|v| v.as_str());
@@ -342,7 +396,12 @@ pub fn send_welcome_sequence(context: &Value, dependency_results: &HashMap<Strin
         .unwrap_or(false);
 
     // Generate welcome template based on plan (aligned with source get_welcome_template)
-    let (subject, greeting, highlights, upgrade_prompt): (String, String, Vec<String>, Option<String>) = match plan {
+    let (subject, greeting, highlights, upgrade_prompt): (
+        String,
+        String,
+        Vec<String>,
+        Option<String>,
+    ) = match plan {
         "pro" => (
             "Welcome to Pro!".to_string(),
             "Thanks for upgrading to Pro".to_string(),
@@ -384,7 +443,10 @@ pub fn send_welcome_sequence(context: &Value, dependency_results: &HashMap<Strin
     // Email (if notifications enabled - source checks email_notifications)
     if email_notifications_enabled {
         channels_used.push("email".to_string());
-        let email_id = format!("msg_email_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+        let email_id = format!(
+            "msg_email_{}",
+            &Uuid::new_v4().to_string().replace('-', "")[..8]
+        );
         messages_detail.push(json!({
             "message_id": email_id,
             "channel": "email",
@@ -396,7 +458,10 @@ pub fn send_welcome_sequence(context: &Value, dependency_results: &HashMap<Strin
 
     // In-app notification (always)
     channels_used.push("in_app".to_string());
-    let notif_id = format!("msg_inapp_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+    let notif_id = format!(
+        "msg_inapp_{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..8]
+    );
     messages_detail.push(json!({
         "message_id": notif_id,
         "channel": "in_app",
@@ -409,7 +474,10 @@ pub fn send_welcome_sequence(context: &Value, dependency_results: &HashMap<Strin
     // SMS (enterprise only - source checks plan == "enterprise")
     if plan == "enterprise" {
         channels_used.push("sms".to_string());
-        let sms_id = format!("msg_sms_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+        let sms_id = format!(
+            "msg_sms_{}",
+            &Uuid::new_v4().to_string().replace('-', "")[..8]
+        );
         messages_detail.push(json!({
             "message_id": sms_id,
             "channel": "sms",
@@ -418,11 +486,16 @@ pub fn send_welcome_sequence(context: &Value, dependency_results: &HashMap<Strin
         }));
     }
 
-    let welcome_sequence_id = format!("welcome_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let welcome_sequence_id = format!(
+        "welcome_{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..12]
+    );
 
     info!(
         "Welcome sequence sent to {} ({}): {} channels",
-        name, email, channels_used.len()
+        name,
+        email,
+        channels_used.len()
     );
 
     // Output keys aligned with source: user_id, plan, channels_used, messages_sent (count),
@@ -457,36 +530,53 @@ pub fn send_welcome_sequence(context: &Value, dependency_results: &HashMap<Strin
 /// Output keys (aligned with source): user_id, status, plan, registration_summary,
 ///   activation_timestamp, all_services_coordinated, services_completed
 pub fn update_user_status(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let user_result = dependency_results.get("create_user_account")
+    let user_result = dependency_results
+        .get("create_user_account")
         .ok_or("Missing create_user_account dependency")?;
 
-    let billing_result = dependency_results.get("setup_billing_profile")
+    let billing_result = dependency_results
+        .get("setup_billing_profile")
         .ok_or("Missing setup_billing_profile dependency")?;
 
-    let prefs_result = dependency_results.get("initialize_preferences")
+    let prefs_result = dependency_results
+        .get("initialize_preferences")
         .ok_or("Missing initialize_preferences dependency")?;
 
-    let welcome_result = dependency_results.get("send_welcome_sequence")
+    let welcome_result = dependency_results
+        .get("send_welcome_sequence")
         .ok_or("Missing send_welcome_sequence dependency")?;
 
     // Source reads: user_id, email, plan, created_at from create_user_account
-    let user_id = user_result.get("user_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let email = user_result.get("email").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let plan = user_result.get("plan").and_then(|v| v.as_str()).unwrap_or("free");
+    let user_id = user_result
+        .get("user_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let email = user_result
+        .get("email")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let plan = user_result
+        .get("plan")
+        .and_then(|v| v.as_str())
+        .unwrap_or("free");
     let user_created_at = user_result.get("created_at").and_then(|v| v.as_str());
 
     // Source reads: billing_id, next_billing_date from setup_billing_profile
     let billing_id = billing_result.get("billing_id").and_then(|v| v.as_str());
-    let next_billing_date = billing_result.get("next_billing_date").and_then(|v| v.as_str());
+    let next_billing_date = billing_result
+        .get("next_billing_date")
+        .and_then(|v| v.as_str());
 
     // Source reads: preferences from initialize_preferences
-    let prefs_count = prefs_result.get("preferences")
+    let prefs_count = prefs_result
+        .get("preferences")
         .and_then(|p| p.as_object())
         .map(|o| o.len())
         .unwrap_or(0);
 
     // Source reads: channels_used from send_welcome_sequence
-    let notification_channels = welcome_result.get("channels_used")
+    let notification_channels = welcome_result
+        .get("channels_used")
         .cloned()
         .unwrap_or(json!([]));
 
