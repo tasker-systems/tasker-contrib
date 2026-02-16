@@ -9,6 +9,8 @@
 # Each example app connects to this shared infrastructure and runs its own
 # app-specific database for domain models (orders, analytics_jobs, etc.).
 
+name: tasker-examples
+
 services:
   tasker-postgres:
     image: ghcr.io/tasker-systems/tasker-postgres:latest
