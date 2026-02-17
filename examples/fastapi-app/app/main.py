@@ -3,10 +3,9 @@
 This app bootstraps a tasker-core worker at startup (with web/gRPC disabled)
 and exposes framework-native HTTP endpoints for creating and querying workflows.
 
-The startup sequence:
-1. Bootstrap the Rust worker (database, messaging, orchestration client)
-2. Discover Python step handlers from app.handlers package
-3. Start the event processing pipeline (EventPoller -> EventBridge -> StepExecutionSubscriber)
+The Worker class wraps the full bootstrap sequence: Rust worker initialization,
+handler discovery, and event processing pipeline (EventPoller -> EventBridge ->
+StepExecutionSubscriber).
 """
 
 from __future__ import annotations
@@ -28,65 +27,21 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: bootstrap tasker worker on startup, stop on shutdown."""
-    from tasker_core import (
-        EventBridge,
-        EventPoller,
-        HandlerRegistry,
-        StepExecutionSubscriber,
-        bootstrap_worker,
-        is_worker_running,
-        stop_worker,
-    )
+    from tasker_core import Worker, is_worker_running
 
-    # Skip bootstrap if already running (e.g., test conftest bootstrapped first)
-    already_running = is_worker_running()
-    poller = None
-
-    if not already_running:
-        # 1. Bootstrap the Rust worker system
+    worker = None
+    if not is_worker_running():
         logger.info("Bootstrapping tasker worker...")
-        result = bootstrap_worker()
-        logger.info(
-            "Tasker worker started: worker_id=%s, status=%s",
-            result.worker_id,
-            result.status,
-        )
-
-        # 2. Discover step handlers from app.handlers package
-        registry = HandlerRegistry.instance()
-        count = registry.discover_handlers("app.handlers")
-        logger.info("Discovered %d step handlers", count)
-
-        # 3. Start event processing pipeline
-        bridge = EventBridge.instance()
-        bridge.start()
-
-        subscriber = StepExecutionSubscriber(
-            event_bridge=bridge,
-            handler_registry=registry,
-            worker_id=result.worker_id,
-        )
-        subscriber.start()
-
-        poller = EventPoller()
-        poller.on_step_event(lambda event: bridge.publish("step.execution.received", event))
-        poller.start()
-
-        logger.info("Event processing pipeline started")
+        worker = Worker.start(handler_packages=["app.handlers"])
+        logger.info("Tasker worker started: worker_id=%s", worker.worker_id)
     else:
         logger.info("Tasker worker already running, skipping bootstrap")
 
     yield
 
-    if not already_running:
-        # Shutdown in reverse order
-        logger.info("Stopping event processing...")
-        if poller:
-            poller.stop()
-        EventBridge.instance().stop()
-
+    if worker:
         logger.info("Stopping tasker worker...")
-        stop_worker()
+        worker.stop()
         logger.info("Tasker worker stopped")
 
 

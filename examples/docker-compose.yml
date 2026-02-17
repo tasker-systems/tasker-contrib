@@ -52,6 +52,8 @@ services:
       DATABASE_URL: postgresql://tasker:tasker@tasker-postgres:5432/tasker
       DATABASE_HOST: tasker-postgres
       REDIS_URL: redis://dragonfly:6379
+      RABBITMQ_URL: amqp://tasker:tasker@rabbitmq:5672/%2F
+      TASKER_MESSAGING_BACKEND: rabbitmq
       TASKER_ENV: development
       RUST_LOG: info
       LOG_LEVEL: info

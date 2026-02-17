@@ -1,5 +1,9 @@
 Rails.application.routes.draw do
-  resources :orders, only: [:create, :show]
+  resources :orders, only: [:create, :show] do
+    collection do
+      post :create_async
+    end
+  end
 
   namespace :analytics do
     resources :jobs, only: [:create, :show]
