@@ -6,7 +6,7 @@
       "name": "tasker-example-bun-app",
       "dependencies": {
         "@hono/node-server": "^1.19.9",
-        "@tasker-systems/tasker": "^0.1.4",
+        "@tasker-systems/tasker": "^0.1.5",
         "dotenv": "^16.6.1",
         "drizzle-kit": "^0.30.6",
         "drizzle-orm": "^0.38.4",
@@ -80,7 +80,7 @@
 
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
 
-    "@tasker-systems/tasker": ["@tasker-systems/tasker@0.1.4", "", { "dependencies": { "eventemitter3": "^5.0.1", "pino": "^10.1.0" }, "optionalDependencies": { "koffi": "^2.9.0" } }, "sha512-MVgw4Eu5a9l67qBAZg1CeBVXUcvhgYpHAashSajmzXZJnEKWfBaNd3qOHF58mwhMWCYUG97i9+cGtusPtdZ6rw=="],
+    "@tasker-systems/tasker": ["@tasker-systems/tasker@0.1.5", "", { "dependencies": { "eventemitter3": "^5.0.1", "pino": "^10.1.0" } }, "sha512-vK1rqBfHP0C+uevqzULfVe9QyoNlFyWU3vU3XMWePUmTK8sXb9T7ZyGW7c7NSilUXcI5/J21qi8enX8HTE46lA=="],
 
     "@types/bun": ["@types/bun@1.3.9", "", { "dependencies": { "bun-types": "1.3.9" } }, "sha512-KQ571yULOdWJiMH+RIWIOZ7B2RXQGpL1YQrBtLIV3FqDcCu6FsbFUBwhdKUlCKUpS3PJDsHlJ1QKlpxoVR+xtw=="],
 
@@ -129,8 +129,6 @@
     "isexe": ["isexe@3.1.5", "", {}, "sha512-6B3tLtFqtQS4ekarvLVMZ+X+VlvQekbe4taUkf/rhVO3d/h0M2rfARm/pXLcPEsjjMsFgrFgSrhQIxcSVrBz8w=="],
 
     "joycon": ["joycon@3.1.1", "", {}, "sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw=="],
-
-    "koffi": ["koffi@2.15.1", "", {}, "sha512-mnc0C0crx/xMSljb5s9QbnLrlFHprioFO1hkXyuSuO/QtbpLDa0l/uM21944UfQunMKmp3/r789DTDxVyyH6aA=="],
 
     "minimist": ["minimist@1.2.8", "", {}, "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA=="],
 
