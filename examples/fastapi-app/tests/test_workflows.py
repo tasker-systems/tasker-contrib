@@ -9,8 +9,6 @@ Run with: pytest tests/ -v
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from httpx import AsyncClient
 
@@ -51,6 +49,31 @@ class TestEcommerceOrderWorkflow:
         assert data["status"] in ("pending", "processing", "task_creation_failed")
         assert "id" in data
         assert "created_at" in data
+
+    @pytest.mark.asyncio
+    async def test_create_order_async(self, client: AsyncClient) -> None:
+        """POST /orders/async queues an order and returns 202."""
+        response = await client.post(
+            "/orders/async",
+            json={
+                "customer_email": "async-test@example.com",
+                "items": [
+                    {
+                        "sku": "ASYNC-001",
+                        "name": "Async Widget",
+                        "quantity": 1,
+                        "unit_price": 24.99,
+                    }
+                ],
+                "payment_token": "tok_test_async",
+                "shipping_address": "2 Async Ave, Testville, US 97201",
+            },
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "queued"
+        assert "id" in data
 
     @pytest.mark.asyncio
     async def test_get_order(self, client: AsyncClient) -> None:
@@ -289,10 +312,6 @@ class TestHealthEndpoint:
 
 
 @pytest.mark.completion
-@pytest.mark.skipif(
-    not os.environ.get("RUN_COMPLETION_TESTS"),
-    reason="Set RUN_COMPLETION_TESTS=1 to run completion verification tests",
-)
 class TestTaskCompletionVerification:
     """Verify end-to-end task dispatch through the orchestration loop.
 
@@ -308,7 +327,7 @@ class TestTaskCompletionVerification:
     async def test_ecommerce_order_dispatches_and_processes(
         self, client: AsyncClient
     ) -> None:
-        """E-commerce order: task created, steps dispatched, reaches terminal status."""
+        """E-commerce order (sync): task created, steps dispatched, all complete."""
         from tests.helpers import wait_for_task_completion
 
         response = await client.post(
@@ -335,21 +354,74 @@ class TestTaskCompletionVerification:
 
         task = await wait_for_task_completion(task_uuid)
 
-        # Task reached a terminal status (infrastructure loop works)
-        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["status"] == "complete", f"Expected task to complete, got: {task['status']}"
         assert task["total_steps"] == 5
 
-        # At least the first step was attempted (handler dispatch works)
         steps = task["steps"]
         assert len(steps) == 5
+        completed = sum(1 for s in steps if s["current_state"] == "complete")
+        assert completed == 5, f"Expected all 5 steps to complete, got {completed}"
+
         validate_step = next(
             (s for s in steps if s["name"] == "validate_cart"), None
         )
         assert validate_step is not None
         assert validate_step["attempts"] >= 1
 
-        completed = sum(1 for s in steps if s["current_state"] == "complete")
-        print(f"  E-commerce task: {task['status']} ({completed}/5 steps complete)")
+        print(f"  E-commerce task (sync): {task['status']} ({completed}/5 steps complete)")
+
+    @pytest.mark.asyncio
+    async def test_ecommerce_order_async_dispatches_and_processes(
+        self, client: AsyncClient
+    ) -> None:
+        """E-commerce order (async): background task creates workflow, all steps complete."""
+        import asyncio
+
+        from tests.helpers import wait_for_task_completion
+
+        response = await client.post(
+            "/orders/async",
+            json={
+                "customer_email": "async-completion@example.com",
+                "items": [
+                    {
+                        "sku": "ASYNC-001",
+                        "name": "Async Widget",
+                        "quantity": 1,
+                        "unit_price": 24.99,
+                    }
+                ],
+                "payment_token": "tok_test_async",
+                "shipping_address": "2 Async Ave, Testville, US 97201",
+            },
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        order_id = data["id"]
+        assert data["status"] == "queued"
+
+        # Poll the app for the task_uuid (background task creates the workflow)
+        task_uuid = None
+        for _ in range(15):
+            order_response = await client.get(f"/orders/{order_id}")
+            order_data = order_response.json()
+            task_uuid = order_data.get("task_uuid")
+            if task_uuid:
+                break
+            await asyncio.sleep(1)
+
+        assert task_uuid, "Background task did not create workflow within 15s"
+
+        task = await wait_for_task_completion(task_uuid)
+
+        assert task["status"] == "complete", f"Expected task to complete, got: {task['status']}"
+        assert task["total_steps"] == 5
+
+        completed = sum(1 for s in task["steps"] if s["current_state"] == "complete")
+        assert completed == 5, f"Expected all 5 steps to complete, got {completed}"
+
+        print(f"  E-commerce task (async): {task['status']} ({completed}/5 steps complete)")
 
     @pytest.mark.asyncio
     async def test_analytics_pipeline_dispatches_and_processes(
@@ -375,7 +447,7 @@ class TestTaskCompletionVerification:
 
         task = await wait_for_task_completion(task_uuid)
 
-        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["status"] == "complete", f"Expected task to complete, got: {task['status']}"
         assert task["total_steps"] == 8
 
         steps = task["steps"]
@@ -394,7 +466,10 @@ class TestTaskCompletionVerification:
         attempted = sum(1 for s in extract_steps if s["attempts"] > 0)
         assert attempted >= 1, "Expected at least one extract step to be attempted"
 
+        # All steps must have reached "complete" state
         completed = sum(1 for s in steps if s["current_state"] == "complete")
+        assert completed == 8, f"Expected all 8 steps to complete, got {completed}"
+
         print(f"  Analytics task: {task['status']} ({completed}/8 steps complete)")
 
     @pytest.mark.asyncio
@@ -421,7 +496,7 @@ class TestTaskCompletionVerification:
 
         task = await wait_for_task_completion(task_uuid)
 
-        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["status"] == "complete", f"Expected task to complete, got: {task['status']}"
         assert task["total_steps"] == 5
 
         steps = task["steps"]
@@ -435,7 +510,10 @@ class TestTaskCompletionVerification:
         ):
             assert name in step_names, f"Expected step '{name}' to be present"
 
+        # All steps must have reached "complete" state
         completed = sum(1 for s in steps if s["current_state"] == "complete")
+        assert completed == 5, f"Expected all 5 steps to complete, got {completed}"
+
         print(f"  User registration task: {task['status']} ({completed}/5 steps complete)")
 
     @pytest.mark.asyncio
@@ -463,10 +541,13 @@ class TestTaskCompletionVerification:
 
         task = await wait_for_task_completion(task_uuid)
 
-        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["status"] == "complete", f"Expected task to complete, got: {task['status']}"
         assert task["total_steps"] == 5
 
+        # All steps must have reached "complete" state
         completed = sum(1 for s in task["steps"] if s["current_state"] == "complete")
+        assert completed == 5, f"Expected all 5 steps to complete, got {completed}"
+
         print(f"  Customer success refund task: {task['status']} ({completed}/5 steps complete)")
 
     @pytest.mark.asyncio
@@ -494,8 +575,11 @@ class TestTaskCompletionVerification:
 
         task = await wait_for_task_completion(task_uuid)
 
-        assert task["status"] in ("complete", "blocked_by_failures", "error")
+        assert task["status"] == "complete", f"Expected task to complete, got: {task['status']}"
         assert task["total_steps"] == 4
 
+        # All steps must have reached "complete" state
         completed = sum(1 for s in task["steps"] if s["current_state"] == "complete")
+        assert completed == 4, f"Expected all 4 steps to complete, got {completed}"
+
         print(f"  Payments refund task: {task['status']} ({completed}/4 steps complete)")

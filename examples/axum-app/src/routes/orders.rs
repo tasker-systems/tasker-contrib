@@ -16,6 +16,7 @@ use crate::models::{ApiResponse, CreateOrderRequest, Order, OrderResponse};
 pub fn router() -> Router {
     Router::new()
         .route("/orders", post(create_order))
+        .route("/orders/async", post(create_order_async))
         .route("/orders/{id}", get(get_order))
 }
 
@@ -118,6 +119,101 @@ async fn create_order(
         Json(ApiResponse {
             data: response,
             message: "Order created successfully".to_string(),
+        }),
+    ))
+}
+
+/// Create a new order and schedule task creation in the background.
+///
+/// Returns 202 Accepted immediately. A spawned tokio task creates the
+/// Tasker workflow and updates the order record asynchronously.
+async fn create_order_async(
+    Extension(pool): Extension<AppDb>,
+    Json(req): Json<CreateOrderRequest>,
+) -> Result<(StatusCode, Json<ApiResponse<OrderResponse>>), StatusCode> {
+    let total: f64 = req
+        .cart_items
+        .iter()
+        .map(|item| item.unit_price * item.quantity as f64)
+        .sum();
+    let items_json = serde_json::to_value(&req.cart_items).unwrap_or_default();
+
+    let order: Order = sqlx::query_as(
+        r#"
+        INSERT INTO orders (customer_email, items, total, status)
+        VALUES ($1, $2, $3, 'queued')
+        RETURNING *
+        "#,
+    )
+    .bind(&req.customer_email)
+    .bind(&items_json)
+    .bind(total)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| {
+        error!("Failed to insert order: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let order_id = order.id;
+    let customer_email = req.customer_email.clone();
+
+    // Build the task payload before moving into spawn
+    let task_payload = serde_json::json!({
+        "name": "ecommerce_order_processing",
+        "namespace": "ecommerce_rs",
+        "version": "1.0.0",
+        "initiator": "axum-example-app",
+        "source_system": "example-axum",
+        "reason": format!("E-commerce order #{} (async)", order_id),
+        "context": {
+            "cart_items": req.cart_items.iter().map(|item| {
+                serde_json::json!({
+                    "product_id": item.sku.parse::<i64>().unwrap_or(1),
+                    "quantity": item.quantity
+                })
+            }).collect::<Vec<_>>(),
+            "customer_email": customer_email,
+            "payment_method": "credit_card",
+            "payment_token": req.payment_token,
+            "payment_amount": total,
+            "shipping_address": req.shipping_address,
+            "app_order_id": order_id
+        }
+    });
+
+    let bg_pool = pool.clone();
+    tokio::spawn(async move {
+        match submit_task_to_orchestration(&task_payload).await {
+            Ok(uuid) => {
+                let _ = sqlx::query(
+                    "UPDATE orders SET task_uuid = $1, status = 'processing' WHERE id = $2",
+                )
+                .bind(uuid)
+                .bind(order_id)
+                .execute(&bg_pool)
+                .await;
+                info!("Background: created task {} for order {}", uuid, order_id);
+            }
+            Err(e) => {
+                error!("Background: failed to create task for order {}: {}", order_id, e);
+            }
+        }
+    });
+
+    let response = OrderResponse {
+        id: order.id,
+        customer_email: order.customer_email,
+        status: "queued".to_string(),
+        task_uuid: None,
+        created_at: order.created_at,
+    };
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(ApiResponse {
+            data: response,
+            message: "Order queued for processing".to_string(),
         }),
     ))
 }

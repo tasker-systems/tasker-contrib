@@ -41,6 +41,16 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
       expect(body['status']).to eq('processing')
     end
 
+    it 'submits an async order and returns 202 Accepted' do
+      post '/orders/create_async', params: order_payload, as: :json
+
+      expect(response).to have_http_status(:accepted)
+
+      body = JSON.parse(response.body)
+      expect(body['id']).to be_present
+      expect(body['status']).to eq('queued')
+    end
+
     it 'retrieves order status with task enrichment' do
       post '/orders', params: order_payload, as: :json
       order_id = JSON.parse(response.body)['id']
@@ -226,23 +236,15 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
   # --------------------------------------------------------------------------
   # 5. Task Completion Verification
   #
-  # These tests create tasks through the app endpoints and then poll the
-  # orchestration API to verify that all steps complete successfully.
-  # They require a running orchestration server and worker.
+  # These tests verify the full infrastructure loop: creating tasks through
+  # app endpoints, polling the orchestration API, and confirming all steps
+  # reach "complete" state. Requires docker-compose services running.
   # --------------------------------------------------------------------------
-  # --------------------------------------------------------------------------
-  # 5. Task Completion Verification
-  #
-  # These tests verify end-to-end task dispatch: creating tasks through app
-  # endpoints, polling the orchestration API, and confirming steps were
-  # dispatched and processed. Tasks reach a terminal status (complete or
-  # blocked_by_failures) which proves the full infrastructure loop works.
-  # --------------------------------------------------------------------------
-  describe 'Task Completion Verification', :completion, skip: ENV['RUN_COMPLETION_TESTS'].nil? ? 'Set RUN_COMPLETION_TESTS=1 to run' : false do
+  describe 'Task Completion Verification', :completion do
     include TaskPolling
 
     describe 'E-commerce order task dispatches and processes' do
-      it 'creates task, dispatches steps, and reaches terminal status' do
+      it 'creates task synchronously and all steps complete' do
         post '/orders', params: {
           order: {
             customer_email: 'completion-test@example.com',
@@ -262,20 +264,62 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        # Task reached a terminal status (infrastructure loop works)
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(5)
 
-        # At least the first step was attempted (handler dispatch works)
         steps = task['steps']
         expect(steps.length).to eq(5)
+        completed = steps.count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
+
         validate_step = steps.find { |s| s['name'] == 'validate_cart' }
         expect(validate_step).to be_present
         expect(validate_step['attempts']).to be >= 1
 
-        # Report completion state for visibility
-        completed = steps.count { |s| s['current_state'] == 'complete' }
-        puts "  E-commerce task: #{task['status']} (#{completed}/5 steps complete)"
+        puts "  E-commerce task (sync): #{task['status']} (#{completed}/5 steps complete)"
+      end
+
+      it 'creates task via async endpoint (background job) and all steps complete' do
+        post '/orders/create_async', params: {
+          order: {
+            customer_email: 'async-completion@example.com',
+            cart_items: [
+              { sku: 'SKU-ASYNC', name: 'Async Widget', quantity: 1, unit_price: 24.99 }
+            ],
+            payment_token: 'tok_test_async',
+            shipping_address: {
+              street: '2 Async Ave', city: 'Testville', state: 'OR', zip: '97201', country: 'US'
+            }
+          }
+        }, as: :json
+
+        expect(response).to have_http_status(:accepted)
+        body = JSON.parse(response.body)
+        order_id = body['id']
+        expect(order_id).to be_present
+        expect(body['status']).to eq('queued')
+
+        # Poll the app for the task_uuid (background job creates the task)
+        task_uuid = nil
+        15.times do
+          get "/orders/#{order_id}", as: :json
+          order_body = JSON.parse(response.body)
+          task_uuid = order_body['task_uuid']
+          break if task_uuid.present?
+
+          sleep 1
+        end
+        expect(task_uuid).to be_present, 'Background job did not create task within 15s'
+
+        task = wait_for_task_completion(task_uuid)
+
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
+        expect(task['total_steps']).to eq(5)
+
+        completed = task['steps'].count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
+
+        puts "  E-commerce task (async): #{task['status']} (#{completed}/5 steps complete)"
       end
     end
 
@@ -298,7 +342,7 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(8)
 
         steps = task['steps']
@@ -314,7 +358,10 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
         attempted = extract_steps.count { |s| s['attempts'] > 0 }
         expect(attempted).to be >= 1, 'Expected at least one extract step to be attempted'
 
+        # All steps must have reached "complete" state
         completed = steps.count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(8), "Expected all 8 steps to complete, got #{completed}"
+
         puts "  Analytics task: #{task['status']} (#{completed}/8 steps complete)"
       end
     end
@@ -338,7 +385,7 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(5)
 
         steps = task['steps']
@@ -349,7 +396,10 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
           expect(step_names).to include(name), "Expected step '#{name}' to be present"
         end
 
+        # All steps must have reached "complete" state
         completed = steps.count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
+
         puts "  User registration task: #{task['status']} (#{completed}/5 steps complete)"
       end
     end
@@ -375,10 +425,13 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(5)
 
+        # All steps must have reached "complete" state
         completed = task['steps'].count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
+
         puts "  Customer success refund task: #{task['status']} (#{completed}/5 steps complete)"
       end
     end
@@ -404,10 +457,13 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(4)
 
+        # All steps must have reached "complete" state
         completed = task['steps'].count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(4), "Expected all 4 steps to complete, got #{completed}"
+
         puts "  Payments refund task: #{task['status']} (#{completed}/4 steps complete)"
       end
     end

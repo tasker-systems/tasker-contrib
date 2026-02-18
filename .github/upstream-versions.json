@@ -2,18 +2,18 @@
   "_comment": "Tracks pinned upstream tasker-core versions for tasker-contrib packages",
   "_updated": "2026-02-12",
   "rust": {
-    "tasker-worker": "0.1.1",
-    "tasker-orchestration": "0.1.1",
-    "tasker-ctl": "0.1.1",
-    "tasker-pgmq": "0.1.1"
+    "tasker-worker": "0.1.4",
+    "tasker-orchestration": "0.1.4",
+    "tasker-ctl": "0.1.4",
+    "tasker-pgmq": "0.1.4"
   },
   "ruby": {
-    "tasker-core-rb": "0.1.1"
+    "tasker-rb": "0.1.5"
   },
   "python": {
-    "tasker_core": "0.1.1"
+    "tasker-py": "0.1.4"
   },
   "typescript": {
-    "@tasker-systems/tasker": "0.1.1"
+    "@tasker-systems/tasker": "0.1.5"
   }
 }

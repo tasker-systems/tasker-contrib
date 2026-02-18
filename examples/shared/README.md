@@ -99,7 +99,7 @@ Each app uses:
 
 | App | Package | Registry |
 |-----|---------|----------|
-| Rails | `tasker-rb ~> 0.1.1` | RubyGems |
-| FastAPI | `tasker-py >= 0.1.1` | PyPI |
-| Bun | `@tasker-systems/tasker ^0.1.1` | npm |
-| Axum | `tasker-worker 0.1.1` | crates.io |
+| Rails | `tasker-rb ~> 0.1.4` | RubyGems |
+| FastAPI | `tasker-py >= 0.1.3` | PyPI |
+| Bun | `@tasker-systems/tasker ^0.1.4` | npm |
+| Axum | `tasker-worker 0.1.3` | crates.io |

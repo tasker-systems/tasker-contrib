@@ -14,16 +14,16 @@ name = "example-axum-app"
 path = "src/main.rs"
 
 [dependencies]
-axum = "0.7"
+axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "bigdecimal"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-tasker-worker = "0.1.2"
-tasker-client = "0.1.2"
-tasker-shared = "0.1.2"
+tasker-worker = "0.1.4"
+tasker-client = "0.1.4"
+tasker-shared = "0.1.4"
 reqwest = { version = "0.12", features = ["json"] }
 dotenvy = "0.15"
 tracing = "0.1"

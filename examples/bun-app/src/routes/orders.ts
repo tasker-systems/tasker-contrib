@@ -85,6 +85,79 @@ ordersRoute.post('/', async (c) => {
 });
 
 /**
+ * POST /orders/async
+ *
+ * Creates a new order and returns 202 immediately. Task creation
+ * happens asynchronously in the background via fire-and-forget.
+ */
+ordersRoute.post('/async', async (c) => {
+  const body = await c.req.json();
+  const { customer_email, items, payment_info } = body;
+
+  if (!customer_email || !items || !Array.isArray(items) || items.length === 0) {
+    return c.json({ error: 'customer_email and non-empty items array are required' }, 400);
+  }
+
+  const total = items.reduce(
+    (sum: number, item: { price: number; quantity: number }) =>
+      sum + item.price * item.quantity,
+    0,
+  );
+
+  const [order] = await db
+    .insert(orders)
+    .values({
+      customerEmail: customer_email,
+      items,
+      total: total.toFixed(2),
+      status: 'queued',
+    })
+    .returning();
+
+  // Fire-and-forget: create the Tasker task in the background
+  (async () => {
+    try {
+      const client = await getTaskerClient();
+      const task = client.createTask({
+        name: 'ecommerce_order_processing',
+        namespace: 'ecommerce_ts',
+        context: {
+          order_id: order.id,
+          customer_email,
+          cart_items: items,
+          payment_info: payment_info || {},
+        },
+        initiator: 'bun-app',
+        sourceSystem: 'example-bun-app',
+        reason: `Process order #${order.id} (async)`,
+        tags: ['ecommerce', 'order'],
+        idempotencyKey: `order-async-${order.id}`,
+      });
+
+      await db
+        .update(orders)
+        .set({ taskUuid: task.task_uuid, status: 'processing', updatedAt: new Date() })
+        .where(eq(orders.id, order.id));
+    } catch (error) {
+      console.error('Background: failed to create Tasker task for order:', error);
+    }
+  })();
+
+  return c.json(
+    {
+      id: order.id,
+      customer_email: order.customerEmail,
+      items: order.items,
+      total: order.total,
+      status: 'queued',
+      task_uuid: null,
+      created_at: order.createdAt,
+    },
+    202,
+  );
+});
+
+/**
  * GET /orders/:id
  *
  * Loads the order record and, if a task_uuid exists, fetches the

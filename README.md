@@ -1,302 +1,128 @@
 # Tasker Contrib
 
-**Framework integrations, starter templates, and operational tooling for [Tasker Core](https://github.com/tasker-systems/tasker-core)**
+**CLI plugin templates, example applications, and operational tooling for [Tasker Core](https://github.com/tasker-systems/tasker-core)**
 
 ---
 
-## Vision
+## What's Here
 
-Tasker Core provides powerful, framework-agnostic workflow orchestration built on Rust, PostgreSQL, and PGMQ. It solves the hard distributed systems problems: DAG execution, state machines, reliable queueing, cross-language FFI workers.
+Tasker Contrib provides two things:
 
-What Tasker Core intentionally does *not* provide:
-- Framework-specific generators (`rails generate`, FastAPI scaffolding)
-- Framework lifecycle integration (Rails initializers, FastAPI startup hooks)
-- Framework idiom translations (ActiveSupport::Notifications, Pydantic models)
-- Deployment templates (Helm charts, Terraform modules)
-- Starter application templates
-
-This is by design—Tasker Core must remain framework-agnostic to support its polyglot worker ecosystem.
-
-**Tasker Contrib bridges this gap.**
-
-| Layer | Responsibility |
-|-------|----------------|
-| **Tasker Core** | Solves the hard distributed systems problems |
-| **Tasker Contrib** | Makes those solutions accessible through familiar framework idioms |
-
----
-
-## Repository Structure
+1. **CLI plugin templates** — code generators for `tasker-ctl` that scaffold step handlers, task definitions, and infrastructure configs across five languages/targets
+2. **Example applications** — four fully working apps (one per SDK language) that demonstrate real-world Tasker workflow patterns against published packages
 
 ```
 tasker-contrib/
-├── rails/                      # Rails framework integration
-│   ├── tasker-contrib-rails/   # Gem: Railtie, generators, event bridge
-│   ├── tasker-cli-plugin/      # CLI plugin: Templates for tasker-cli
-│   └── tasker-rails-template/  # Template: Production-ready Rails app
+├── rails/tasker-cli-plugin/        # Ruby/Rails templates
+├── python/tasker-cli-plugin/       # Python templates
+├── typescript/tasker-cli-plugin/   # TypeScript templates
+├── rust/tasker-cli-plugin/         # Rust templates
+├── ops/tasker-cli-plugin/          # Infrastructure templates (Docker, config)
 │
-├── python/                     # Python framework integrations
-│   ├── tasker-contrib-fastapi/ # Package: FastAPI integration
-│   ├── tasker-contrib-django/  # Package: Django integration
-│   ├── tasker-cli-plugin/      # CLI plugin: Python templates
-│   └── tasker-fastapi-template/# Template: Production-ready FastAPI app
+├── examples/                       # Example applications
+│   ├── axum-app/                   # Rust (Axum) — tasker-worker + tasker-client
+│   ├── bun-app/                    # TypeScript (Hono/Bun) — @tasker-systems/tasker
+│   ├── fastapi-app/                # Python (FastAPI) — tasker-py
+│   ├── rails-app/                  # Ruby (Rails) — tasker-core-rb
+│   ├── orchestration/              # Shared orchestration config
+│   ├── docker-compose.yml          # Shared infrastructure stack
+│   └── init-db.sql                 # Per-app database creation
 │
-├── typescript/                 # TypeScript integrations (Bun-focused)
-│   ├── tasker-contrib-bun/     # Package: Bun.serve integration
-│   ├── tasker-cli-plugin/      # CLI plugin: TypeScript templates
-│   └── tasker-bun-template/    # Template: Production-ready Bun app
-│
-├── rust/                       # Rust framework integrations
-│   ├── tasker-contrib-axum/    # Crate: Axum integration
-│   ├── tasker-cli-plugin/      # CLI plugin: Rust templates
-│   └── tasker-axum-template/   # Template: Production-ready Axum app
-│
-├── ops/                        # Operational tooling
-│   ├── helm/                   # Kubernetes Helm charts
-│   │   ├── tasker-orchestration/
-│   │   ├── tasker-worker/
-│   │   └── tasker-full-stack/
-│   ├── terraform/              # Cloud infrastructure modules
-│   │   ├── aws/
-│   │   ├── gcp/
-│   │   └── azure/
-│   ├── docker/                 # Docker Compose configurations
-│   │   ├── development/
-│   │   ├── production/
-│   │   └── observability/
-│   └── monitoring/             # Observability configurations
-│       ├── grafana-dashboards/
-│       ├── prometheus-rules/
-│       └── datadog-monitors/
-│
-├── examples/                   # Standalone example applications
-│   ├── e-commerce-workflow/
-│   ├── etl-pipeline/
-│   └── approval-system/
-│
-└── docs/
-    ├── ticket-specs/           # Implementation specifications
-    ├── architecture/           # Cross-cutting decisions
-    └── guides/                 # User-facing documentation
+├── scripts/                        # CI and validation scripts
+├── config/                         # Shared Tasker configuration
+└── docs/                           # Architecture and ticket specs
 ```
 
 ---
 
-## Current Status
+## CLI Plugin Templates
 
-| Package | Status | Description |
-|---------|--------|-------------|
-| `tasker-contrib-rails` | 🚧 In Progress | Rails Railtie, generators, AS::Notifications bridge |
-| `tasker-contrib-fastapi` | 📋 Planned | FastAPI startup hooks, Pydantic integration |
-| `tasker-contrib-bun` | 📋 Planned | Bun.serve integration, TypeScript handlers |
-| `tasker-contrib-axum` | 📋 Planned | Axum layers, state extractors |
-| Helm charts | 📋 Planned | Kubernetes deployment charts |
-| Terraform modules | 📋 Planned | AWS, GCP, Azure infrastructure |
+Each plugin provides templates for `tasker-ctl template generate`:
 
----
-
-## Architectural Principles
-
-### 1. Dependency Direction: Contrib → Core
-
-Framework bridges depend on Tasker Core packages, never vice versa. This ensures Core remains framework-agnostic.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    APPLICATION LAYER                         │
-│  (Your Rails app, FastAPI service, Bun server, etc.)        │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    TASKER CONTRIB LAYER                      │
-│  tasker-contrib-rails, tasker-contrib-fastapi, etc.         │
-│  - Framework-specific generators                             │
-│  - Lifecycle integration (initializers, startup hooks)       │
-│  - Event bridges (AS::Notifications, signals)               │
-│  - Config DSL wrappers                                       │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    TASKER CORE LAYER                         │
-│  tasker-core-rb, tasker-core-py, tasker-core-ts             │
-│  - Handler base classes                                      │
-│  - Type definitions                                          │
-│  - FFI bridge                                               │
-│  - Domain events                                            │
-│  - Bootstrap/lifecycle                                       │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    RUST FOUNDATION                           │
-│  tasker-orchestration, tasker-worker                        │
-│  - DAG execution engine                                     │
-│  - State machines                                           │
-│  - PGMQ integration                                         │
-│  - Actor system                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 2. Thin Integration, Thick Core
-
-Contrib packages should be thin wrappers that translate framework idioms to Tasker Core concepts. Business logic and workflow execution remain in Core.
-
-### 3. CLI as Shared Foundation with Plugin Architecture
-
-The `tasker-cli` (in tasker-core) is a stable binary that loads templates from plugins at runtime. This means:
-
-- **CLI binary doesn't need rebuilding** when templates change
-- **Plugins live in tasker-contrib** alongside framework integrations
-- **Users can customize** via `.config/tasker-cli.toml` (like nextest)
-- **Local development** can point to local plugin paths
+| Plugin | Language | Templates |
+|--------|----------|-----------|
+| `tasker-contrib-rails` | Ruby | step_handler, step_handler_api, step_handler_decision, step_handler_batchable, task_template |
+| `tasker-contrib-python` | Python | step_handler, step_handler_api, step_handler_decision, step_handler_batchable, task_template |
+| `tasker-contrib-typescript` | TypeScript | step_handler, step_handler_api, step_handler_decision, step_handler_batchable, task_template |
+| `tasker-contrib-rust` | Rust | step_handler, task_template |
+| `tasker-contrib-ops` | Ops | docker_compose, config |
 
 ```bash
-# CLI discovers templates from plugins
-tasker-cli template list
-# TEMPLATE              PLUGIN                  LANGUAGES
-# step-handler          tasker-contrib-rails    ruby
-# step-handler          tasker-contrib-python   python
-# step-handler          tasker-contrib-typescript typescript
+# List available templates
+tasker-ctl template list
 
-# Generate with framework hint
-tasker-cli template generate step-handler \
-  --name ProcessPayment \
-  --framework rails \
-  --output ./app/handlers/
-
-# Framework generators wrap the CLI
-rails generate tasker:step_handler ProcessPayment
-# Internally calls: tasker-cli template generate ...
+# Generate a step handler
+tasker-ctl template generate step_handler --plugin tasker-contrib-rails --param name=ProcessPayment
 ```
-
-**Plugin Configuration** (`.config/tasker-cli.toml`):
-```toml
-[profiles.development]
-plugin-paths = [
-    "~/projects/tasker-systems/tasker-contrib",
-]
-
-[profiles.ci]
-use-published-plugins = true
-```
-
-See [CLI Plugin Architecture](docs/ticket-specs/TAS-126/cli-plugin-architecture.md) for details.
-
-### 4. Configuration Passthrough
-
-Contrib packages translate framework configuration idioms to Tasker's TOML configuration, but don't invent new configuration semantics.
-
-```ruby
-# Rails initializer generates/modifies TOML
-Tasker.configure do |config|
-  config.database.pool_size = 20  # → worker.toml: [database.pool] max_connections = 20
-end
-```
-
-### 5. Opt-In Complexity
-
-Start with the simplest possible integration. Advanced features (ActiveJob adapters, complex event bridges) are opt-in and documented separately.
 
 ---
 
-## Responsibility Boundaries
+## Example Applications
 
-### What Belongs in Tasker Core
+Four example apps demonstrate the same five workflow patterns using each SDK's idiomatic style:
 
-| Component | Rationale |
-|-----------|-----------|
-| Handler base classes | FFI-coupled, framework-agnostic |
-| Type definitions | Cross-language consistency |
-| FFI bridge code | Language-specific but not framework-specific |
-| Domain event system | Part of orchestration contract |
-| Bootstrap/lifecycle | Core worker concern |
-| `tasker-cli` | Shared tooling foundation |
-| TOML configuration | Language-agnostic format |
+| App | Framework | SDK Package | Database |
+|-----|-----------|-------------|----------|
+| `axum-app` | Axum (Rust) | tasker-worker 0.1.4 | `example_axum` |
+| `bun-app` | Hono (Bun) | @tasker-systems/tasker 0.1.4 | `example_bun` |
+| `fastapi-app` | FastAPI (Python) | tasker-py 0.1.4 | `example_fastapi` |
+| `rails-app` | Rails (Ruby) | tasker-core-rb 0.1.4 | `example_rails` |
 
-### What Belongs in Tasker Contrib
+### Workflow Patterns
 
-| Component | Rationale |
-|-----------|-----------|
-| Framework generators | Rails, FastAPI, etc. specific |
-| Lifecycle hooks | Railties, FastAPI lifespan, etc. |
-| Config DSL wrappers | Framework idiom translation |
-| Event bridges | AS::Notifications, signals, etc. |
-| Testing helpers | RSpec matchers, pytest fixtures |
-| Application templates | Opinionated starter apps |
-| Deployment tooling | Helm, Terraform, Docker Compose |
+All four apps implement these workflows:
 
----
+1. **E-commerce Order Processing** — multi-step order fulfillment with inventory, payment, shipping
+2. **Data Pipeline Analytics** — ETL-style data ingestion, transformation, aggregation
+3. **Microservices Orchestration** — cross-service coordination with user provisioning
+4. **Customer Success Refund** — refund processing with verification and notification
+5. **Payments Compliance** — payment validation with compliance checks
 
-## Getting Started
-
-### Rails
-
-```ruby
-# Gemfile
-gem 'tasker-contrib-rails'
-gem 'tasker-core-rb'
-```
+### Running Locally
 
 ```bash
-bundle install
-rails generate tasker:install
-rails generate tasker:step_handler ProcessPayment --type api
-```
+# Start shared infrastructure (PostgreSQL + PGMQ, orchestration, RabbitMQ, Dragonfly)
+cd examples
+docker compose up -d
 
-### FastAPI
+# Wait for orchestration to be healthy
+curl -sf http://localhost:8080/health
 
-```python
-# pyproject.toml
-dependencies = [
-    "tasker-contrib-fastapi",
-    "tasker-core-py",
-]
-```
-
-```bash
-pip install -e .
-tasker init --framework fastapi
-tasker generate handler process_payment --type api
-```
-
-### Bun
-
-```bash
-bun add tasker-contrib-bun tasker-core-ts
-```
-
-```typescript
-import { TaskerServer } from 'tasker-contrib-bun';
-
-const server = new TaskerServer({
-  port: 3000,
-  handlers: './handlers',
-});
-
-server.start();
+# Run any app's tests (see DEVELOPMENT.md for per-app setup)
+cd fastapi-app && uv sync && uv run pytest tests/ -v
 ```
 
 ---
 
-## Development
+## Quick Start
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for:
-- Local development setup
-- Cross-repository dependency management
-- Testing against local tasker-core builds
-- Contributing guidelines
+```bash
+# Install cargo-make
+cargo install cargo-make
+
+# Validate all plugin manifests
+cargo make validate
+
+# Generate and syntax-check all templates
+cargo make test-templates
+
+# Run example app integration tests (requires docker-compose services)
+cargo make test-examples
+```
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for full setup instructions.
 
 ---
 
-## Documentation
+## CI
 
-| Document | Description |
-|----------|-------------|
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Local development and cross-repo setup |
-| [docs/ticket-specs/](docs/ticket-specs/) | Implementation specifications |
-| [TAS-126: Foundations](docs/ticket-specs/TAS-126/) | Foundations and CLI plugin architecture |
+| Workflow | Purpose |
+|----------|---------|
+| **CI** (`ci.yml`) | Validate plugin manifests + generate and syntax-check templates |
+| **Test Examples** (`test-examples.yml`) | Integration tests for all four example apps |
+| **Upstream Check** (`upstream-check.yml`) | Monitor for new tasker-core package releases |
+
+See [.github/CI-ARCHITECTURE.md](.github/CI-ARCHITECTURE.md) for details.
 
 ---
 
@@ -304,21 +130,19 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for:
 
 | Project | Description |
 |---------|-------------|
-| [tasker-core](https://github.com/tasker-systems/tasker-core) | Rust-based workflow orchestration engine |
-| [tasker-engine](https://github.com/tasker-systems/tasker-engine) | Legacy Rails engine (reference only, never released) |
+| [tasker-core](https://github.com/tasker-systems/tasker-core) | Rust workflow orchestration engine |
+| [tasker-book](https://github.com/tasker-systems/tasker-book) | Documentation hub (GitHub Pages) |
 
 ---
 
 ## Contributing
 
-Tasker Contrib is designed to welcome community contributions more readily than Tasker Core. Framework-specific expertise is especially valuable.
+Framework-specific expertise is especially valuable. Contribution areas:
 
-**Contribution areas:**
-- Framework integrations for languages/frameworks you know well
-- Helm charts and Terraform modules for your cloud platform
-- Grafana dashboards and monitoring configurations
-- Example applications demonstrating real-world patterns
-- Documentation improvements and tutorials
+- Template improvements for languages you know well
+- New example app patterns or workflow demonstrations
+- Infrastructure templates (Helm, Terraform, monitoring)
+- Documentation and tutorials
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions.
 
@@ -326,4 +150,4 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details.

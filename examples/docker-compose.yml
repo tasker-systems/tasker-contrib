@@ -13,7 +13,7 @@ name: tasker-examples
 
 services:
   tasker-postgres:
-    image: ghcr.io/tasker-systems/tasker-postgres:latest
+    image: ghcr.io/tasker-systems/tasker-postgres:pg18-latest
     # TODO: Remove platform override once GHCR images are built multi-arch (linux/amd64 + linux/arm64)
     platform: linux/amd64
     container_name: tasker-postgres
@@ -23,9 +23,8 @@ services:
       POSTGRES_USER: tasker
       POSTGRES_PASSWORD: tasker
       POSTGRES_DB: tasker
-      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init-app-dbs.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tasker"]
@@ -36,7 +35,7 @@ services:
       - tasker-network
 
   tasker-orchestration:
-    image: ghcr.io/tasker-systems/tasker-orchestration:latest
+    image: ghcr.io/tasker-systems/tasker-orchestration:0.1.4
     # TODO: Remove platform override once GHCR images are built multi-arch (linux/amd64 + linux/arm64)
     platform: linux/amd64
     container_name: tasker-orchestration
@@ -53,6 +52,8 @@ services:
       DATABASE_URL: postgresql://tasker:tasker@tasker-postgres:5432/tasker
       DATABASE_HOST: tasker-postgres
       REDIS_URL: redis://dragonfly:6379
+      RABBITMQ_URL: amqp://tasker:tasker@rabbitmq:5672/%2F
+      TASKER_MESSAGING_BACKEND: rabbitmq
       TASKER_ENV: development
       RUST_LOG: info
       LOG_LEVEL: info

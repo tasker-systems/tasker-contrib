@@ -1,0 +1,5 @@
+[profile.default]
+# Integration tests bootstrap a Tasker worker per process.
+# Multiple workers competing for the same RabbitMQ queues causes
+# orphaned steps when fast test processes exit early.
+test-threads = 1

@@ -2,14 +2,14 @@
 
 ## Overview
 
-Tasker Contrib's CI validates that CLI plugin templates generate correct, syntactically valid code. No databases or services are required — `tasker-ctl` is a pure CLI tool for plugin discovery and template generation.
+Tasker Contrib's CI has two concerns: validating CLI plugin templates and testing the example applications against published Tasker infrastructure.
 
 | Aspect | Description |
 |--------|-------------|
-| **What we test** | Plugin manifests + template generation + output syntax |
-| **How we build** | Shallow-clone tasker-core, build tasker-ctl with sccache |
-| **No services needed** | No PostgreSQL, no RabbitMQ, no Docker services |
-| **Path-based triggers** | Only runs when relevant templates change |
+| **Template validation** | Plugin manifests + template generation + output syntax checks |
+| **Example app testing** | Integration tests against docker-compose with published GHCR images |
+| **How we get tasker-ctl** | `cargo install tasker-ctl` from crates.io |
+| **Path-based triggers** | Workflows only run when relevant files change |
 
 ## Workflows
 
@@ -23,7 +23,7 @@ Tasker Contrib's CI validates that CLI plugin templates generate correct, syntac
 
 | Job | Trigger Path | What It Does |
 |-----|-------------|--------------|
-| `build-tasker-ctl` | Any `*/tasker-cli-plugin/**` change | Builds tasker-ctl from tasker-core main |
+| `build-tasker-ctl` | Any `*/tasker-cli-plugin/**` change | Installs tasker-ctl from crates.io |
 | `validate-plugins` | (depends on build) | Runs `plugin validate` on all 5 plugins |
 | `test-ruby-templates` | `rails/tasker-cli-plugin/**` | Generates Rails templates, `ruby -c` syntax check |
 | `test-python-templates` | `python/tasker-cli-plugin/**` | Generates Python templates, `py_compile` check |
@@ -32,27 +32,37 @@ Tasker Contrib's CI validates that CLI plugin templates generate correct, syntac
 | `test-ops-templates` | `ops/tasker-cli-plugin/**` | Generates ops templates, YAML/TOML validation |
 | `docs` | `docs/**`, `*.md` | Markdown link checking |
 
-### 2. Bleeding Edge (bleeding-edge.yml)
+### 2. Test Examples (test-examples.yml)
 
-**Purpose**: Test templates against latest tasker-core main to catch compatibility issues early.
+**Purpose**: Run integration tests for all four example apps against real Tasker infrastructure.
 
-**Triggers**:
-- Repository dispatch from tasker-core (`tasker-core-updated`)
-- Manual dispatch (with optional `tasker_core_ref`)
-- Nightly schedule (4 AM UTC)
+**Triggers**: Push/PR to main when `examples/**` changes
 
-**Jobs**:
-1. **build-tasker-ctl**: Build from specified tasker-core ref
-2. **validate-and-test**: Install all language toolchains, run full validation + generation across all plugins
-3. **report**: Create/update GitHub issue on failure (label: `bleeding-edge-failure`)
+**Infrastructure**: `docker compose up -d` from `examples/` starts:
+- `tasker-postgres` (PostgreSQL 18 + PGMQ + app databases)
+- `tasker-orchestration` (published GHCR image)
+- `dragonfly` (Redis-compatible cache)
+- `rabbitmq` (messaging backend)
+
+**Per-app testing** (sequential, shared infrastructure):
+
+| App | Setup | Migrate | Test Command |
+|-----|-------|---------|--------------|
+| FastAPI | `uv sync` | `uv run alembic upgrade head` | `uv run pytest tests/ -v` |
+| Bun | `bun install` | `bun run db:migrate` | `bun test tests/` |
+| Rails | `bundle install` (cached) | `bundle exec rake db:migrate` | `bundle exec rspec spec/integration/ --format documentation` |
+| Axum | sccache + nextest | automatic (sqlx) | `cargo nextest run` |
+
+All test failures are hard failures — no `continue-on-error`.
 
 ### 3. Upstream Check (upstream-check.yml)
 
-**Purpose**: Monitor for new tasker-core releases.
+**Purpose**: Monitor for new tasker-core releases across all package registries.
 
 **Triggers**: Daily at 6 AM UTC, manual dispatch
 
 **Registry checks**:
+
 | Registry | Package |
 |----------|---------|
 | crates.io | `tasker-worker`, `tasker-orchestration`, `tasker-ctl`, `tasker-pgmq` |
@@ -62,22 +72,22 @@ Tasker Contrib's CI validates that CLI plugin templates generate correct, syntac
 
 **Actions**: Creates GitHub issue when updates available (label: `upstream-update`)
 
-## Composite Actions
-
-| Action | Purpose |
-|--------|---------|
-| `.github/actions/build-tasker-core` | Clone tasker-core, install Rust/protobuf, build tasker-ctl with sccache |
-| `.github/actions/setup-sccache` | Configure mozilla sccache with GHA backend |
-| `.github/actions/setup-rust-cache` | Cache cargo registry + build artifacts |
-
 ## Build Strategy
 
-We build `tasker-ctl` from source rather than distributing prebuilt binaries. This provides:
+We install `tasker-ctl` from crates.io rather than building from source:
 
-1. **Always up-to-date**: No binary distribution pipeline needed
-2. **sccache makes it fast**: GHA-backed cache means rebuilds after minor changes are quick
-3. **Cross-platform**: Build on the CI runner's own architecture
-4. **Artifact sharing**: Build once, download in all per-language test jobs
+1. **No cross-repo clone**: No need to fetch tasker-core source
+2. **No protobuf compiler**: Binary is pre-compiled
+3. **Cargo caching**: Registry + git caches make installs fast after first run
+4. **Artifact sharing**: Install once, download in all per-language test jobs
+
+## Validation Tiers
+
+| Tier | What | Status |
+|------|------|--------|
+| **Tier 1** | Generate templates + syntax check output | Implemented (ci.yml) |
+| **Tier 2** | Run generated tests against FFI packages | Future |
+| **Tier 3** | Example apps with full services | Implemented (test-examples.yml) |
 
 ## Version Tracking
 
@@ -85,20 +95,12 @@ We build `tasker-ctl` from source rather than distributing prebuilt binaries. Th
 
 ```json
 {
-  "rust": { "tasker-worker": "0.1.1", ... },
-  "ruby": { "tasker-core-rb": "0.1.1" },
-  "python": { "tasker_core": "0.1.1" },
-  "typescript": { "@tasker-systems/tasker": "0.1.1" }
+  "rust": { "tasker-worker": "0.1.4", ... },
+  "ruby": { "tasker-core-rb": "0.1.4" },
+  "python": { "tasker_core": "0.1.4" },
+  "typescript": { "@tasker-systems/tasker": "0.1.4" }
 }
 ```
-
-## Validation Tiers
-
-| Tier | What | Status |
-|------|------|--------|
-| **Tier 1** | Generate templates + syntax check output | Implemented |
-| **Tier 2** | Run generated tests against FFI packages | Future |
-| **Tier 3** | Example apps with full services | Future |
 
 ## Local Development
 
@@ -117,30 +119,17 @@ cargo make test-templates
 
 # Or run both
 cargo make test-all
-```
 
-## Cross-Repo Triggering
-
-When tasker-core main merges successfully:
-
-```yaml
-# In tasker-core CI
-- name: Trigger tasker-contrib bleeding edge
-  if: github.ref == 'refs/heads/main'
-  uses: peter-evans/repository-dispatch@v3
-  with:
-    token: ${{ secrets.CONTRIB_TRIGGER_TOKEN }}
-    repository: tasker-systems/tasker-contrib
-    event-type: tasker-core-updated
-    client-payload: '{"ref": "${{ github.sha }}"}'
+# Run example app tests (requires docker-compose infrastructure)
+cargo make test-examples
 ```
 
 ## Performance Targets
 
 | Workflow | Cold Cache | Warm Cache |
 |----------|------------|------------|
-| CI (path-based) | 15 min | 8 min |
-| Bleeding Edge | 18 min | 10 min |
+| CI (path-based) | 10 min | 5 min |
+| Test Examples | 15 min | 10 min |
 | Upstream Check | 2 min | 2 min |
 
 ## Related Documentation

@@ -7,5 +7,6 @@ Rails.application.configure do
   config.action_dispatch.show_exceptions = :rescuable
   config.action_controller.allow_forgery_protection = false
   config.active_support.deprecation = :stderr
+  config.active_job.queue_adapter = :async
   config.action_controller.raise_on_missing_callback_actions = true
 end

@@ -1,7 +1,8 @@
 """E-commerce order routes demonstrating sequential workflow orchestration.
 
-POST /orders/ - Create an order and kick off the 5-step processing workflow
-GET  /orders/{id} - Get order details with current task status
+POST /orders/      - Create an order and kick off the 5-step processing workflow
+POST /orders/async - Create an order with background task creation (returns 202)
+GET  /orders/{id}  - Get order details with current task status
 """
 
 from __future__ import annotations
@@ -9,11 +10,11 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import async_session_factory, get_db
 from app.models import Order
 from app.schemas import CreateOrderRequest, OrderResponse
 
@@ -68,6 +69,76 @@ async def create_order(
 
     await db.commit()
     await db.refresh(order)
+
+    return OrderResponse(
+        id=order.id,
+        customer_email=order.customer_email,
+        items=order.items,
+        total=float(order.total) if order.total else None,
+        status=order.status,
+        task_uuid=order.task_uuid,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+    )
+
+
+async def _create_task_for_order(order_id: int, request: CreateOrderRequest) -> None:
+    """Background task: create the Tasker workflow for an order."""
+    from tasker_core.client import TaskerClient
+
+    async with async_session_factory() as db:
+        result = await db.execute(select(Order).where(Order.id == order_id))
+        order = result.scalar_one_or_none()
+        if order is None:
+            logger.error("Background task: order %d not found", order_id)
+            return
+
+        client = TaskerClient(initiator="fastapi-example", source_system="fastapi-example")
+        try:
+            task_response = client.create_task(
+                "ecommerce_order_processing",
+                namespace="ecommerce_py",
+                context={
+                    "order_id": order.id,
+                    "customer_email": request.customer_email,
+                    "items": [item.model_dump() for item in request.items],
+                    "payment_token": request.payment_token,
+                    "shipping_address": request.shipping_address,
+                },
+                reason="E-commerce order processing (async)",
+            )
+            order.task_uuid = uuid.UUID(task_response.task_uuid)
+            order.status = "processing"
+            logger.info("Background: created task %s for order %d", order.task_uuid, order.id)
+        except Exception:
+            logger.exception("Background: failed to create task for order %d", order.id)
+            order.status = "task_creation_failed"
+
+        await db.commit()
+
+
+@router.post("/async", response_model=OrderResponse, status_code=202)
+async def create_order_async(
+    request: CreateOrderRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> OrderResponse:
+    """Create an order and schedule task creation as a background job.
+
+    Returns 202 Accepted immediately. The Tasker workflow task is created
+    asynchronously — the order will transition from 'queued' to 'processing'
+    once the background task completes.
+    """
+    order = Order(
+        customer_email=request.customer_email,
+        items=[item.model_dump() for item in request.items],
+        status="queued",
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    background_tasks.add_task(_create_task_for_order, order.id, request)
 
     return OrderResponse(
         id=order.id,

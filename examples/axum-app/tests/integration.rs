@@ -12,11 +12,8 @@
 //! # 1. Start shared infrastructure
 //! cd examples/ && docker compose up -d
 //!
-//! # 2. Run tests (no separate server needed)
-//! cd examples/axum-app && cargo test
-//!
-//! # 3. Run completion tests (verifies end-to-end handler execution)
-//! cd examples/axum-app && RUN_COMPLETION_TESTS=1 cargo test -- --include-ignored
+//! # 2. Run all tests (including completion verification)
+//! cd examples/axum-app && cargo nextest run
 //! ```
 
 #[cfg(test)]
@@ -31,9 +28,8 @@ mod tests {
     /// Uses a dedicated tokio runtime on a background thread so it doesn't
     /// conflict with #[tokio::test]'s per-test runtime.
     ///
-    /// When `RUN_COMPLETION_TESTS=1`, the Tasker worker is also bootstrapped
-    /// so that templates are registered with orchestration and step handlers
-    /// can execute.
+    /// The Tasker worker is bootstrapped so that templates are registered
+    /// with orchestration and step handlers can execute.
     fn base_url() -> &'static str {
         TEST_SERVER_URL.get_or_init(|| {
             dotenvy::dotenv().ok();
@@ -61,10 +57,9 @@ mod tests {
                         .await
                         .expect("Failed to run migrations");
 
-                    // Bootstrap the Tasker worker when completion tests are enabled.
-                    // This registers templates with orchestration and starts the
-                    // handler dispatch pipeline so steps can execute.
-                    if std::env::var("RUN_COMPLETION_TESTS").is_ok() {
+                    // Bootstrap the Tasker worker: register templates with
+                    // orchestration and start the handler dispatch pipeline.
+                    {
                         use tasker_worker::worker::handlers::{
                             HandlerDispatchConfig, HandlerDispatchService, NoOpCallback,
                         };
@@ -92,7 +87,7 @@ mod tests {
                             });
                         }
 
-                        eprintln!("Tasker worker bootstrapped for completion tests");
+                        eprintln!("Tasker worker bootstrapped");
                     }
 
                     let app = example_axum_app::create_app(pool);
@@ -241,6 +236,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_create_order_async() {
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{}/orders/async", base_url()))
+            .json(&json!({
+                "customer_email": "async-test@example.com",
+                "cart_items": [
+                    {"sku": "A1", "name": "Async Widget", "quantity": 1, "unit_price": 24.99}
+                ],
+                "payment_token": "tok_test_async",
+                "shipping_address": {
+                    "street": "2 Async Ave",
+                    "city": "Testville",
+                    "state": "OR",
+                    "zip": "97201",
+                    "country": "US"
+                }
+            }))
+            .send()
+            .await
+            .expect("Failed to send request");
+
+        assert_eq!(res.status(), 202, "Expected 202 Accepted");
+
+        let body: serde_json::Value = res.json().await.expect("Failed to parse response");
+        assert!(body["data"]["id"].is_number(), "Response should contain order ID");
+        assert_eq!(body["data"]["status"].as_str().unwrap(), "queued");
+    }
+
+    #[tokio::test]
     async fn test_get_order_not_found() {
         let client = reqwest::Client::new();
         let res = client
@@ -308,16 +333,13 @@ mod tests {
 
     // -----------------------------------------------------------------------
     // Task Completion Verification
-    // -----------------------------------------------------------------------
-
-    // -----------------------------------------------------------------------
-    // Completion tests verify the full infrastructure loop: task creation,
-    // step dispatch, handler execution, and result processing. Tasks reach
-    // a terminal status (complete or blocked_by_failures).
+    //
+    // These tests verify the full infrastructure loop: task creation, step
+    // dispatch, handler execution, and result processing. All tasks must
+    // reach "complete" status with every step in "complete" state.
     // -----------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_ecommerce_order_dispatches_and_processes() {
         let client = reqwest::Client::new();
         let res = client
@@ -348,33 +370,102 @@ mod tests {
 
         let task = wait_for_task_completion(&client, task_uuid).await;
 
-        // Task reached a terminal status (infrastructure loop works)
+        // Task must fully complete (all steps successful)
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 5);
 
-        // At least the first step was attempted (handler dispatch works)
+        // All steps must have reached "complete" state
         let steps = task["steps"].as_array().expect("Expected steps array");
         assert_eq!(steps.len(), 5);
+        let completed = steps
+            .iter()
+            .filter(|s| s["current_state"].as_str() == Some("complete"))
+            .count();
+        assert_eq!(completed, 5, "Expected all 5 steps to complete, got {}", completed);
+
+        // Handler dispatch works: first step was attempted
         let validate_step = steps
             .iter()
             .find(|s| s["name"].as_str() == Some("validate_cart"))
             .expect("Expected validate_cart step");
         assert!(validate_step["attempts"].as_i64().unwrap() >= 1);
 
+        println!("  E-commerce task (sync): {} ({}/5 steps complete)", status, completed);
+    }
+
+    #[tokio::test]
+    async fn test_ecommerce_order_async_dispatches_and_processes() {
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{}/orders/async", base_url()))
+            .json(&json!({
+                "customer_email": "async-completion@example.com",
+                "cart_items": [
+                    {"sku": "A1", "name": "Async Widget", "quantity": 1, "unit_price": 24.99}
+                ],
+                "payment_token": "tok_test_async",
+                "shipping_address": {
+                    "street": "2 Async Ave",
+                    "city": "Testville",
+                    "state": "OR",
+                    "zip": "97201",
+                    "country": "US"
+                }
+            }))
+            .send()
+            .await
+            .expect("Failed to send request");
+
+        assert_eq!(res.status(), 202);
+        let body: serde_json::Value = res.json().await.unwrap();
+        eprintln!("  Async order response: {}", body);
+        let order_id = body["data"]["id"].as_i64().expect("Expected order ID");
+        assert_eq!(body["data"]["status"].as_str().unwrap(), "queued");
+
+        // Poll the app for the task_uuid (background task creates the workflow)
+        let mut task_uuid = None;
+        for _ in 0..15 {
+            let order_res = client
+                .get(format!("{}/orders/{}", base_url(), order_id))
+                .send()
+                .await
+                .expect("Failed to get order");
+
+            // 404 returns no body (bare StatusCode), so skip JSON parsing
+            if !order_res.status().is_success() {
+                eprintln!("  GET /orders/{} returned {}", order_id, order_res.status());
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+
+            let order_body: serde_json::Value = order_res.json().await.unwrap();
+            if let Some(uuid) = order_body["data"]["task_uuid"].as_str() {
+                task_uuid = Some(uuid.to_string());
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        let task_uuid = task_uuid.expect("Background task did not create workflow within 15s");
+
+        let task = wait_for_task_completion(&client, &task_uuid).await;
+
+        let status = task["status"].as_str().unwrap();
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
+        assert_eq!(task["total_steps"].as_i64().unwrap(), 5);
+
+        let steps = task["steps"].as_array().expect("Expected steps array");
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
-        println!("  E-commerce task: {} ({}/5 steps complete)", status, completed);
+        assert_eq!(completed, 5, "Expected all 5 steps to complete, got {}", completed);
+
+        println!("  E-commerce task (async): {} ({}/5 steps complete)", status, completed);
     }
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_analytics_pipeline_dispatches_and_processes() {
         let client = reqwest::Client::new();
         let res = client
@@ -400,11 +491,7 @@ mod tests {
         let task = wait_for_task_completion(&client, task_uuid).await;
 
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 8);
 
         let steps = task["steps"].as_array().expect("Expected steps array");
@@ -438,10 +525,13 @@ mod tests {
             .count();
         assert!(attempted >= 1, "Expected at least one extract step to be attempted");
 
+        // All steps must have reached "complete" state
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
+        assert_eq!(completed, 8, "Expected all 8 steps to complete, got {}", completed);
+
         println!(
             "  Analytics task: {} ({}/8 steps complete)",
             status, completed
@@ -449,7 +539,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_user_registration_dispatches_and_processes() {
         let client = reqwest::Client::new();
         let res = client
@@ -471,13 +560,9 @@ mod tests {
 
         let task = wait_for_task_completion(&client, task_uuid).await;
 
-        // Task reached a terminal status (infrastructure loop works)
+        // Task must fully complete (all steps successful)
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 5);
 
         // Verify diamond pattern: 5 steps present
@@ -503,17 +588,20 @@ mod tests {
             );
         }
 
-        // At least the first step was attempted (handler dispatch works)
+        // Handler dispatch works: first step was attempted
         let create_step = steps
             .iter()
             .find(|s| s["name"].as_str() == Some("create_user_account"))
             .expect("Expected create_user_account step");
         assert!(create_step["attempts"].as_i64().unwrap() >= 1);
 
+        // All steps must have reached "complete" state
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
+        assert_eq!(completed, 5, "Expected all 5 steps to complete, got {}", completed);
+
         println!(
             "  User registration task: {} ({}/5 steps complete)",
             status, completed
@@ -521,7 +609,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_customer_success_refund_dispatches_and_processes() {
         let client = reqwest::Client::new();
         let res = client
@@ -548,11 +635,7 @@ mod tests {
         let task = wait_for_task_completion(&client, task_uuid).await;
 
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 5);
 
         let steps = task["steps"].as_array().expect("Expected steps array");
@@ -577,17 +660,20 @@ mod tests {
             );
         }
 
-        // At least the first step was attempted
+        // Handler dispatch works: first step was attempted
         let validate_step = steps
             .iter()
             .find(|s| s["name"].as_str() == Some("validate_refund_request"))
             .expect("Expected validate_refund_request step");
         assert!(validate_step["attempts"].as_i64().unwrap() >= 1);
 
+        // All steps must have reached "complete" state
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
+        assert_eq!(completed, 5, "Expected all 5 steps to complete, got {}", completed);
+
         println!(
             "  Customer success refund task: {} ({}/5 steps complete)",
             status, completed
@@ -595,7 +681,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_payments_refund_dispatches_and_processes() {
         let client = reqwest::Client::new();
 
@@ -627,11 +712,7 @@ mod tests {
         let task = wait_for_task_completion(&client, task_uuid).await;
 
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 4);
 
         let steps = task["steps"].as_array().expect("Expected steps array");
@@ -655,17 +736,20 @@ mod tests {
             );
         }
 
-        // At least the first step was attempted
+        // Handler dispatch works: first step was attempted
         let validate_step = steps
             .iter()
             .find(|s| s["name"].as_str() == Some("validate_payment_eligibility"))
             .expect("Expected validate_payment_eligibility step");
         assert!(validate_step["attempts"].as_i64().unwrap() >= 1);
 
+        // All steps must have reached "complete" state
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
+        assert_eq!(completed, 4, "Expected all 4 steps to complete, got {}", completed);
+
         println!(
             "  Payments refund task: {} ({}/4 steps complete)",
             status, completed

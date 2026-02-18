@@ -14,7 +14,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tracing::{error, info};
+use tracing::info;
 use uuid::Uuid;
 
 // ============================================================================
@@ -37,11 +37,51 @@ struct Product {
 
 fn get_product_catalog() -> HashMap<i64, Product> {
     let mut catalog = HashMap::new();
-    catalog.insert(1, Product { id: 1, name: "Widget A".into(), price: 29.99, stock: 100 });
-    catalog.insert(2, Product { id: 2, name: "Widget B".into(), price: 49.99, stock: 50 });
-    catalog.insert(3, Product { id: 3, name: "Widget C".into(), price: 99.99, stock: 25 });
-    catalog.insert(4, Product { id: 4, name: "Gadget X".into(), price: 149.99, stock: 30 });
-    catalog.insert(5, Product { id: 5, name: "Gadget Y".into(), price: 199.99, stock: 15 });
+    catalog.insert(
+        1,
+        Product {
+            id: 1,
+            name: "Widget A".into(),
+            price: 29.99,
+            stock: 100,
+        },
+    );
+    catalog.insert(
+        2,
+        Product {
+            id: 2,
+            name: "Widget B".into(),
+            price: 49.99,
+            stock: 50,
+        },
+    );
+    catalog.insert(
+        3,
+        Product {
+            id: 3,
+            name: "Widget C".into(),
+            price: 99.99,
+            stock: 25,
+        },
+    );
+    catalog.insert(
+        4,
+        Product {
+            id: 4,
+            name: "Gadget X".into(),
+            price: 149.99,
+            stock: 30,
+        },
+    );
+    catalog.insert(
+        5,
+        Product {
+            id: 5,
+            name: "Gadget Y".into(),
+            price: 199.99,
+            stock: 15,
+        },
+    );
     catalog
 }
 
@@ -52,10 +92,9 @@ fn get_product_catalog() -> HashMap<i64, Product> {
 /// Validates cart items against the product catalog, checks stock availability,
 /// and calculates pricing including subtotal, tax (8%), shipping, and total.
 pub fn validate_cart(context: &Value) -> Result<Value, String> {
-    let cart_items: Vec<CartItem> = serde_json::from_value(
-        context.get("cart_items").cloned().unwrap_or(json!([])),
-    )
-    .map_err(|e| format!("Invalid cart_items format: {}", e))?;
+    let cart_items: Vec<CartItem> =
+        serde_json::from_value(context.get("cart_items").cloned().unwrap_or(json!([])))
+            .map_err(|e| format!("Invalid cart_items format: {}", e))?;
 
     if cart_items.is_empty() {
         return Err("Cart cannot be empty".to_string());
@@ -127,20 +166,27 @@ pub fn validate_cart(context: &Value) -> Result<Value, String> {
 /// - `tok_test_declined`: card declined (permanent error)
 /// - `tok_test_insufficient_funds`: insufficient funds (permanent error)
 /// - `tok_test_network_error`: gateway unreachable (retryable error)
-pub fn process_payment(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
+pub fn process_payment(
+    context: &Value,
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
     // Route sends flat fields: payment_token, payment_method
-    let token = context.get("payment_token")
+    let token = context
+        .get("payment_token")
         .and_then(|v| v.as_str())
         .unwrap_or("tok_test_success");
 
-    let method = context.get("payment_method")
+    let method = context
+        .get("payment_method")
         .and_then(|v| v.as_str())
         .unwrap_or("credit_card");
 
     // Get cart total from validate_cart dependency
-    let cart_result = dependency_results.get("validate_cart")
+    let cart_result = dependency_results
+        .get("validate_cart")
         .ok_or("Missing validate_cart dependency result")?;
-    let cart_total = cart_result.get("total")
+    let cart_total = cart_result
+        .get("total")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
 
@@ -159,7 +205,10 @@ pub fn process_payment(context: &Value, dependency_results: &HashMap<String, Val
     }
 
     let transaction_id = format!("txn_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
-    let authorization_code = format!("AUTH{}", &Uuid::new_v4().to_string().replace('-', "")[..6].to_uppercase());
+    let authorization_code = format!(
+        "AUTH{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..6].to_uppercase()
+    );
 
     info!(
         "Payment processed: ${:.2} via {} (txn: {}, auth: {})",
@@ -184,10 +233,12 @@ pub fn process_payment(context: &Value, dependency_results: &HashMap<String, Val
 /// Creates inventory reservations for each validated cart item.
 /// Each reservation gets a unique ID and is marked with a 24-hour expiration window.
 pub fn update_inventory(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let cart_result = dependency_results.get("validate_cart")
+    let cart_result = dependency_results
+        .get("validate_cart")
         .ok_or("Missing validate_cart dependency result")?;
 
-    let validated_items = cart_result.get("validated_items")
+    let validated_items = cart_result
+        .get("validated_items")
         .and_then(|v| v.as_array())
         .ok_or("Missing validated_items in cart result")?;
 
@@ -197,7 +248,10 @@ pub fn update_inventory(dependency_results: &HashMap<String, Value>) -> Result<V
 
     for item in validated_items {
         let product_id = item.get("product_id").and_then(|v| v.as_i64()).unwrap_or(0);
-        let product_name = item.get("product_name").and_then(|v| v.as_str()).unwrap_or("Unknown");
+        let product_name = item
+            .get("product_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown");
         let quantity = item.get("quantity").and_then(|v| v.as_i64()).unwrap_or(0);
         let reservation_id = format!("res_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
 
@@ -215,7 +269,8 @@ pub fn update_inventory(dependency_results: &HashMap<String, Value>) -> Result<V
 
     info!(
         "Inventory reserved: {} units across {} products",
-        total_reserved, reservations.len()
+        total_reserved,
+        reservations.len()
     );
 
     Ok(json!({
@@ -232,40 +287,72 @@ pub fn update_inventory(dependency_results: &HashMap<String, Value>) -> Result<V
 
 /// Aggregates data from cart validation, payment processing, and inventory reservation
 /// to create a complete order record. Generates an order ID in the format ORD-{date}-{hex}.
-pub fn create_order(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
+pub fn create_order(
+    context: &Value,
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
     // Route sends flat fields: customer_email, customer_name
-    let customer_email = context.get("customer_email")
+    let customer_email = context
+        .get("customer_email")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown@example.com");
 
-    let customer_name = context.get("customer_name")
+    let customer_name = context
+        .get("customer_name")
         .and_then(|v| v.as_str())
         .unwrap_or("Unknown Customer");
 
     // Collect data from all upstream steps
-    let cart_result = dependency_results.get("validate_cart")
+    let cart_result = dependency_results
+        .get("validate_cart")
         .ok_or("Missing validate_cart dependency")?;
 
-    let payment_result = dependency_results.get("process_payment")
+    let payment_result = dependency_results
+        .get("process_payment")
         .ok_or("Missing process_payment dependency")?;
 
-    let inventory_result = dependency_results.get("update_inventory")
+    let inventory_result = dependency_results
+        .get("update_inventory")
         .ok_or("Missing update_inventory dependency")?;
 
-    let validated_items = cart_result.get("validated_items").cloned().unwrap_or(json!([]));
-    let order_total = cart_result.get("total").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let subtotal = cart_result.get("subtotal").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let tax = cart_result.get("tax").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let shipping = cart_result.get("shipping").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let transaction_id = payment_result.get("transaction_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let reservations = inventory_result.get("reservations").cloned().unwrap_or(json!([]));
+    let validated_items = cart_result
+        .get("validated_items")
+        .cloned()
+        .unwrap_or(json!([]));
+    let order_total = cart_result
+        .get("total")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let subtotal = cart_result
+        .get("subtotal")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let tax = cart_result
+        .get("tax")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let shipping = cart_result
+        .get("shipping")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let transaction_id = payment_result
+        .get("transaction_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let reservations = inventory_result
+        .get("reservations")
+        .cloned()
+        .unwrap_or(json!([]));
 
     // Generate order ID: ORD-{YYYYMMDD}-{hex}
     let date_str = chrono::Utc::now().format("%Y%m%d").to_string();
     let hex_suffix = &Uuid::new_v4().to_string().replace('-', "")[..6].to_uppercase();
     let order_id = format!("ORD-{}-{}", date_str, hex_suffix);
 
-    info!("Order created: {} for {} (total: ${:.2})", order_id, customer_email, order_total);
+    info!(
+        "Order created: {} for {} (total: ${:.2})",
+        order_id, customer_email, order_total
+    );
 
     Ok(json!({
         "order_id": order_id,
@@ -296,16 +383,22 @@ pub fn create_order(context: &Value, dependency_results: &HashMap<String, Value>
 
 /// Simulates sending an order confirmation email to the customer.
 /// Generates a unique email ID and includes order summary details.
-pub fn send_confirmation(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
+pub fn send_confirmation(
+    context: &Value,
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
     // Route sends flat field: customer_email
-    let customer_email = context.get("customer_email")
+    let customer_email = context
+        .get("customer_email")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown@example.com");
 
-    let order_result = dependency_results.get("create_order")
+    let order_result = dependency_results
+        .get("create_order")
         .ok_or("Missing create_order dependency")?;
 
-    let order_id = order_result.get("order_id")
+    let order_id = order_result
+        .get("order_id")
         .and_then(|v| v.as_str())
         .unwrap_or("ORD-UNKNOWN");
 
@@ -321,7 +414,10 @@ pub fn send_confirmation(context: &Value, dependency_results: &HashMap<String, V
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
 
-    let email_id = format!("email_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let email_id = format!(
+        "email_{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..12]
+    );
     let subject = format!("Order Confirmation - {}", order_id);
 
     info!(

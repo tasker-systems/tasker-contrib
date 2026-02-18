@@ -1,514 +1,365 @@
 # Development Guide
 
-This guide covers local development setup for tasker-contrib, with particular attention to managing dependencies on [tasker-core](https://github.com/tasker-systems/tasker-core).
+Local development setup for tasker-contrib — CLI plugin templates and example applications.
 
 ---
 
 ## Prerequisites
 
-- **tasker-core** cloned locally (for development)
-- PostgreSQL 15+ with PGMQ extension
-- Language toolchains for packages you're working on:
-  - Ruby 3.2+ and Bundler
-  - Python 3.11+ and uv/pip
-  - Node.js 20+ or Bun 1.0+
-  - Rust 1.75+ (for tasker-cli and FFI extensions)
+- [cargo-make](https://github.com/sagiegurari/cargo-make) (`cargo install cargo-make`)
+- Docker and Docker Compose (for example app testing)
+- Language toolchains for the areas you're working on:
+
+| Area | Requirements |
+|------|-------------|
+| CLI plugin templates | `tasker-ctl` binary (build from tasker-core or `cargo install tasker-ctl`) |
+| Rails templates | Ruby 3.3+, Bundler |
+| Python templates | Python 3.12+, PyYAML |
+| TypeScript templates | Bun 1.0+ |
+| Rust templates | Rust stable, rustfmt |
+| Ops templates | Python 3.12+, PyYAML |
+| Example apps | All of the above + Docker Compose |
+
+---
 
 ## Repository Layout
 
-We recommend this directory structure for development:
+```
+tasker-contrib/
+├── rails/tasker-cli-plugin/     # Rails CLI plugin (templates + manifest)
+├── python/tasker-cli-plugin/    # Python CLI plugin
+├── typescript/tasker-cli-plugin/# TypeScript CLI plugin
+├── rust/tasker-cli-plugin/      # Rust CLI plugin
+├── ops/tasker-cli-plugin/       # Ops CLI plugin (Docker, config)
+├── examples/                    # Example applications
+│   ├── axum-app/                # Rust (Axum)
+│   ├── bun-app/                 # TypeScript (Hono/Bun)
+│   ├── fastapi-app/             # Python (FastAPI)
+│   ├── rails-app/               # Ruby (Rails)
+│   ├── orchestration/           # Shared orchestration config
+│   ├── docker-compose.yml       # Shared infrastructure
+│   └── init-db.sql              # App database creation
+├── scripts/                     # Validation and CI scripts
+├── config/                      # Shared Tasker TOML configuration
+├── Makefile.toml                # cargo-make task definitions
+└── .tasker-cli.toml             # Plugin discovery config
+```
+
+Recommended sibling directory layout:
 
 ```
 tasker-systems/
-├── tasker-core/              # Core orchestration engine
-├── tasker-contrib/           # This repository
-└── tasker-engine/            # Legacy reference (optional)
+├── tasker-core/        # Core orchestration engine (for building tasker-ctl locally)
+└── tasker-contrib/     # This repository
 ```
 
 ---
 
-## Cross-Repository Dependencies
-
-Tasker Contrib packages depend on Tasker Core packages. During development, you'll want to use local builds. For releases, packages reference published versions.
-
-### Strategy Overview
-
-| Context | Ruby | Python | TypeScript | Rust |
-|---------|------|--------|------------|------|
-| **Local Dev** | `path:` in Gemfile | `-e` editable install | `file:` or `link:` | `path` in Cargo.toml |
-| **CI/Release** | Version in gemspec | Version in pyproject.toml | Version in package.json | Version in Cargo.toml |
-
-### Ruby (tasker-contrib-rails)
-
-**Local Development:**
-
-```ruby
-# rails/tasker-contrib-rails/Gemfile
-
-source 'https://rubygems.org'
-
-gemspec
-
-# Development: use local tasker-core-rb
-# Assumes tasker-core is checked out at ../../tasker-core relative to this repo
-gem 'tasker-core-rb', path: '../../../../tasker-core/workers/ruby'
-```
-
-**Release (gemspec):**
-
-```ruby
-# rails/tasker-contrib-rails/tasker-contrib-rails.gemspec
-
-Gem::Specification.new do |spec|
-  spec.name = 'tasker-contrib-rails'
-  spec.version = TaskerContribRails::VERSION
-
-  # Release: reference published gem
-  spec.add_dependency 'tasker-core-rb', '~> 0.5.0'
-  
-  # Rails version requirements
-  spec.add_dependency 'railties', '>= 7.0', '< 8.0'
-end
-```
-
-**Switching Modes:**
+## Quick Reference
 
 ```bash
-# For local development (uses Gemfile path:)
-cd rails/tasker-contrib-rails
-bundle config set --local path 'vendor/bundle'
-bundle install
+cargo make validate          # (v)  Validate all plugin manifests
+cargo make test-templates    # (tt) Generate + syntax-check all templates
+cargo make test-all          # (ta) validate + test-templates
+cargo make ci-sanity-check   # (csc) Validate scripts and workflows
+cargo make ci-check          #      All quality checks + CI sanity
 
-# For release testing (uses gemspec version)
-cd rails/tasker-contrib-rails
-BUNDLE_GEMFILE=Gemfile.release bundle install
-```
-
-**Gemfile.release pattern:**
-
-```ruby
-# rails/tasker-contrib-rails/Gemfile.release
-source 'https://rubygems.org'
-
-gemspec
-
-# No path overrides - uses gemspec dependencies
-```
-
-### Python (tasker-contrib-fastapi)
-
-**Local Development:**
-
-```toml
-# python/tasker-contrib-fastapi/pyproject.toml
-
-[project]
-name = "tasker-contrib-fastapi"
-version = "0.1.0"
-dependencies = [
-    "tasker-core-py>=0.5.0",
-    "fastapi>=0.100.0",
-]
-
-[tool.uv]
-# Development overrides for local tasker-core
-dev-dependencies = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-]
-
-[tool.uv.sources]
-# Local development: point to local tasker-core-py
-tasker-core-py = { path = "../../../../tasker-core/workers/python", editable = true }
-```
-
-**Alternative: pip editable install:**
-
-```bash
-# Install local tasker-core-py in editable mode
-cd ../tasker-core/workers/python
-pip install -e .
-
-# Then install tasker-contrib-fastapi
-cd ../tasker-contrib/python/tasker-contrib-fastapi
-pip install -e .
-```
-
-### TypeScript (tasker-contrib-express)
-
-**Local Development:**
-
-```json
-// typescript/tasker-contrib-express/package.json
-{
-  "name": "tasker-contrib-express",
-  "version": "0.1.0",
-  "dependencies": {
-    "express": "^4.18.0"
-  },
-  "peerDependencies": {
-    "tasker-core-ts": ">=0.5.0"
-  },
-  "devDependencies": {
-    "tasker-core-ts": "file:../../../../tasker-core/workers/typescript"
-  }
-}
-```
-
-**Using npm/yarn link:**
-
-```bash
-# Link tasker-core-ts globally
-cd ../tasker-core/workers/typescript
-npm link
-
-# Use linked package in contrib
-cd ../tasker-contrib/typescript/tasker-contrib-express
-npm link tasker-core-ts
-```
-
-**Using Bun workspaces (alternative):**
-
-```json
-// tasker-contrib/package.json (workspace root)
-{
-  "workspaces": [
-    "typescript/*"
-  ]
-}
-```
-
-### Rust (tasker-contrib-axum)
-
-**Local Development:**
-
-```toml
-# rust/tasker-contrib-axum/Cargo.toml
-
-[package]
-name = "tasker-contrib-axum"
-version = "0.1.0"
-
-[dependencies]
-axum = "0.7"
-
-# Local development: path dependency
-tasker-worker = { path = "../../../../tasker-core/tasker-worker" }
-tasker-shared = { path = "../../../../tasker-core/tasker-shared" }
-```
-
-**Release:**
-
-```toml
-# rust/tasker-contrib-axum/Cargo.toml
-
-[dependencies]
-axum = "0.7"
-
-# Release: crates.io version
-tasker-worker = "0.5"
-tasker-shared = "0.5"
-```
-
-**Using Cargo patch (workspace-level):**
-
-```toml
-# tasker-contrib/Cargo.toml (workspace root)
-
-[workspace]
-members = ["rust/*"]
-
-# Override for all workspace members during development
-[patch.crates-io]
-tasker-worker = { path = "../tasker-core/tasker-worker" }
-tasker-shared = { path = "../tasker-core/tasker-shared" }
+# Example app integration tests (require docker-compose services)
+cargo make test-examples     # (te) Run all example app tests
+cargo make test-example-axum
+cargo make test-example-bun
+cargo make test-example-fastapi
+cargo make test-example-rails
 ```
 
 ---
 
-## Development Workflow
+## Working on CLI Plugin Templates
 
-### Initial Setup
+### Getting tasker-ctl
 
+You need the `tasker-ctl` binary to validate plugins and generate templates.
+
+**Option A: Install from crates.io** (simplest)
 ```bash
-# Clone both repositories
-git clone git@github.com:tasker-systems/tasker-core.git
-git clone git@github.com:tasker-systems/tasker-contrib.git
-
-# Build tasker-core first
-cd tasker-core
-cargo build --release
-cd workers/ruby && bundle install && bundle exec rake compile
-cd ../python && pip install -e .
-cd ../typescript && bun install
-
-# Set up tasker-contrib
-cd ../../tasker-contrib
-# Follow package-specific setup below
+cargo install tasker-ctl
 ```
 
-### Working on tasker-contrib-rails
+**Option B: Build from local tasker-core**
+```bash
+cargo make build-ctl
+# Requires TASKER_CORE_PATH (defaults to ../tasker-core)
+```
+
+Either way, the binary ends up discoverable by the Makefile.toml tasks.
+
+### Validating plugins
 
 ```bash
-cd rails/tasker-contrib-rails
+# Validate all five plugin manifests
+cargo make validate
 
-# Install dependencies (uses local tasker-core-rb via Gemfile path:)
-bundle install
+# Test template generation + syntax checking for all plugins
+cargo make test-templates
+
+# Or validate a specific plugin
+TASKER_CTL=./bin/tasker-ctl ./scripts/test-templates.sh --plugin tasker-contrib-rails
+```
+
+### Template structure
+
+Each plugin follows this structure:
+
+```
+{language}/tasker-cli-plugin/
+├── tasker-plugin.toml              # Plugin manifest
+└── templates/
+    ├── step_handler/               # Template directory
+    │   ├── template.toml           # Template metadata
+    │   └── files/                  # Template files (with Tera syntax)
+    ├── step_handler_api/
+    ├── step_handler_decision/
+    ├── step_handler_batchable/
+    └── task_template/
+```
+
+---
+
+## Working on Example Applications
+
+The example apps are standalone applications that use published Tasker packages. They share a docker-compose infrastructure stack.
+
+### Starting infrastructure
+
+```bash
+cd examples
+docker compose up -d
+```
+
+This starts:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| `tasker-postgres` | 5432 | PostgreSQL 18 + PGMQ + app databases |
+| `tasker-orchestration` | 8080 | Tasker orchestration server (GHCR image) |
+| `dragonfly` | 6379/11211 | Redis/Memcached cache |
+| `rabbitmq` | 5672/15672 | Message broker |
+
+The `init-db.sql` script creates four app databases: `example_axum`, `example_bun`, `example_fastapi`, `example_rails`.
+
+Wait for orchestration to be healthy before running tests:
+
+```bash
+curl -sf http://localhost:8080/health
+```
+
+### Environment variables
+
+All apps need these shared variables (set in your shell or `.env`):
+
+```bash
+export DATABASE_URL=postgresql://tasker:tasker@localhost:5432/tasker
+export RABBITMQ_URL=amqp://tasker:tasker@localhost:5672/%2F
+export ORCHESTRATION_URL=http://localhost:8080
+export TASKER_API_KEY=test-api-key-full-access
+export TASKER_ENV=development
+export RUST_LOG=info
+```
+
+Each app also needs its own `APP_DATABASE_URL` and config paths — see per-app sections below.
+
+### FastAPI app
+
+```bash
+cd examples/fastapi-app
+
+export APP_DATABASE_URL=postgresql+asyncpg://tasker:tasker@localhost:5432/example_fastapi
+export TASKER_CONFIG_PATH=app/config/worker.toml
+export TASKER_TEMPLATE_PATH=app/config/templates
+
+# Install dependencies
+uv sync
+
+# Run migrations
+APP_DATABASE_URL=postgresql://tasker:tasker@localhost:5432/example_fastapi \
+  uv run alembic upgrade head
 
 # Run tests
-bundle exec rspec
-
-# Test generators in dummy app
-cd spec/dummy
-bundle exec rails generate tasker:install
-bundle exec rails generate tasker:step_handler TestHandler
+uv run pytest tests/ -v
 ```
 
-### Working on tasker-contrib-fastapi
+Note: Alembic migrations need the non-async `APP_DATABASE_URL` (no `+asyncpg`), while the app itself uses the async variant.
+
+### Bun app
 
 ```bash
-cd python/tasker-contrib-fastapi
+cd examples/bun-app
 
-# Install with local tasker-core-py
-uv sync  # or pip install -e .
-
-# Run tests
-pytest
-
-# Test in example app
-cd examples/basic
-uvicorn main:app --reload
-```
-
-### Working on tasker-contrib-express
-
-```bash
-cd typescript/tasker-contrib-express
+export APP_DATABASE_URL=postgresql://tasker:tasker@localhost:5432/example_bun
+export TASKER_CONFIG_PATH=src/config/worker.toml
+export TASKER_TEMPLATE_PATH=src/config/templates
 
 # Install dependencies
 bun install
 
-# Run tests
-bun test
-
-# Build
-bun run build
-```
-
----
-
-## Testing Against Published Packages
-
-Before release, verify packages work with published dependencies:
-
-### Ruby
-
-```bash
-cd rails/tasker-contrib-rails
-
-# Create a clean environment
-rm -rf vendor/bundle .bundle
-
-# Install from gemspec (no local overrides)
-BUNDLE_GEMFILE=Gemfile.release bundle install
+# Run migrations (Drizzle Kit)
+bun run db:migrate
 
 # Run tests
-BUNDLE_GEMFILE=Gemfile.release bundle exec rspec
+bun test tests/
 ```
 
-### Python
+### Rails app
 
 ```bash
-cd python/tasker-contrib-fastapi
+cd examples/rails-app
 
-# Create clean venv
-python -m venv .venv-release
-source .venv-release/bin/activate
+export APP_DATABASE_URL=postgresql://tasker:tasker@localhost:5432/example_rails
+export TASKER_CONFIG_PATH=config/tasker/worker.toml
+export TASKER_TEMPLATE_PATH=config/tasker/templates
+export RAILS_ENV=test
 
-# Install without local overrides
-pip install . --no-deps
-pip install tasker-core-py  # From PyPI
+# Install dependencies
+bundle install
+
+# Run migrations
+bundle exec rake db:migrate
 
 # Run tests
-pytest
+bundle exec rspec spec/integration/ --format documentation
+```
+
+Important: The Rails worker starts once at boot via an initializer. Tests must not re-initialize it — doing so corrupts the FFI bridge.
+
+### Axum app
+
+```bash
+cd examples/axum-app
+
+export APP_DATABASE_URL=postgresql://tasker:tasker@localhost:5432/example_axum
+export TASKER_CONFIG_PATH=config/worker.toml
+export TASKER_TEMPLATE_PATH=config/templates
+
+# Run tests (migrations run automatically via sqlx)
+cargo nextest run
+```
+
+The Axum app boots an in-process test server and Tasker worker — no separate server process needed.
+
+### Running all example tests at once
+
+```bash
+# From repo root (requires docker-compose services running)
+cargo make test-examples
+```
+
+### Stopping infrastructure
+
+```bash
+cd examples
+docker compose down -v
 ```
 
 ---
 
-## Environment Variables
+## CI Workflows
 
-### Required for Integration Tests
+| Workflow | Trigger | What It Does |
+|----------|---------|--------------|
+| **CI** | Push/PR to main | Install `tasker-ctl` from crates.io, validate plugins, generate + syntax-check templates |
+| **Test Examples** | `examples/**` changes | Integration tests for all four apps against docker-compose |
+| **Upstream Check** | Daily 6 AM UTC | Monitor for new tasker-core releases, create GitHub issues |
 
-```bash
-# PostgreSQL connection (with PGMQ extension)
-export DATABASE_URL="postgresql://tasker:tasker@localhost:5432/tasker_contrib_test"
-
-# Tasker environment
-export TASKER_ENV="test"
-```
-
-### Optional Development Settings
-
-```bash
-# Point to local tasker-core for CLI tools
-export TASKER_CLI_PATH="../tasker-core/target/release/tasker-cli"
-
-# Enable verbose logging
-export RUST_LOG="debug"
-export TASKER_LOG_LEVEL="debug"
-```
-
----
-
-## CI Configuration
-
-CI should test both local and published dependency scenarios:
-
-```yaml
-# .github/workflows/test.yml
-jobs:
-  test-with-local:
-    name: Test with local tasker-core
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: tasker-contrib
-      
-      - uses: actions/checkout@v4
-        with:
-          repository: tasker-systems/tasker-core
-          path: tasker-core
-      
-      - name: Build tasker-core
-        working-directory: tasker-core
-        run: |
-          cargo build --release
-          cd workers/ruby && bundle install && rake compile
-      
-      - name: Test tasker-contrib-rails
-        working-directory: tasker-contrib/rails/tasker-contrib-rails
-        run: |
-          bundle install
-          bundle exec rspec
-
-  test-with-published:
-    name: Test with published tasker-core
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Test tasker-contrib-rails
-        working-directory: rails/tasker-contrib-rails
-        run: |
-          BUNDLE_GEMFILE=Gemfile.release bundle install
-          BUNDLE_GEMFILE=Gemfile.release bundle exec rspec
-```
-
----
-
-## Release Process
-
-### Pre-Release Checklist
-
-1. **Update version numbers** in all affected packages
-2. **Update CHANGELOG.md** for each package
-3. **Test with published tasker-core** (not local)
-4. **Update dependency version constraints** if tasker-core had breaking changes
-
-### Publishing
-
-```bash
-# Ruby
-cd rails/tasker-contrib-rails
-gem build tasker-contrib-rails.gemspec
-gem push tasker-contrib-rails-0.1.0.gem
-
-# Python
-cd python/tasker-contrib-fastapi
-uv build
-uv publish
-
-# TypeScript
-cd typescript/tasker-contrib-express
-npm publish
-
-# Rust
-cd rust/tasker-contrib-axum
-cargo publish
-```
+See [.github/CI-ARCHITECTURE.md](.github/CI-ARCHITECTURE.md) for full architecture details.
 
 ---
 
 ## Troubleshooting
 
-### "tasker-core-rb not found"
-
-Ensure tasker-core is built and the path in Gemfile is correct:
+### "tasker-ctl not found"
 
 ```bash
-# Check the FFI extension exists
-ls ../tasker-core/workers/ruby/lib/tasker_core/tasker_worker_rb.bundle
+# Install from crates.io
+cargo install tasker-ctl
 
-# Rebuild if necessary
-cd ../tasker-core/workers/ruby
-bundle exec rake compile
+# Or build from local tasker-core
+cargo make build-ctl
 ```
 
-### "FFI library load error"
-
-The Rust FFI extension must be compiled for your platform:
+### Docker compose services won't start
 
 ```bash
-cd ../tasker-core
-cargo build --release
+# Check service status
+cd examples && docker compose ps
 
-# For Ruby
-cd workers/ruby
-bundle exec rake compile
+# View logs
+docker compose logs tasker-orchestration
+docker compose logs tasker-postgres
+
+# Nuclear reset
+docker compose down -v && docker compose up -d
 ```
 
-### "Database connection failed"
+### Orchestration not healthy
 
-Ensure PostgreSQL is running with PGMQ:
+The orchestration service depends on PostgreSQL and RabbitMQ being fully ready. Wait up to 60 seconds:
 
 ```bash
-# Using Docker
-docker run -d \
-  --name tasker-postgres \
-  -e POSTGRES_USER=tasker \
-  -e POSTGRES_PASSWORD=tasker \
-  -e POSTGRES_DB=tasker_contrib_test \
-  -p 5432:5432 \
-  quay.io/tembo/pg17-pgmq:latest
+for i in $(seq 1 60); do
+  curl -sf http://localhost:8080/health && echo " healthy" && break
+  sleep 1
+done
+```
 
-# Run migrations from tasker-core
-cd ../tasker-core
-DATABASE_URL="postgresql://tasker:tasker@localhost/tasker_contrib_test" \
-  cargo run --bin tasker-cli -- migrate
+### "Database does not exist" errors
+
+The `init-db.sql` script creates app databases on first PostgreSQL startup. If you've already created the postgres volume without the init script:
+
+```bash
+cd examples
+docker compose down -v   # Remove volumes
+docker compose up -d     # Recreate with init-db.sql
+```
+
+### FFI library load errors (Rails/FastAPI/Bun apps)
+
+The example apps use published FFI packages from their respective registries. If you see library load errors, ensure the correct package versions are installed:
+
+```bash
+# Ruby
+gem list tasker-core-rb
+
+# Python
+pip show tasker-py
+
+# TypeScript
+bun pm ls | grep tasker
 ```
 
 ---
 
 ## Contributing
 
-### Adding a New Framework Integration
+### Adding a new template
 
-1. Create directory structure: `{language}/tasker-contrib-{framework}/`
-2. Set up package manifest with tasker-core dependency
-3. Implement Railtie/lifespan/middleware pattern
-4. Add generators that wrap `tasker-cli`
-5. Write tests including integration tests
-6. Document in README
+1. Create template directory: `{language}/tasker-cli-plugin/templates/{template_name}/`
+2. Add `template.toml` with metadata and variable definitions
+3. Add template files in `files/` subdirectory using Tera syntax
+4. Register the template in `tasker-plugin.toml`
+5. Run `cargo make test-templates` to verify
 
-### Code Style
+### Adding a new example app
 
-- **Ruby**: Follow RuboCop with Rails conventions
-- **Python**: Follow Ruff/Black formatting
-- **TypeScript**: Follow Biome/ESLint configuration
-- **Rust**: Follow rustfmt and Clippy
+1. Create `examples/{framework}-app/` with standard project structure
+2. Add the app database to `examples/init-db.sql`
+3. Add a `cargo make test-example-{framework}` task to `Makefile.toml`
+4. Add the app to `test-examples` dependencies in `Makefile.toml`
+5. Add CI steps to `.github/workflows/test-examples.yml`
 
-### Pull Request Process
+### Code style
 
-1. Create feature branch from `main`
-2. Ensure tests pass with both local and published dependencies
-3. Update documentation as needed
-4. Request review from maintainers
+- **Ruby**: Standard Rails conventions
+- **Python**: Ruff formatting
+- **TypeScript**: Biome
+- **Rust**: rustfmt + Clippy
+- **Shell**: shellcheck-clean

@@ -1,3 +1,0 @@
-# Tasker CLI plugin discovery configuration
-# Scans subdirectories for */tasker-cli-plugin/ plugin directories
-plugin-paths = ["."]

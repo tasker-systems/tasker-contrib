@@ -32,6 +32,25 @@ class OrdersController < ApplicationController
     render json: { error: "Order submission failed: #{e.message}" }, status: :unprocessable_entity
   end
 
+  def create_async
+    order = Order.create!(
+      customer_email: order_params[:customer_email],
+      items:          order_params[:cart_items],
+      status:         'queued'
+    )
+
+    CreateOrderTaskJob.perform_later(order.id)
+
+    render json: {
+      id:      order.id,
+      status:  order.status,
+      message: 'Order queued for processing'
+    }, status: :accepted
+  rescue StandardError => e
+    Rails.logger.error("Async order creation failed: #{e.message}")
+    render json: { error: "Order submission failed: #{e.message}" }, status: :unprocessable_entity
+  end
+
   def show
     order = Order.find(params[:id])
     render json: enrich_with_task_status(order)

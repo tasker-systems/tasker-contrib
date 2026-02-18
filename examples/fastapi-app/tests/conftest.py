@@ -24,53 +24,19 @@ from app.database import async_session_factory
 def tasker_worker() -> Any:
     """Bootstrap the tasker worker and event processing for the test session.
 
-    Sets up the full pipeline:
-    1. Bootstrap the Rust worker (database, messaging, orchestration client)
-    2. Discover step handlers from app.handlers package
-    3. Start EventBridge, StepExecutionSubscriber, and EventPoller
+    Uses the Worker class which wraps the full bootstrap sequence:
+    Rust worker init, handler discovery, and event processing pipeline.
 
     Stops everything after all tests complete.
     """
-    from tasker_core import (
-        EventBridge,
-        EventPoller,
-        HandlerRegistry,
-        StepExecutionSubscriber,
-        bootstrap_worker,
-        stop_worker,
-    )
+    from tasker_core import Worker
 
-    # 1. Bootstrap the Rust worker system
-    result = bootstrap_worker()
-    assert result.status == "started", f"Worker bootstrap failed: {result}"
+    worker = Worker.start(handler_packages=["app.handlers"])
+    assert worker.worker_id, "Worker bootstrap failed"
 
-    # 2. Discover step handlers
-    registry = HandlerRegistry.instance()
-    count = registry.discover_handlers("app.handlers")
-    assert count > 0, "No step handlers discovered"
+    yield worker
 
-    # 3. Start event processing pipeline
-    bridge = EventBridge.instance()
-    bridge.start()
-
-    subscriber = StepExecutionSubscriber(
-        event_bridge=bridge,
-        handler_registry=registry,
-        worker_id=result.worker_id,
-    )
-    subscriber.start()
-
-    poller = EventPoller()
-    poller.on_step_event(lambda event: bridge.publish("step.execution.received", event))
-    poller.start()
-
-    yield result
-
-    # Shutdown
-    poller.stop()
-    subscriber.stop()
-    bridge.stop()
-    stop_worker()
+    worker.stop()
 
 
 @pytest_asyncio.fixture
