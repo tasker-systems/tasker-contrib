@@ -154,8 +154,10 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.6
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: examples/axum-app
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -166,8 +168,6 @@ jobs:
           APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_axum
           TASKER_CONFIG_PATH: config/worker.toml
           TASKER_TEMPLATE_PATH: config/templates
-          SCCACHE_GHA_ENABLED: "true"
-          RUSTC_WRAPPER: sccache
         run: cargo nextest run
 
       # ================================================================
