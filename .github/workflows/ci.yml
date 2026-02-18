@@ -4,7 +4,7 @@
 # No database or services required — tasker-ctl is a pure CLI tool.
 #
 # Strategy:
-# 1. Build tasker-ctl from tasker-core source (with sccache)
+# 1. Install tasker-ctl from crates.io
 # 2. Validate all plugin manifests
 # 3. Per-language: generate templates and syntax-check output files
 
@@ -36,7 +36,6 @@ jobs:
       ops-templates: ${{ steps.filter.outputs.ops-templates }}
       docs: ${{ steps.filter.outputs.docs }}
       scripts: ${{ steps.filter.outputs.scripts }}
-      actions: ${{ steps.filter.outputs.actions }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +46,6 @@ jobs:
             templates:
               - '*/tasker-cli-plugin/**'
               - 'scripts/**'
-              - '.github/actions/**'
               - '.github/workflows/ci.yml'
             rails-templates:
               - 'rails/tasker-cli-plugin/**'
@@ -64,26 +62,38 @@ jobs:
               - '*.md'
             scripts:
               - 'scripts/**'
-            actions:
-              - '.github/actions/**'
 
   # ==========================================================================
   # Build tasker-ctl
   # ==========================================================================
   build-tasker-ctl:
-    name: Build tasker-ctl
+    name: Install tasker-ctl
     needs: changes
     if: needs.changes.outputs.templates == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
-      - name: Checkout tasker-contrib
-        uses: actions/checkout@v4
-        with:
-          path: tasker-contrib
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Build tasker-ctl
-        uses: ./tasker-contrib/.github/actions/build-tasker-core
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-tasker-ctl-${{ runner.os }}-${{ hashFiles('**/upstream-versions.json') }}
+          restore-keys: cargo-tasker-ctl-${{ runner.os }}-
+
+      - name: Install tasker-ctl from crates.io
+        run: cargo install tasker-ctl
+
+      - name: Upload tasker-ctl binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasker-ctl
+          path: ~/.cargo/bin/tasker-ctl
+          retention-days: 1
 
   # ==========================================================================
   # Validate all plugin manifests
@@ -266,7 +276,7 @@ jobs:
   ci-sanity-check:
     name: CI Sanity Check
     needs: changes
-    if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.actions == 'true'
+    if: needs.changes.outputs.scripts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

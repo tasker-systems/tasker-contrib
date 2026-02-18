@@ -30,6 +30,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    env:
+      DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
+      RABBITMQ_URL: amqp://tasker:tasker@localhost:5672/%2F
+      ORCHESTRATION_URL: http://localhost:8080
+      TASKER_API_KEY: test-api-key-full-access
+      TASKER_ENV: development
+      RUST_LOG: info
+
     steps:
       # ================================================================
       # Setup
@@ -65,25 +73,26 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install uv
+        run: pip install uv
+
       - name: Install FastAPI dependencies
         working-directory: examples/fastapi-app
-        run: pip install -e ".[test]"
+        run: uv sync
 
-      - name: Run FastAPI basic tests
+      - name: Run FastAPI migrations
         working-directory: examples/fastapi-app
         env:
           APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_fastapi
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
-        run: pytest tests/ -v --ignore=tests/test_workflows.py
+        run: uv run alembic upgrade head
 
-      - name: Run FastAPI completion tests
+      - name: Run FastAPI tests
         working-directory: examples/fastapi-app
         env:
-          APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_fastapi
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
-          RUN_COMPLETION_TESTS: "1"
-        run: pytest tests/test_workflows.py -v -m completion
-        continue-on-error: true
+          APP_DATABASE_URL: postgresql+asyncpg://tasker:tasker@localhost:5432/example_fastapi
+          TASKER_CONFIG_PATH: app/config/worker.toml
+          TASKER_TEMPLATE_PATH: app/config/templates
+        run: uv run pytest tests/ -v
 
       # ================================================================
       # Bun
@@ -97,27 +106,19 @@ jobs:
         working-directory: examples/bun-app
         run: bun install
 
-      - name: Run Bun DB migrations
+      - name: Run Bun migrations
         working-directory: examples/bun-app
         env:
           APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_bun
         run: bun run db:migrate
 
-      - name: Run Bun basic tests
+      - name: Run Bun tests
         working-directory: examples/bun-app
         env:
           APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_bun
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
-        run: bun test
-
-      - name: Run Bun completion tests
-        working-directory: examples/bun-app
-        env:
-          APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_bun
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
-          RUN_COMPLETION_TESTS: "1"
-        run: bun test
-        continue-on-error: true
+          TASKER_CONFIG_PATH: src/config/worker.toml
+          TASKER_TEMPLATE_PATH: src/config/templates
+        run: bun test tests/
 
       # ================================================================
       # Rails
@@ -129,31 +130,21 @@ jobs:
           bundler-cache: true
           working-directory: examples/rails-app
 
-      - name: Run Rails DB migrations
+      - name: Run Rails migrations
         working-directory: examples/rails-app
         env:
           APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_rails
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
           RAILS_ENV: test
-        run: bundle exec rails db:migrate
+        run: bundle exec rake db:migrate
 
-      - name: Run Rails basic tests
+      - name: Run Rails tests
         working-directory: examples/rails-app
         env:
           APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_rails
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
           RAILS_ENV: test
-        run: bundle exec rspec --format documentation
-
-      - name: Run Rails completion tests
-        working-directory: examples/rails-app
-        env:
-          APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_rails
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
-          RAILS_ENV: test
-          RUN_COMPLETION_TESTS: "1"
-        run: bundle exec rspec --format documentation --tag completion
-        continue-on-error: true
+          TASKER_CONFIG_PATH: config/tasker/worker.toml
+          TASKER_TEMPLATE_PATH: config/tasker/templates
+        run: bundle exec rspec spec/integration/ --format documentation
 
       # ================================================================
       # Axum
@@ -164,44 +155,18 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.6
 
-      - name: Build Axum app
-        working-directory: examples/axum-app
-        env:
-          SCCACHE_GHA_ENABLED: "true"
-          RUSTC_WRAPPER: sccache
-        run: cargo build --release
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
 
-      - name: Run Axum DB migrations
+      - name: Run Axum tests
         working-directory: examples/axum-app
         env:
           APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_axum
-        run: |
-          # Apply migrations using sqlx-cli or raw SQL
-          if command -v sqlx &> /dev/null; then
-            sqlx migrate run
-          else
-            psql "$APP_DATABASE_URL" -f migrations/001_create_domain_models.sql
-          fi
-
-      - name: Run Axum basic tests
-        working-directory: examples/axum-app
-        env:
-          APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_axum
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
+          TASKER_CONFIG_PATH: config/worker.toml
+          TASKER_TEMPLATE_PATH: config/templates
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
-        run: cargo test
-
-      - name: Run Axum completion tests
-        working-directory: examples/axum-app
-        env:
-          APP_DATABASE_URL: postgresql://tasker:tasker@localhost:5432/example_axum
-          DATABASE_URL: postgresql://tasker:tasker@localhost:5432/tasker
-          RUN_COMPLETION_TESTS: "1"
-          SCCACHE_GHA_ENABLED: "true"
-          RUSTC_WRAPPER: sccache
-        run: cargo test -- --ignored
-        continue-on-error: true
+        run: cargo nextest run
 
       # ================================================================
       # Cleanup
@@ -209,7 +174,7 @@ jobs:
       - name: Show docker logs on failure
         if: failure()
         working-directory: examples
-        run: docker compose logs --tail=50
+        run: docker compose logs --tail=100
 
       - name: Stop infrastructure
         if: always()
