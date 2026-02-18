@@ -4,7 +4,6 @@ import uuid
 from unittest.mock import MagicMock
 
 import pytest
-
 from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
 
 
@@ -30,20 +29,20 @@ class TestDecisionRouting:
         result = handler.call(context)
 
         assert result.success is True
-        assert "fast_track_processing" in result.result["decision_point_outcome"]["steps"]
+        assert "fast_track_processing" in result.result["decision_point_outcome"]["step_names"]
 
     def test_review_required_route(self, handler):
         context = make_context("review_required")
         result = handler.call(context)
 
         assert result.success is True
-        steps = result.result["decision_point_outcome"]["steps"]
-        assert "manual_review" in steps
-        assert "approval_gate" in steps
+        step_names = result.result["decision_point_outcome"]["step_names"]
+        assert "manual_review" in step_names
+        assert "approval_gate" in step_names
 
     def test_default_route(self, handler):
         context = make_context()
         result = handler.call(context)
 
         assert result.success is True
-        assert "standard_processing" in result.result["decision_point_outcome"]["steps"]
+        assert "standard_processing" in result.result["decision_point_outcome"]["step_names"]

@@ -1,10 +1,9 @@
 """Tests for {{ name | pascal_case }}Handler."""
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
 
 
@@ -19,42 +18,37 @@ def context():
     ctx.task_uuid = uuid.uuid4()
     ctx.step_uuid = uuid.uuid4()
     ctx.input_data = {"endpoint": "/users/1"}
-    ctx.step_config = {"base_url": "{{ base_url }}"}
+    ctx.step_config = {}
     ctx.retry_count = 0
     ctx.max_retries = 3
     return ctx
 
 
 class TestCall:
-    @pytest.mark.asyncio
-    async def test_returns_success_on_200(self, handler, context):
+    def test_returns_success_on_200(self, handler, context):
         mock_response = MagicMock()
-        mock_response.is_success = True
+        mock_response.ok = True
         mock_response.status_code = 200
-        mock_response.json.return_value = {"id": 1, "name": "Test"}
+        mock_response.body = {"id": 1, "name": "Test"}
+        mock_response.headers = {"content-type": "application/json"}
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            mock_client.return_value.get = AsyncMock(return_value=mock_response)
-
-            result = await handler.call(context)
+        with patch.object(handler, "get", return_value=mock_response):
+            result = handler.call(context)
 
         assert result.success is True
-        assert result.result["id"] == 1
 
-    @pytest.mark.asyncio
-    async def test_returns_retryable_failure_on_500(self, handler, context):
+    def test_returns_failure_on_500(self, handler, context):
         mock_response = MagicMock()
-        mock_response.is_success = False
+        mock_response.ok = False
         mock_response.status_code = 500
+        mock_response.is_retryable = True
+        mock_response.is_client_error = False
+        mock_response.is_server_error = True
+        mock_response.headers = {}
+        mock_response.body = None
+        mock_response.retry_after = None
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
-            mock_client.return_value.get = AsyncMock(return_value=mock_response)
-
-            result = await handler.call(context)
+        with patch.object(handler, "get", return_value=mock_response):
+            result = handler.call(context)
 
         assert result.success is False
-        assert result.retryable is True

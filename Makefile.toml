@@ -4,6 +4,7 @@
 #   cargo make build-ctl              # Build tasker-ctl from tasker-core source
 #   cargo make validate          (v)  # Validate all plugin manifests
 #   cargo make test-templates    (tt) # Tier 1: generate + syntax check all templates
+#   cargo make lint-templates    (lt) # Tier 1.5: generate + lint + type check templates
 #   cargo make test-all          (ta) # Run all validation
 #   cargo make ci-sanity-check        # Validate scripts, workflows, and references
 #   cargo make ci-check               # All quality checks + CI sanity
@@ -91,6 +92,24 @@ ${SCRIPTS_DIR}/test-templates.sh
 
 [tasks.tt]
 alias = "test-templates"
+
+# ---------------------------------------------------------------------------
+# Lint templates
+# ---------------------------------------------------------------------------
+[tasks.lint-templates]
+description = "Tier 1.5: generate templates and run language-specific linters + type checkers"
+script_runner = "@shell"
+script = '''
+if [ ! -x "${TASKER_CTL}" ]; then
+  echo "tasker-ctl not found at ${TASKER_CTL}"
+  echo "Run 'cargo make build-ctl' first."
+  exit 1
+fi
+${SCRIPTS_DIR}/lint-templates.sh
+'''
+
+[tasks.lt]
+alias = "lint-templates"
 
 # ---------------------------------------------------------------------------
 # Test all

@@ -37,15 +37,15 @@ class {{ name | pascal_case }}Handler(DecisionHandler):
         if route_key == "fast_track":
             return self.decision_success(
                 steps=["fast_track_processing"],
-                result_data={"route": "fast_track", "reason": "Meets fast-track criteria"},
+                routing_context={"route": "fast_track", "reason": "Meets fast-track criteria"},
             )
         elif route_key == "review_required":
             return self.decision_success(
                 steps=["manual_review", "approval_gate"],
-                result_data={"route": "review", "reason": "Review required"},
+                routing_context={"route": "review", "reason": "Review required"},
             )
         else:
             return self.decision_success(
                 steps=["standard_processing"],
-                result_data={"route": "standard", "reason": "Default routing"},
+                routing_context={"route": "standard", "reason": "Default routing"},
             )

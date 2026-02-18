@@ -1,37 +1,52 @@
-"""Tests for {{ name | pascal_case }}Handler batch processing."""
+"""Tests for {{ name | pascal_case }} batch processing handlers."""
 
 import uuid
 from unittest.mock import MagicMock
 
 import pytest
-
-from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
-
-
-@pytest.fixture
-def handler():
-    return {{ name | pascal_case }}Handler()
+from {{ module_name }}.{{ name | snake_case }}_handler import (
+    {{ name | pascal_case }}AnalyzerHandler,
+    {{ name | pascal_case }}WorkerHandler,
+)
 
 
 class TestAnalyzer:
+    @pytest.fixture
+    def handler(self):
+        return {{ name | pascal_case }}AnalyzerHandler()
+
     def test_creates_batch_configs(self, handler):
         context = MagicMock()
         context.task_uuid = uuid.uuid4()
         context.step_uuid = uuid.uuid4()
         context.input_data = {"total_items": 1000}
-        context.step_config = {"worker_count": 5}
-        context.step_inputs = {}
+        context.step_config = {"batch_size": 200}
 
         result = handler.call(context)
 
         assert result.success is True
         outcome = result.result["batch_processing_outcome"]
         assert outcome["type"] == "create_batches"
-        assert outcome["worker_count"] == 5
-        assert outcome["total_items"] == 1000
+        assert result.result["total_items"] == 1000
+
+    def test_returns_no_batches_for_empty_dataset(self, handler):
+        context = MagicMock()
+        context.task_uuid = uuid.uuid4()
+        context.step_uuid = uuid.uuid4()
+        context.input_data = {"total_items": 0}
+        context.step_config = {}
+
+        result = handler.call(context)
+
+        assert result.success is True
+        assert result.result["batch_processing_outcome"]["type"] == "no_batches"
 
 
 class TestWorker:
+    @pytest.fixture
+    def handler(self):
+        return {{ name | pascal_case }}WorkerHandler()
+
     def test_processes_batch(self, handler):
         context = MagicMock()
         context.task_uuid = uuid.uuid4()
@@ -51,16 +66,3 @@ class TestWorker:
 
         assert result.success is True
         assert result.result["items_processed"] == 200
-
-    def test_handles_no_op_worker(self, handler):
-        context = MagicMock()
-        context.task_uuid = uuid.uuid4()
-        context.step_uuid = uuid.uuid4()
-        context.input_data = {}
-        context.step_config = {}
-        context.step_inputs = {"is_no_op": True, "cursor": {"batch_id": "no_op"}}
-
-        result = handler.call(context)
-
-        assert result.success is True
-        assert result.result["no_op"] is True

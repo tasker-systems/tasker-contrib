@@ -4,7 +4,6 @@ import uuid
 from unittest.mock import MagicMock
 
 import pytest
-
 from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
 
 

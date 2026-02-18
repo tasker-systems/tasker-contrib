@@ -1,6 +1,6 @@
 """{{ name | pascal_case }} step handler for Tasker workflow processing."""
 
-from tasker_core import StepHandler, StepContext, StepHandlerResult
+from tasker_core import StepContext, StepHandler, StepHandlerResult
 
 
 class {{ name | pascal_case }}Handler(StepHandler):

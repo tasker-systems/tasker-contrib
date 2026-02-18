@@ -23,12 +23,6 @@ export class {{ name | pascal_case }}Handler extends ApiHandler {
   static baseUrl = '{{ base_url }}';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
-    // Override base URL from step config if provided
-    const configBaseUrl = context.stepConfig['base_url'] as string | undefined;
-    if (configBaseUrl) {
-      (this.constructor as typeof ApiHandler).baseUrl = configBaseUrl;
-    }
-
     const endpoint = (context.inputData['endpoint'] as string) || '/resource';
 
     try {
