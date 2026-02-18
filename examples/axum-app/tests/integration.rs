@@ -236,6 +236,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_create_order_async() {
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{}/orders/async", base_url()))
+            .json(&json!({
+                "customer_email": "async-test@example.com",
+                "cart_items": [
+                    {"sku": "A1", "name": "Async Widget", "quantity": 1, "unit_price": 24.99}
+                ],
+                "payment_token": "tok_test_async",
+                "shipping_address": {
+                    "street": "2 Async Ave",
+                    "city": "Testville",
+                    "state": "OR",
+                    "zip": "97201",
+                    "country": "US"
+                }
+            }))
+            .send()
+            .await
+            .expect("Failed to send request");
+
+        assert_eq!(res.status(), 202, "Expected 202 Accepted");
+
+        let body: serde_json::Value = res.json().await.expect("Failed to parse response");
+        assert!(body["data"]["id"].is_number(), "Response should contain order ID");
+        assert_eq!(body["data"]["status"].as_str().unwrap(), "queued");
+    }
+
+    #[tokio::test]
     async fn test_get_order_not_found() {
         let client = reqwest::Client::new();
         let res = client
@@ -361,7 +391,69 @@ mod tests {
             .expect("Expected validate_cart step");
         assert!(validate_step["attempts"].as_i64().unwrap() >= 1);
 
-        println!("  E-commerce task: {} ({}/5 steps complete)", status, completed);
+        println!("  E-commerce task (sync): {} ({}/5 steps complete)", status, completed);
+    }
+
+    #[tokio::test]
+    async fn test_ecommerce_order_async_dispatches_and_processes() {
+        let client = reqwest::Client::new();
+        let res = client
+            .post(format!("{}/orders/async", base_url()))
+            .json(&json!({
+                "customer_email": "async-completion@example.com",
+                "cart_items": [
+                    {"sku": "A1", "name": "Async Widget", "quantity": 1, "unit_price": 24.99}
+                ],
+                "payment_token": "tok_test_async",
+                "shipping_address": {
+                    "street": "2 Async Ave",
+                    "city": "Testville",
+                    "state": "OR",
+                    "zip": "97201",
+                    "country": "US"
+                }
+            }))
+            .send()
+            .await
+            .expect("Failed to send request");
+
+        assert_eq!(res.status(), 202);
+        let body: serde_json::Value = res.json().await.unwrap();
+        let order_id = body["data"]["id"].as_i64().expect("Expected order ID");
+        assert_eq!(body["data"]["status"].as_str().unwrap(), "queued");
+
+        // Poll the app for the task_uuid (background task creates the workflow)
+        let mut task_uuid = None;
+        for _ in 0..15 {
+            let order_res = client
+                .get(format!("{}/orders/{}", base_url(), order_id))
+                .send()
+                .await
+                .expect("Failed to get order");
+            let order_body: serde_json::Value = order_res.json().await.unwrap();
+            if let Some(uuid) = order_body["data"]["task_uuid"].as_str() {
+                task_uuid = Some(uuid.to_string());
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        let task_uuid = task_uuid.expect("Background task did not create workflow within 15s");
+
+        let task = wait_for_task_completion(&client, &task_uuid).await;
+
+        let status = task["status"].as_str().unwrap();
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
+        assert_eq!(task["total_steps"].as_i64().unwrap(), 5);
+
+        let steps = task["steps"].as_array().expect("Expected steps array");
+        let completed = steps
+            .iter()
+            .filter(|s| s["current_state"].as_str() == Some("complete"))
+            .count();
+        assert_eq!(completed, 5, "Expected all 5 steps to complete, got {}", completed);
+
+        println!("  E-commerce task (async): {} ({}/5 steps complete)", status, completed);
     }
 
     #[tokio::test]

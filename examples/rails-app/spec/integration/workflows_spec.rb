@@ -41,6 +41,16 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
       expect(body['status']).to eq('processing')
     end
 
+    it 'submits an async order and returns 202 Accepted' do
+      post '/orders/create_async', params: order_payload, as: :json
+
+      expect(response).to have_http_status(:accepted)
+
+      body = JSON.parse(response.body)
+      expect(body['id']).to be_present
+      expect(body['status']).to eq('queued')
+    end
+
     it 'retrieves order status with task enrichment' do
       post '/orders', params: order_payload, as: :json
       order_id = JSON.parse(response.body)['id']
@@ -234,7 +244,7 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
     include TaskPolling
 
     describe 'E-commerce order task dispatches and processes' do
-      it 'creates task, dispatches steps, and reaches terminal status' do
+      it 'creates task synchronously and all steps complete' do
         post '/orders', params: {
           order: {
             customer_email: 'completion-test@example.com',
@@ -254,22 +264,62 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        # Task must fully complete (all steps successful)
         expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(5)
 
-        # All steps must have reached "complete" state
         steps = task['steps']
         expect(steps.length).to eq(5)
         completed = steps.count { |s| s['current_state'] == 'complete' }
         expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
 
-        # Handler dispatch works: first step was attempted
         validate_step = steps.find { |s| s['name'] == 'validate_cart' }
         expect(validate_step).to be_present
         expect(validate_step['attempts']).to be >= 1
 
-        puts "  E-commerce task: #{task['status']} (#{completed}/5 steps complete)"
+        puts "  E-commerce task (sync): #{task['status']} (#{completed}/5 steps complete)"
+      end
+
+      it 'creates task via async endpoint (background job) and all steps complete' do
+        post '/orders/create_async', params: {
+          order: {
+            customer_email: 'async-completion@example.com',
+            cart_items: [
+              { sku: 'SKU-ASYNC', name: 'Async Widget', quantity: 1, unit_price: 24.99 }
+            ],
+            payment_token: 'tok_test_async',
+            shipping_address: {
+              street: '2 Async Ave', city: 'Testville', state: 'OR', zip: '97201', country: 'US'
+            }
+          }
+        }, as: :json
+
+        expect(response).to have_http_status(:accepted)
+        body = JSON.parse(response.body)
+        order_id = body['id']
+        expect(order_id).to be_present
+        expect(body['status']).to eq('queued')
+
+        # Poll the app for the task_uuid (background job creates the task)
+        task_uuid = nil
+        15.times do
+          get "/orders/#{order_id}", as: :json
+          order_body = JSON.parse(response.body)
+          task_uuid = order_body['task_uuid']
+          break if task_uuid.present?
+
+          sleep 1
+        end
+        expect(task_uuid).to be_present, 'Background job did not create task within 15s'
+
+        task = wait_for_task_completion(task_uuid)
+
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
+        expect(task['total_steps']).to eq(5)
+
+        completed = task['steps'].count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
+
+        puts "  E-commerce task (async): #{task['status']} (#{completed}/5 steps complete)"
       end
     end
 

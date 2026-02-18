@@ -76,6 +76,20 @@ describe('E-commerce workflow', () => {
     }
   });
 
+  test('POST /orders/async queues order and returns 202', async () => {
+    const res = await postJson('/orders/async', {
+      customer_email: 'async-test@example.com',
+      items: [{ sku: 'ASYNC-001', name: 'Async Widget', price: 24.99, quantity: 1 }],
+      payment_info: { method: 'credit_card', card_last_four: '4242' },
+    });
+
+    expect(res.status).toBe(202);
+
+    const body = await res.json();
+    expect(body.id).toBeDefined();
+    expect(body.status).toBe('queued');
+  });
+
   test('POST /orders validates required fields', async () => {
     const res = await postJson('/orders', {
       customer_email: 'test@example.com',
@@ -268,7 +282,44 @@ describe('Task Completion Verification', () => {
     expect(validateStep).toBeDefined();
     expect(validateStep!.attempts).toBeGreaterThanOrEqual(1);
 
-    console.log(`  E-commerce task: ${task.status} (${completed}/5 steps complete)`);
+    console.log(`  E-commerce task (sync): ${task.status} (${completed}/5 steps complete)`);
+  });
+
+  test('E-commerce order async dispatches via background and reaches terminal status', async () => {
+    const { waitForTaskCompletion, getTask } = await import('./helpers');
+
+    const res = await postJson('/orders/async', {
+      customer_email: 'async-completion@example.com',
+      items: [{ sku: 'ASYNC-001', name: 'Async Widget', price: 24.99, quantity: 1 }],
+      payment_info: { method: 'credit_card', card_last_four: '4242' },
+    });
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    const orderId = body.id;
+    expect(body.status).toBe('queued');
+
+    // Poll the app for the task_uuid (background creates the workflow)
+    let taskUuid: string | undefined;
+    for (let i = 0; i < 15; i++) {
+      const orderRes = await req(`/orders/${orderId}`);
+      const orderBody = await orderRes.json();
+      if (orderBody.task_uuid) {
+        taskUuid = orderBody.task_uuid;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    expect(taskUuid).toBeDefined();
+
+    const task = await waitForTaskCompletion(taskUuid!);
+
+    expect(task.status).toBe('complete');
+    expect(task.total_steps).toBe(5);
+
+    const completed = task.steps.filter((s) => s.current_state === 'complete').length;
+    expect(completed).toBe(5);
+
+    console.log(`  E-commerce task (async): ${task.status} (${completed}/5 steps complete)`);
   });
 
   test('User registration dispatches diamond pattern and reaches terminal status', async () => {

@@ -51,6 +51,31 @@ class TestEcommerceOrderWorkflow:
         assert "created_at" in data
 
     @pytest.mark.asyncio
+    async def test_create_order_async(self, client: AsyncClient) -> None:
+        """POST /orders/async queues an order and returns 202."""
+        response = await client.post(
+            "/orders/async",
+            json={
+                "customer_email": "async-test@example.com",
+                "items": [
+                    {
+                        "sku": "ASYNC-001",
+                        "name": "Async Widget",
+                        "quantity": 1,
+                        "unit_price": 24.99,
+                    }
+                ],
+                "payment_token": "tok_test_async",
+                "shipping_address": "2 Async Ave, Testville, US 97201",
+            },
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["status"] == "queued"
+        assert "id" in data
+
+    @pytest.mark.asyncio
     async def test_get_order(self, client: AsyncClient) -> None:
         """POST then GET /orders/{id} returns order with status."""
         create_response = await client.post(
@@ -302,7 +327,7 @@ class TestTaskCompletionVerification:
     async def test_ecommerce_order_dispatches_and_processes(
         self, client: AsyncClient
     ) -> None:
-        """E-commerce order: task created, steps dispatched, reaches terminal status."""
+        """E-commerce order (sync): task created, steps dispatched, all complete."""
         from tests.helpers import wait_for_task_completion
 
         response = await client.post(
@@ -329,24 +354,74 @@ class TestTaskCompletionVerification:
 
         task = await wait_for_task_completion(task_uuid)
 
-        # Task must fully complete (all steps successful)
         assert task["status"] == "complete", f"Expected task to complete, got: {task['status']}"
         assert task["total_steps"] == 5
 
-        # All steps must have reached "complete" state
         steps = task["steps"]
         assert len(steps) == 5
         completed = sum(1 for s in steps if s["current_state"] == "complete")
         assert completed == 5, f"Expected all 5 steps to complete, got {completed}"
 
-        # Handler dispatch works: first step was attempted
         validate_step = next(
             (s for s in steps if s["name"] == "validate_cart"), None
         )
         assert validate_step is not None
         assert validate_step["attempts"] >= 1
 
-        print(f"  E-commerce task: {task['status']} ({completed}/5 steps complete)")
+        print(f"  E-commerce task (sync): {task['status']} ({completed}/5 steps complete)")
+
+    @pytest.mark.asyncio
+    async def test_ecommerce_order_async_dispatches_and_processes(
+        self, client: AsyncClient
+    ) -> None:
+        """E-commerce order (async): background task creates workflow, all steps complete."""
+        import asyncio
+
+        from tests.helpers import wait_for_task_completion
+
+        response = await client.post(
+            "/orders/async",
+            json={
+                "customer_email": "async-completion@example.com",
+                "items": [
+                    {
+                        "sku": "ASYNC-001",
+                        "name": "Async Widget",
+                        "quantity": 1,
+                        "unit_price": 24.99,
+                    }
+                ],
+                "payment_token": "tok_test_async",
+                "shipping_address": "2 Async Ave, Testville, US 97201",
+            },
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        order_id = data["id"]
+        assert data["status"] == "queued"
+
+        # Poll the app for the task_uuid (background task creates the workflow)
+        task_uuid = None
+        for _ in range(15):
+            order_response = await client.get(f"/orders/{order_id}")
+            order_data = order_response.json()
+            task_uuid = order_data.get("task_uuid")
+            if task_uuid:
+                break
+            await asyncio.sleep(1)
+
+        assert task_uuid, "Background task did not create workflow within 15s"
+
+        task = await wait_for_task_completion(task_uuid)
+
+        assert task["status"] == "complete", f"Expected task to complete, got: {task['status']}"
+        assert task["total_steps"] == 5
+
+        completed = sum(1 for s in task["steps"] if s["current_state"] == "complete")
+        assert completed == 5, f"Expected all 5 steps to complete, got {completed}"
+
+        print(f"  E-commerce task (async): {task['status']} ({completed}/5 steps complete)")
 
     @pytest.mark.asyncio
     async def test_analytics_pipeline_dispatches_and_processes(
