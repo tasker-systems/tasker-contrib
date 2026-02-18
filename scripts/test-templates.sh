@@ -162,8 +162,8 @@ with open(sys.argv[1], 'rb') as f:
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-# Write a .tasker-cli.toml pointing at the repo root
-cat > "$WORK_DIR/.tasker-cli.toml" <<EOF
+# Write a .tasker-ctl.toml pointing at the repo root
+cat > "$WORK_DIR/.tasker-ctl.toml" <<EOF
 plugin-paths = ["$REPO_ROOT"]
 EOF
 
