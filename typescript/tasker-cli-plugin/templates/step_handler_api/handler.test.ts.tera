@@ -9,7 +9,7 @@ describe('{{ name | pascal_case }}Handler', () => {
     stepUuid: crypto.randomUUID(),
     inputData: { endpoint: '/users/1' },
     dependencyResults: {},
-    stepConfig: { base_url: '{{ base_url }}' },
+    stepConfig: {},
     stepInputs: {},
     retryCount: 0,
     maxRetries: 3,
@@ -36,6 +36,10 @@ describe('{{ name | pascal_case }}Handler', () => {
   describe('metadata', () => {
     it('has the correct handler name', () => {
       expect({{ name | pascal_case }}Handler.handlerName).toBe('{{ name | snake_case }}');
+    });
+
+    it('has the correct base URL', () => {
+      expect({{ name | pascal_case }}Handler.baseUrl).toBe('{{ base_url }}');
     });
   });
 });

@@ -1,0 +1,48 @@
+# RuboCop configuration for linting generated Ruby handler templates.
+#
+# These are scaffolded files — we check for correctness not perfection.
+
+AllCops:
+  TargetRubyVersion: 3.4
+  NewCops: enable
+  SuggestExtensions: false
+
+# Generated handlers are self-documenting via the class structure
+Style/Documentation:
+  Enabled: false
+
+# Scaffold methods may be longer than typical production code
+Metrics/MethodLength:
+  Max: 30
+
+# Scaffold classes may be longer than typical production code
+Metrics/ClassLength:
+  Max: 150
+
+Layout/LineLength:
+  Max: 120
+
+# Generated code uses string interpolation which is fine
+Style/StringLiterals:
+  Enabled: false
+
+# RSpec describe/context blocks are naturally long in generated specs
+Metrics/BlockLength:
+  Max: 60
+
+# Scaffold code uses TODO placeholders with assigned-but-unused variables
+Lint/UselessAssignment:
+  Enabled: false
+
+# Handler method signatures follow the StepHandler contract even if
+# not all parameters are used in the scaffold
+Lint/UnusedMethodArgument:
+  Enabled: false
+
+# Scaffold readability: explicit if blocks are clearer than one-liners
+Style/IfUnlessModifier:
+  Enabled: false
+
+# Single-element arrays are clearer as literals in scaffold code
+Style/WordArray:
+  Enabled: false

@@ -1,0 +1,6 @@
+# Generated template output (created/cleaned by lint-templates.sh)
+generated/
+
+# Dynamic configs written by lint-templates.sh
+pyrightconfig.json
+tsconfig.json

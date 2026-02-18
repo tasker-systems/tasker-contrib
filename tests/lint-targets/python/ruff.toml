@@ -1,0 +1,22 @@
+# Ruff configuration for linting generated Python handler templates.
+#
+# These are scaffolded files — we check for correctness not perfection.
+# Style rules (quotes, trailing commas) are intentionally excluded.
+
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes (unused imports, undefined names, etc.)
+  "I",   # isort (import ordering)
+  "UP",  # pyupgrade (Python version idioms)
+  "W",   # pycodestyle warnings
+]
+
+# Rules that don't apply to generated scaffold code
+ignore = [
+  "E501",  # line length — templates may exceed for readability
+  "F841",  # local variable assigned but never used — TODO placeholders
+]

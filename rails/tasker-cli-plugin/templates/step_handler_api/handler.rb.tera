@@ -18,46 +18,29 @@ module {{ module_name }}
     include TaskerCore::StepHandler::Mixins::API
 
     def call(context)
-      base_url = context.step_config['base_url'] || '{{ base_url }}'
-
       # Build the API request from context
       endpoint = context.input_data['endpoint'] || '/resource'
-      url = "#{base_url}#{endpoint}"
 
       # Make the HTTP request using the API mixin
-      response = connection(url: base_url).get(endpoint)
+      response = get(endpoint)
+      body = JSON.parse(response.body)
 
-      if response.success?
-        body = JSON.parse(response.body)
-        success(
-          result: body,
-          metadata: {
-            status_code: response.status,
-            endpoint: endpoint
-          }
-        )
-      else
-        failure(
-          message: "API request failed: HTTP #{response.status}",
-          error_type: response.status >= 500 ? 'RetryableError' : 'PermanentError',
-          retryable: response.status >= 500,
-          metadata: {
-            status_code: response.status,
-            endpoint: endpoint
-          }
-        )
-      end
+      api_success(
+        data: body,
+        status: response.status,
+        metadata: { endpoint: endpoint }
+      )
     rescue Faraday::TimeoutError => e
-      failure(
+      api_failure(
         message: "API timeout: #{e.message}",
-        error_type: 'RetryableError',
-        retryable: true
+        status: 408,
+        metadata: { endpoint: endpoint }
       )
     rescue Faraday::ConnectionFailed => e
-      failure(
+      api_failure(
         message: "API connection failed: #{e.message}",
-        error_type: 'RetryableError',
-        retryable: true
+        status: 503,
+        metadata: { endpoint: endpoint }
       )
     end
   end
