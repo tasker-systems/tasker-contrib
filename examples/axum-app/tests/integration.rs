@@ -312,8 +312,8 @@ mod tests {
 
     // -----------------------------------------------------------------------
     // Completion tests verify the full infrastructure loop: task creation,
-    // step dispatch, handler execution, and result processing. Tasks reach
-    // a terminal status (complete or blocked_by_failures).
+    // step dispatch, handler execution, and result processing. All tasks
+    // must reach "complete" status with every step in "complete" state.
     // -----------------------------------------------------------------------
 
     #[tokio::test]
@@ -348,28 +348,27 @@ mod tests {
 
         let task = wait_for_task_completion(&client, task_uuid).await;
 
-        // Task reached a terminal status (infrastructure loop works)
+        // Task must fully complete (all steps successful)
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 5);
 
-        // At least the first step was attempted (handler dispatch works)
+        // All steps must have reached "complete" state
         let steps = task["steps"].as_array().expect("Expected steps array");
         assert_eq!(steps.len(), 5);
+        let completed = steps
+            .iter()
+            .filter(|s| s["current_state"].as_str() == Some("complete"))
+            .count();
+        assert_eq!(completed, 5, "Expected all 5 steps to complete, got {}", completed);
+
+        // Handler dispatch works: first step was attempted
         let validate_step = steps
             .iter()
             .find(|s| s["name"].as_str() == Some("validate_cart"))
             .expect("Expected validate_cart step");
         assert!(validate_step["attempts"].as_i64().unwrap() >= 1);
 
-        let completed = steps
-            .iter()
-            .filter(|s| s["current_state"].as_str() == Some("complete"))
-            .count();
         println!("  E-commerce task: {} ({}/5 steps complete)", status, completed);
     }
 
@@ -400,11 +399,7 @@ mod tests {
         let task = wait_for_task_completion(&client, task_uuid).await;
 
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 8);
 
         let steps = task["steps"].as_array().expect("Expected steps array");
@@ -438,10 +433,13 @@ mod tests {
             .count();
         assert!(attempted >= 1, "Expected at least one extract step to be attempted");
 
+        // All steps must have reached "complete" state
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
+        assert_eq!(completed, 8, "Expected all 8 steps to complete, got {}", completed);
+
         println!(
             "  Analytics task: {} ({}/8 steps complete)",
             status, completed
@@ -471,13 +469,9 @@ mod tests {
 
         let task = wait_for_task_completion(&client, task_uuid).await;
 
-        // Task reached a terminal status (infrastructure loop works)
+        // Task must fully complete (all steps successful)
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 5);
 
         // Verify diamond pattern: 5 steps present
@@ -503,17 +497,20 @@ mod tests {
             );
         }
 
-        // At least the first step was attempted (handler dispatch works)
+        // Handler dispatch works: first step was attempted
         let create_step = steps
             .iter()
             .find(|s| s["name"].as_str() == Some("create_user_account"))
             .expect("Expected create_user_account step");
         assert!(create_step["attempts"].as_i64().unwrap() >= 1);
 
+        // All steps must have reached "complete" state
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
+        assert_eq!(completed, 5, "Expected all 5 steps to complete, got {}", completed);
+
         println!(
             "  User registration task: {} ({}/5 steps complete)",
             status, completed
@@ -548,11 +545,7 @@ mod tests {
         let task = wait_for_task_completion(&client, task_uuid).await;
 
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 5);
 
         let steps = task["steps"].as_array().expect("Expected steps array");
@@ -577,17 +570,20 @@ mod tests {
             );
         }
 
-        // At least the first step was attempted
+        // Handler dispatch works: first step was attempted
         let validate_step = steps
             .iter()
             .find(|s| s["name"].as_str() == Some("validate_refund_request"))
             .expect("Expected validate_refund_request step");
         assert!(validate_step["attempts"].as_i64().unwrap() >= 1);
 
+        // All steps must have reached "complete" state
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
+        assert_eq!(completed, 5, "Expected all 5 steps to complete, got {}", completed);
+
         println!(
             "  Customer success refund task: {} ({}/5 steps complete)",
             status, completed
@@ -627,11 +623,7 @@ mod tests {
         let task = wait_for_task_completion(&client, task_uuid).await;
 
         let status = task["status"].as_str().unwrap();
-        assert!(
-            ["complete", "blocked_by_failures", "error"].contains(&status),
-            "Expected terminal status, got: {}",
-            status
-        );
+        assert_eq!(status, "complete", "Expected task to complete, got: {}", status);
         assert_eq!(task["total_steps"].as_i64().unwrap(), 4);
 
         let steps = task["steps"].as_array().expect("Expected steps array");
@@ -655,17 +647,20 @@ mod tests {
             );
         }
 
-        // At least the first step was attempted
+        // Handler dispatch works: first step was attempted
         let validate_step = steps
             .iter()
             .find(|s| s["name"].as_str() == Some("validate_payment_eligibility"))
             .expect("Expected validate_payment_eligibility step");
         assert!(validate_step["attempts"].as_i64().unwrap() >= 1);
 
+        // All steps must have reached "complete" state
         let completed = steps
             .iter()
             .filter(|s| s["current_state"].as_str() == Some("complete"))
             .count();
+        assert_eq!(completed, 4, "Expected all 4 steps to complete, got {}", completed);
+
         println!(
             "  Payments refund task: {} ({}/4 steps complete)",
             status, completed

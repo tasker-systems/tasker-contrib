@@ -262,19 +262,21 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        # Task reached a terminal status (infrastructure loop works)
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        # Task must fully complete (all steps successful)
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(5)
 
-        # At least the first step was attempted (handler dispatch works)
+        # All steps must have reached "complete" state
         steps = task['steps']
         expect(steps.length).to eq(5)
+        completed = steps.count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
+
+        # Handler dispatch works: first step was attempted
         validate_step = steps.find { |s| s['name'] == 'validate_cart' }
         expect(validate_step).to be_present
         expect(validate_step['attempts']).to be >= 1
 
-        # Report completion state for visibility
-        completed = steps.count { |s| s['current_state'] == 'complete' }
         puts "  E-commerce task: #{task['status']} (#{completed}/5 steps complete)"
       end
     end
@@ -298,7 +300,7 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(8)
 
         steps = task['steps']
@@ -314,7 +316,10 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
         attempted = extract_steps.count { |s| s['attempts'] > 0 }
         expect(attempted).to be >= 1, 'Expected at least one extract step to be attempted'
 
+        # All steps must have reached "complete" state
         completed = steps.count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(8), "Expected all 8 steps to complete, got #{completed}"
+
         puts "  Analytics task: #{task['status']} (#{completed}/8 steps complete)"
       end
     end
@@ -338,7 +343,7 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(5)
 
         steps = task['steps']
@@ -349,7 +354,10 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
           expect(step_names).to include(name), "Expected step '#{name}' to be present"
         end
 
+        # All steps must have reached "complete" state
         completed = steps.count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
+
         puts "  User registration task: #{task['status']} (#{completed}/5 steps complete)"
       end
     end
@@ -375,10 +383,13 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(5)
 
+        # All steps must have reached "complete" state
         completed = task['steps'].count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
+
         puts "  Customer success refund task: #{task['status']} (#{completed}/5 steps complete)"
       end
     end
@@ -404,10 +415,13 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         task = wait_for_task_completion(task_uuid)
 
-        expect(%w[complete blocked_by_failures error]).to include(task['status'])
+        expect(task['status']).to eq('complete'), "Expected task to complete, got: #{task['status']}"
         expect(task['total_steps']).to eq(4)
 
+        # All steps must have reached "complete" state
         completed = task['steps'].count { |s| s['current_state'] == 'complete' }
+        expect(completed).to eq(4), "Expected all 4 steps to complete, got #{completed}"
+
         puts "  Payments refund task: #{task['status']} (#{completed}/4 steps complete)"
       end
     end

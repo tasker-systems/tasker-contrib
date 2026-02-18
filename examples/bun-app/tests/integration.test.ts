@@ -259,15 +259,17 @@ completionDescribe('Task Completion Verification', () => {
 
     const task = await waitForTaskCompletion(body.task_uuid);
 
-    expect(['complete', 'blocked_by_failures', 'error']).toContain(task.status);
+    expect(task.status).toBe('complete');
     expect(task.total_steps).toBe(5);
 
     expect(task.steps).toHaveLength(5);
+    const completed = task.steps.filter((s) => s.current_state === 'complete').length;
+    expect(completed).toBe(5);
+
     const validateStep = task.steps.find((s) => s.name === 'validate_cart');
     expect(validateStep).toBeDefined();
     expect(validateStep!.attempts).toBeGreaterThanOrEqual(1);
 
-    const completed = task.steps.filter((s) => s.current_state === 'complete').length;
     console.log(`  E-commerce task: ${task.status} (${completed}/5 steps complete)`);
   });
 
@@ -286,7 +288,7 @@ completionDescribe('Task Completion Verification', () => {
 
     const task = await waitForTaskCompletion(body.task_uuid);
 
-    expect(['complete', 'blocked_by_failures', 'error']).toContain(task.status);
+    expect(task.status).toBe('complete');
     expect(task.total_steps).toBe(5);
 
     expect(task.steps).toHaveLength(5);
@@ -302,6 +304,8 @@ completionDescribe('Task Completion Verification', () => {
     expect(createStep!.attempts).toBeGreaterThanOrEqual(1);
 
     const completed = task.steps.filter((s) => s.current_state === 'complete').length;
+    expect(completed).toBe(5);
+
     console.log(`  User registration task: ${task.status} (${completed}/5 steps complete)`);
   });
 
@@ -330,7 +334,7 @@ completionDescribe('Task Completion Verification', () => {
     expect(csTaskUuid).toBeDefined();
     const csTask = await waitForTaskCompletion(csTaskUuid);
 
-    expect(['complete', 'blocked_by_failures', 'error']).toContain(csTask.status);
+    expect(csTask.status).toBe('complete');
     expect(csTask.total_steps).toBe(5);
 
     expect(csTask.steps).toHaveLength(5);
@@ -346,6 +350,8 @@ completionDescribe('Task Completion Verification', () => {
     expect(csValidateStep!.attempts).toBeGreaterThanOrEqual(1);
 
     const csCompleted = csTask.steps.filter((s) => s.current_state === 'complete').length;
+    expect(csCompleted).toBe(5);
+
     console.log(`  Customer success refund task: ${csTask.status} (${csCompleted}/5 steps complete)`);
 
     // Verify payments task
@@ -353,7 +359,7 @@ completionDescribe('Task Completion Verification', () => {
     expect(payTaskUuid).toBeDefined();
     const payTask = await waitForTaskCompletion(payTaskUuid);
 
-    expect(['complete', 'blocked_by_failures', 'error']).toContain(payTask.status);
+    expect(payTask.status).toBe('complete');
     expect(payTask.total_steps).toBe(4);
 
     expect(payTask.steps).toHaveLength(4);
@@ -368,6 +374,8 @@ completionDescribe('Task Completion Verification', () => {
     expect(payValidateStep!.attempts).toBeGreaterThanOrEqual(1);
 
     const payCompleted = payTask.steps.filter((s) => s.current_state === 'complete').length;
+    expect(payCompleted).toBe(4);
+
     console.log(`  Payments refund task: ${payTask.status} (${payCompleted}/4 steps complete)`);
   });
 
@@ -385,7 +393,7 @@ completionDescribe('Task Completion Verification', () => {
 
     const task = await waitForTaskCompletion(body.task_uuid);
 
-    expect(['complete', 'blocked_by_failures', 'error']).toContain(task.status);
+    expect(task.status).toBe('complete');
     expect(task.total_steps).toBe(8);
 
     const stepNames = task.steps.map((s) => s.name);
@@ -398,6 +406,8 @@ completionDescribe('Task Completion Verification', () => {
     expect(attempted).toBeGreaterThanOrEqual(1);
 
     const completed = task.steps.filter((s) => s.current_state === 'complete').length;
+    expect(completed).toBe(8);
+
     console.log(`  Analytics task: ${task.status} (${completed}/8 steps complete)`);
   });
 });
