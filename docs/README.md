@@ -1,5 +1,8 @@
 # Tasker Contrib Documentation
 
+> Consumer-facing documentation is published in [The Tasker Book](https://github.com/tasker-systems/tasker-book).
+> See the [Documentation Architecture](https://github.com/tasker-systems/tasker-book/blob/main/DOCUMENTATION-ARCHITECTURE.md) for the cross-repo ownership model.
+
 ## Quick Links
 
 | Document | Description |
