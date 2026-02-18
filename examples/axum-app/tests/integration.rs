@@ -12,11 +12,8 @@
 //! # 1. Start shared infrastructure
 //! cd examples/ && docker compose up -d
 //!
-//! # 2. Run tests (no separate server needed)
-//! cd examples/axum-app && cargo test
-//!
-//! # 3. Run completion tests (verifies end-to-end handler execution)
-//! cd examples/axum-app && RUN_COMPLETION_TESTS=1 cargo test -- --include-ignored
+//! # 2. Run all tests (including completion verification)
+//! cd examples/axum-app && cargo nextest run
 //! ```
 
 #[cfg(test)]
@@ -31,9 +28,8 @@ mod tests {
     /// Uses a dedicated tokio runtime on a background thread so it doesn't
     /// conflict with #[tokio::test]'s per-test runtime.
     ///
-    /// When `RUN_COMPLETION_TESTS=1`, the Tasker worker is also bootstrapped
-    /// so that templates are registered with orchestration and step handlers
-    /// can execute.
+    /// The Tasker worker is bootstrapped so that templates are registered
+    /// with orchestration and step handlers can execute.
     fn base_url() -> &'static str {
         TEST_SERVER_URL.get_or_init(|| {
             dotenvy::dotenv().ok();
@@ -61,10 +57,9 @@ mod tests {
                         .await
                         .expect("Failed to run migrations");
 
-                    // Bootstrap the Tasker worker when completion tests are enabled.
-                    // This registers templates with orchestration and starts the
-                    // handler dispatch pipeline so steps can execute.
-                    if std::env::var("RUN_COMPLETION_TESTS").is_ok() {
+                    // Bootstrap the Tasker worker: register templates with
+                    // orchestration and start the handler dispatch pipeline.
+                    {
                         use tasker_worker::worker::handlers::{
                             HandlerDispatchConfig, HandlerDispatchService, NoOpCallback,
                         };
@@ -92,7 +87,7 @@ mod tests {
                             });
                         }
 
-                        eprintln!("Tasker worker bootstrapped for completion tests");
+                        eprintln!("Tasker worker bootstrapped");
                     }
 
                     let app = example_axum_app::create_app(pool);
@@ -308,16 +303,13 @@ mod tests {
 
     // -----------------------------------------------------------------------
     // Task Completion Verification
-    // -----------------------------------------------------------------------
-
-    // -----------------------------------------------------------------------
-    // Completion tests verify the full infrastructure loop: task creation,
-    // step dispatch, handler execution, and result processing. All tasks
-    // must reach "complete" status with every step in "complete" state.
+    //
+    // These tests verify the full infrastructure loop: task creation, step
+    // dispatch, handler execution, and result processing. All tasks must
+    // reach "complete" status with every step in "complete" state.
     // -----------------------------------------------------------------------
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_ecommerce_order_dispatches_and_processes() {
         let client = reqwest::Client::new();
         let res = client
@@ -373,7 +365,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_analytics_pipeline_dispatches_and_processes() {
         let client = reqwest::Client::new();
         let res = client
@@ -447,7 +438,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_user_registration_dispatches_and_processes() {
         let client = reqwest::Client::new();
         let res = client
@@ -518,7 +508,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_customer_success_refund_dispatches_and_processes() {
         let client = reqwest::Client::new();
         let res = client
@@ -591,7 +580,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Set RUN_COMPLETION_TESTS=1 and run with --include-ignored"]
     async fn test_payments_refund_dispatches_and_processes() {
         let client = reqwest::Client::new();
 

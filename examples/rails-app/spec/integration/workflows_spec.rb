@@ -226,19 +226,11 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
   # --------------------------------------------------------------------------
   # 5. Task Completion Verification
   #
-  # These tests create tasks through the app endpoints and then poll the
-  # orchestration API to verify that all steps complete successfully.
-  # They require a running orchestration server and worker.
+  # These tests verify the full infrastructure loop: creating tasks through
+  # app endpoints, polling the orchestration API, and confirming all steps
+  # reach "complete" state. Requires docker-compose services running.
   # --------------------------------------------------------------------------
-  # --------------------------------------------------------------------------
-  # 5. Task Completion Verification
-  #
-  # These tests verify end-to-end task dispatch: creating tasks through app
-  # endpoints, polling the orchestration API, and confirming steps were
-  # dispatched and processed. Tasks reach a terminal status (complete or
-  # blocked_by_failures) which proves the full infrastructure loop works.
-  # --------------------------------------------------------------------------
-  describe 'Task Completion Verification', :completion, skip: ENV['RUN_COMPLETION_TESTS'].nil? ? 'Set RUN_COMPLETION_TESTS=1 to run' : false do
+  describe 'Task Completion Verification', :completion do
     include TaskPolling
 
     describe 'E-commerce order task dispatches and processes' do

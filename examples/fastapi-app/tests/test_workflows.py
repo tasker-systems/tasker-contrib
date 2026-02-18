@@ -9,8 +9,6 @@ Run with: pytest tests/ -v
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from httpx import AsyncClient
 
@@ -289,10 +287,6 @@ class TestHealthEndpoint:
 
 
 @pytest.mark.completion
-@pytest.mark.skipif(
-    not os.environ.get("RUN_COMPLETION_TESTS"),
-    reason="Set RUN_COMPLETION_TESTS=1 to run completion verification tests",
-)
 class TestTaskCompletionVerification:
     """Verify end-to-end task dispatch through the orchestration loop.
 

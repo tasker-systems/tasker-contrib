@@ -186,9 +186,7 @@ describe('Microservices user registration workflow', () => {
   });
 });
 
-const completionDescribe = process.env.RUN_COMPLETION_TESTS ? describe : describe.skip;
-
-completionDescribe('Task Completion Verification', () => {
+describe('Task Completion Verification', () => {
   // Bootstrap the Tasker worker before completion tests.
   // This initializes WORKER_SYSTEM (required for TaskerClient.createTask()),
   // registers templates with orchestration, and starts step dispatch.

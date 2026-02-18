@@ -1,13 +1,20 @@
 # Tasker Contrib — cargo-make task definitions
 #
 # Usage:
-#   cargo make build-ctl         # Build tasker-ctl from tasker-core source
-#   cargo make validate     (v)  # Validate all plugin manifests
-#   cargo make test-templates(tt)# Tier 1: generate + syntax check all templates
-#   cargo make test-all     (ta) # Run all validation
-#   cargo make ci-sanity-check   # Validate scripts, workflows, and references
-#   cargo make ci-check          # All quality checks + CI sanity
-#   cargo make cleanup-keep      # Remove .keep from populated template dirs
+#   cargo make build-ctl              # Build tasker-ctl from tasker-core source
+#   cargo make validate          (v)  # Validate all plugin manifests
+#   cargo make test-templates    (tt) # Tier 1: generate + syntax check all templates
+#   cargo make test-all          (ta) # Run all validation
+#   cargo make ci-sanity-check        # Validate scripts, workflows, and references
+#   cargo make ci-check               # All quality checks + CI sanity
+#   cargo make cleanup-keep           # Remove .keep from populated template dirs
+#
+# Example app integration tests (require: cd examples && docker compose up -d):
+#   cargo make test-example-axum      # Run axum-app integration tests
+#   cargo make test-example-bun       # Run bun-app integration tests
+#   cargo make test-example-fastapi   # Run fastapi-app integration tests
+#   cargo make test-example-rails     # Run rails-app integration tests
+#   cargo make test-examples          # Run all example app tests
 
 [config]
 skip_core_tasks = true
@@ -16,6 +23,7 @@ skip_core_tasks = true
 TASKER_CORE_PATH = { value = "../tasker-core", condition = { env_not_set = ["TASKER_CORE_PATH"] } }
 TASKER_CTL = { value = "${CARGO_MAKE_WORKING_DIRECTORY}/bin/tasker-ctl", condition = { env_not_set = ["TASKER_CTL"] } }
 SCRIPTS_DIR = "scripts"
+EXAMPLES_DIR = "${CARGO_MAKE_WORKING_DIRECTORY}/examples"
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -110,6 +118,52 @@ alias = "ci-sanity-check"
 [tasks.ci-check]
 description = "All quality checks + CI infrastructure sanity"
 dependencies = ["validate", "test-templates", "ci-sanity-check"]
+
+# ---------------------------------------------------------------------------
+# Example App Integration Tests
+#
+# These require the shared infrastructure stack to be running:
+#   cd examples && docker compose up -d
+# ---------------------------------------------------------------------------
+[tasks.test-example-axum]
+description = "Run axum-app integration tests (requires docker-compose services)"
+script_runner = "@shell"
+script = '''
+cd "${EXAMPLES_DIR}/axum-app" && cargo nextest run
+'''
+
+[tasks.test-example-bun]
+description = "Run bun-app integration tests (requires docker-compose services)"
+script_runner = "@shell"
+script = '''
+cd "${EXAMPLES_DIR}/bun-app" && bun test tests/
+'''
+
+[tasks.test-example-fastapi]
+description = "Run fastapi-app integration tests (requires docker-compose services)"
+script_runner = "@shell"
+script = '''
+cd "${EXAMPLES_DIR}/fastapi-app" && uv run pytest tests/ -v
+'''
+
+[tasks.test-example-rails]
+description = "Run rails-app integration tests (requires docker-compose services)"
+script_runner = "@shell"
+script = '''
+cd "${EXAMPLES_DIR}/rails-app" && bundle exec rspec
+'''
+
+[tasks.test-examples]
+description = "Run all example app integration tests (requires docker-compose services)"
+dependencies = [
+  "test-example-axum",
+  "test-example-bun",
+  "test-example-fastapi",
+  "test-example-rails",
+]
+
+[tasks.te]
+alias = "test-examples"
 
 # ---------------------------------------------------------------------------
 # Cleanup
