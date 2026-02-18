@@ -419,6 +419,7 @@ mod tests {
 
         assert_eq!(res.status(), 202);
         let body: serde_json::Value = res.json().await.unwrap();
+        eprintln!("  Async order response: {}", body);
         let order_id = body["data"]["id"].as_i64().expect("Expected order ID");
         assert_eq!(body["data"]["status"].as_str().unwrap(), "queued");
 
@@ -430,6 +431,14 @@ mod tests {
                 .send()
                 .await
                 .expect("Failed to get order");
+
+            // 404 returns no body (bare StatusCode), so skip JSON parsing
+            if !order_res.status().is_success() {
+                eprintln!("  GET /orders/{} returned {}", order_id, order_res.status());
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+
             let order_body: serde_json::Value = order_res.json().await.unwrap();
             if let Some(uuid) = order_body["data"]["task_uuid"].as_str() {
                 task_uuid = Some(uuid.to_string());

@@ -16,4 +16,12 @@
 | #7117 | 8:47 AM | 🟣 | FastAPI async test helpers mirror Rails polling pattern with httpx client reuse | ~385 |
 | #7115 | " | 🔵 | FastAPI test fixtures bootstrap tasker worker for session lifecycle | ~404 |
 | #7110 | 8:45 AM | 🔵 | FastAPI app mirrors Rails test patterns with async pytest implementation | ~420 |
+
+### Feb 16, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7604 | 12:12 AM | 🟣 | FastAPI Test Fixtures with Session-Scoped Worker Bootstrap | ~654 |
+| #7603 | " | 🟣 | FastAPI Integration Tests with Completion Verification Suite | ~660 |
+| #7593 | 12:08 AM | 🟣 | FastAPI Async Task Polling Helper with HTTPX Client | ~531 |
 </claude-mem-context>
