@@ -45,7 +45,7 @@ Each plugin provides templates for `tasker-ctl template generate`:
 | `tasker-contrib-python` | Python | step_handler, step_handler_api, step_handler_decision, step_handler_batchable, task_template |
 | `tasker-contrib-typescript` | TypeScript | step_handler, step_handler_api, step_handler_decision, step_handler_batchable, task_template |
 | `tasker-contrib-rust` | Rust | step_handler, task_template |
-| `tasker-contrib-ops` | Ops | docker_compose, config |
+| `tasker-contrib-ops` | Ops | docker_compose |
 
 ```bash
 # List available templates

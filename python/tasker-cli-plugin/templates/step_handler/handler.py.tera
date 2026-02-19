@@ -28,8 +28,8 @@ class {{ name | pascal_case }}Handler(StepHandler):
         Returns:
             StepHandlerResult indicating success or failure.
         """
-        # Access input data from the task context
-        input_data = context.input_data
+        # Access input data from the task context (TAS-137 cross-language standard)
+        # value = context.get_input("field_name")
 
         # Access results from upstream dependency steps
         # prev_result = context.get_dependency_result("previous_step_name")

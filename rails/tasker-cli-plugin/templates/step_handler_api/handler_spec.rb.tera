@@ -7,15 +7,17 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
   subject(:handler) { described_class.new }
 
   let(:context) do
-    instance_double(
+    ctx = instance_double(
       TaskerCore::Types::StepContext,
       task_uuid: SecureRandom.uuid,
       step_uuid: SecureRandom.uuid,
-      input_data: { 'endpoint' => '/users/1' },
       step_config: { 'base_url' => '{{ base_url }}' },
       retry_count: 0,
       max_retries: 3
     )
+    allow(ctx).to receive(:get_input).and_return(nil)
+    allow(ctx).to receive(:get_input).with('endpoint').and_return('/users/1')
+    ctx
   end
 
   describe '#call' do

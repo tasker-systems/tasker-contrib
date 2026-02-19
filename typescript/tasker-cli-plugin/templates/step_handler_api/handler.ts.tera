@@ -23,7 +23,7 @@ export class {{ name | pascal_case }}Handler extends ApiHandler {
   static baseUrl = '{{ base_url }}';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
-    const endpoint = (context.inputData['endpoint'] as string) || '/resource';
+    const endpoint = context.getInput<string>('endpoint') || '/resource';
 
     try {
       const response = await this.get(endpoint);

@@ -28,11 +28,9 @@ class {{ name | pascal_case }}Handler(DecisionHandler):
             StepHandlerResult with decision_point_outcome indicating
             which downstream steps should execute.
         """
-        input_data = context.input_data
-
         # TODO: Implement your routing logic here
         # Example: route based on a field value
-        route_key = input_data.get("route_key", "default")
+        route_key = context.get_input("route_key") or "default"
 
         if route_key == "fast_track":
             return self.decision_success(

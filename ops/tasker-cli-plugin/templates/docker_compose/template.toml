@@ -10,13 +10,7 @@ required = true
 name = "messaging"
 description = "Messaging backend: pgmq or rabbitmq"
 required = false
-default = "pgmq"
-
-[[parameters]]
-name = "cache"
-description = "Cache backend: none or dragonfly"
-required = false
-default = "none"
+default = "rabbitmq"
 
 [[outputs]]
 template = "docker-compose.yml.tera"

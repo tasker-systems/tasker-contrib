@@ -3,8 +3,9 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::time::Instant;
 use tasker_shared::types::TaskSequenceStep;
+use tasker_worker_rust::step_handlers::StepHandlerConfig;
+use tasker_worker_rust::RustStepHandler;
 use tasker_worker_rust::{error_result, success_result};
-use tasker_worker_rust::{RustStepHandler, StepHandlerConfig};
 
 /// {{ name | pascal_case }} step handler for Tasker workflow processing.
 ///
@@ -35,7 +36,7 @@ impl RustStepHandler for {{ name | pascal_case }}Handler {
     async fn call(
         &self,
         step_data: &TaskSequenceStep,
-    ) -> Result<tasker_shared::types::StepExecutionResult> {
+    ) -> Result<tasker_shared::messaging::StepExecutionResult> {
         let start = Instant::now();
 
         // Access input data from the task context

@@ -22,8 +22,8 @@ export class {{ name | pascal_case }}Handler extends StepHandler {
 
   async call(context: StepContext): Promise<StepHandlerResult> {
     try {
-      // Access input data from the task context
-      const inputData = context.inputData;
+      // Access input data from the task context (TAS-137 cross-language standard)
+      // const value = context.getInput('field_name');
 
       // Access results from upstream dependency steps
       // const prevResult = context.getDependencyResult('previous_step_name');

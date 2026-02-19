@@ -36,7 +36,7 @@ module {{ module_name }}
 
     def analyze_and_create_batches(context)
       # TODO: Determine total items from your data source
-      total_items = context.input_data['total_items']&.to_i || 1000
+      total_items = context.get_input('total_items')&.to_i || 1000
       worker_count = context.step_config['worker_count']&.to_i || 5
 
       cursor_configs = create_cursor_configs(total_items, worker_count)

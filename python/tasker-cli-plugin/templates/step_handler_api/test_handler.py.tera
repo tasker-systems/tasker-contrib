@@ -17,7 +17,7 @@ def context():
     ctx = MagicMock()
     ctx.task_uuid = uuid.uuid4()
     ctx.step_uuid = uuid.uuid4()
-    ctx.input_data = {"endpoint": "/users/1"}
+    ctx.get_input = MagicMock(side_effect=lambda key: "/users/1" if key == "endpoint" else None)
     ctx.step_config = {}
     ctx.retry_count = 0
     ctx.max_retries = 3

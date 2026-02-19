@@ -8,15 +8,17 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
 
   describe '#call' do
     let(:context) do
-      instance_double(
+      ctx = instance_double(
         TaskerCore::Types::StepContext,
         task_uuid: SecureRandom.uuid,
         step_uuid: SecureRandom.uuid,
-        input_data: { 'key' => 'value' },
         step_config: {},
         retry_count: 0,
         max_retries: 3
       )
+      allow(ctx).to receive(:get_input).and_return(nil)
+      allow(ctx).to receive(:get_input).with('key').and_return('value')
+      ctx
     end
 
     context 'when processing succeeds' do
@@ -30,7 +32,7 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
 
     context 'when an error occurs' do
       before do
-        allow(context).to receive(:input_data).and_raise(StandardError, 'test error')
+        allow(context).to receive(:get_input).and_raise(StandardError, 'test error')
       end
 
       it 'returns a failure result' do
