@@ -9,7 +9,3 @@ name = "docker_compose"
 path = "templates/docker_compose"
 description = "Generate a Docker Compose stack for Tasker services"
 
-[[templates]]
-name = "config"
-path = "templates/config"
-description = "Generate Tasker TOML configuration files"

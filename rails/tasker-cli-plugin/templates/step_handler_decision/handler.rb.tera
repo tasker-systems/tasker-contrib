@@ -16,12 +16,9 @@ module {{ module_name }}
     include TaskerCore::StepHandler::Mixins::Decision
 
     def call(context)
-      # Extract decision criteria from context
-      input = context.input_data
-
       # TODO: Implement your routing logic here
       # Example: route based on a field value
-      route_key = input['route_key'] || 'default'
+      route_key = context.get_input('route_key') || 'default'
 
       case route_key
       when 'fast_track'

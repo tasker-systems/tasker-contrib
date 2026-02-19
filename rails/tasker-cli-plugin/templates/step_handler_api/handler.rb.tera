@@ -19,7 +19,7 @@ module {{ module_name }}
 
     def call(context)
       # Build the API request from context
-      endpoint = context.input_data['endpoint'] || '/resource'
+      endpoint = context.get_input('endpoint') || '/resource'
 
       # Make the HTTP request using the API mixin
       response = get(endpoint)

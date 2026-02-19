@@ -148,4 +148,4 @@ See [.github/CI-ARCHITECTURE.md](.github/CI-ARCHITECTURE.md) for full details.
 | tasker-contrib-python | 4 handlers + task template | Active |
 | tasker-contrib-typescript | 4 handlers + task template | Active |
 | tasker-contrib-rust | 1 handler + task template | Active |
-| tasker-contrib-ops | docker_compose + config | Active |
+| tasker-contrib-ops | docker_compose | Active |

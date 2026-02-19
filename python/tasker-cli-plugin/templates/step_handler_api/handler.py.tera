@@ -33,7 +33,7 @@ class {{ name | pascal_case }}Handler(APIMixin, StepHandler):
         Returns:
             StepHandlerResult with the API response data.
         """
-        endpoint = context.input_data.get("endpoint", "/resource")
+        endpoint = context.get_input("endpoint") or "/resource"
 
         try:
             response = self.get(endpoint)

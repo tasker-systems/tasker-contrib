@@ -37,7 +37,7 @@ export class {{ name | pascal_case }}Handler extends BatchableStepHandler {
 
   private analyzeAndCreateBatches(context: StepContext): StepHandlerResult {
     // TODO: Determine total items from your data source
-    const totalItems = (context.inputData['total_items'] as number) || 1000;
+    const totalItems = context.getInput<number>('total_items') || 1000;
     const workerCount = (context.stepConfig['worker_count'] as number) || 5;
 
     const batchConfigs = this.createCursorConfigs(totalItems, workerCount);

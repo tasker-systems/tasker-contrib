@@ -20,7 +20,8 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
   describe '#call' do
     context 'when route_key is fast_track' do
       let(:context) do
-        allow(base_context).to receive(:input_data).and_return({ 'route_key' => 'fast_track' })
+        allow(base_context).to receive(:get_input).and_return(nil)
+        allow(base_context).to receive(:get_input).with('route_key').and_return('fast_track')
         base_context
       end
 
@@ -36,7 +37,8 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
 
     context 'when route_key is review_required' do
       let(:context) do
-        allow(base_context).to receive(:input_data).and_return({ 'route_key' => 'review_required' })
+        allow(base_context).to receive(:get_input).and_return(nil)
+        allow(base_context).to receive(:get_input).with('route_key').and_return('review_required')
         base_context
       end
 
@@ -50,7 +52,7 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
 
     context 'when route_key is default' do
       let(:context) do
-        allow(base_context).to receive(:input_data).and_return({})
+        allow(base_context).to receive(:get_input).and_return(nil)
         base_context
       end
 

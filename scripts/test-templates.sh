@@ -71,7 +71,6 @@ params_for_template() {
     step_handler_batchable) echo "name=ProcessBatch" ;;
     task_template)       echo "name=ProcessOrder handler_callable=Handlers::ProcessOrderHandler" ;;
     docker_compose)      echo "name=myapp" ;;
-    config)              echo "" ;;
     *)                   echo "name=Test" ;;
   esac
 }

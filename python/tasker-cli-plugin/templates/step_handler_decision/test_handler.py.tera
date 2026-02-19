@@ -16,7 +16,7 @@ def make_context(route_key=None):
     ctx = MagicMock()
     ctx.task_uuid = uuid.uuid4()
     ctx.step_uuid = uuid.uuid4()
-    ctx.input_data = {"route_key": route_key} if route_key else {}
+    ctx.get_input = MagicMock(side_effect=lambda key: route_key if key == "route_key" else None)
     ctx.step_config = {}
     ctx.retry_count = 0
     ctx.max_retries = 3

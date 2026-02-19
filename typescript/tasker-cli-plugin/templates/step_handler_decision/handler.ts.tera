@@ -20,11 +20,9 @@ export class {{ name | pascal_case }}Handler extends DecisionHandler {
   static handlerVersion = '1.0.0';
 
   async call(context: StepContext): Promise<StepHandlerResult> {
-    const inputData = context.inputData;
-
     // TODO: Implement your routing logic here
     // Example: route based on a field value
-    const routeKey = (inputData['route_key'] as string) || 'default';
+    const routeKey = context.getInput<string>('route_key') || 'default';
 
     switch (routeKey) {
       case 'fast_track':

@@ -19,7 +19,7 @@ class TestAnalyzer:
         context = MagicMock()
         context.task_uuid = uuid.uuid4()
         context.step_uuid = uuid.uuid4()
-        context.input_data = {"total_items": 1000}
+        context.get_input = MagicMock(side_effect=lambda key: 1000 if key == "total_items" else None)
         context.step_config = {"batch_size": 200}
 
         result = handler.call(context)
@@ -33,7 +33,7 @@ class TestAnalyzer:
         context = MagicMock()
         context.task_uuid = uuid.uuid4()
         context.step_uuid = uuid.uuid4()
-        context.input_data = {"total_items": 0}
+        context.get_input = MagicMock(side_effect=lambda key: 0 if key == "total_items" else None)
         context.step_config = {}
 
         result = handler.call(context)

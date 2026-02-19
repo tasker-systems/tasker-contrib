@@ -18,8 +18,8 @@ module {{ module_name }}
     # @param context [TaskerCore::Types::StepContext] Step execution context
     # @return [TaskerCore::Types::StepHandlerCallResult] Success or failure result
     def call(context)
-      # Access input data from the task context
-      input = context.input_data
+      # Access input data from the task context (TAS-137 cross-language standard)
+      # value = context.get_input('field_name')
 
       # Access results from upstream dependency steps
       # prev_result = context.get_dependency_result('previous_step_name')
