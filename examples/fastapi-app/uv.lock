@@ -788,7 +788,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
-    { name = "tasker-py", specifier = ">=0.1.4" },
+    { name = "tasker-py", editable = "../../../tasker-core/workers/python" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 provides-extras = ["dev"]
@@ -802,7 +802,7 @@ dev = [
 [[package]]
 name = "tasker-py"
 version = "0.1.4"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../../../tasker-core/workers/python" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -810,9 +810,33 @@ dependencies = [
     { name = "pyee" },
     { name = "pyyaml" },
 ]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a8/2a/c471556a553391f4494980b506e19cee2be5a5b74b1ca00cf4e1cced71ff/tasker_py-0.1.4-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:344995f658b8787f3f430225de823c7f5352d6c68bf0091cb785d319b25de19d", size = 11194007, upload-time = "2026-02-17T20:50:18.893Z" },
-    { url = "https://files.pythonhosted.org/packages/66/e4/301c3d16dc09afb4b45186c056bd2589568481ef6f9eaf58baf36a08d9c8/tasker_py-0.1.4-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:9dfef9204a04b0c4bd65ba73b4a33d134d05c19528027beb48e552be60607858", size = 12345051, upload-time = "2026-02-17T20:50:21.949Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.7,<2.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+    { name = "pydantic-settings", specifier = ">=2.6.0" },
+    { name = "pyee", specifier = ">=12.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.0" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "maturin", specifier = ">=1.7,<2.0" },
+    { name = "mypy", specifier = ">=1.10.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+    { name = "pytest-cov", specifier = ">=5.0.0" },
+    { name = "ruff", specifier = ">=0.8.0" },
+    { name = "types-pyyaml", specifier = ">=6.0.0" },
 ]
 
 [[package]]

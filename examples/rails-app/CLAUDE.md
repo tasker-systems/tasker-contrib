@@ -14,4 +14,11 @@
 | #7127 | 8:49 AM | 🔵 | Rails Gemfile already includes dotenv via tasker-rb dependency | ~303 |
 | #7105 | 8:44 AM | ✅ | Added orchestration service URL to Rails app configuration | ~194 |
 | #7103 | 8:43 AM | 🔵 | Rails app environment configuration for tasker integration | ~326 |
+
+### Feb 16, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7576 | 12:04 AM | 🔵 | Rails App Uses Published tasker-rb 0.1.4 Gem | ~290 |
+| #7575 | " | 🔵 | Rails Example App with TaskerCore::StepHandler::Base Pattern | ~530 |
 </claude-mem-context>

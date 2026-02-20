@@ -14,7 +14,7 @@ dependencies = [
     "alembic>=1.14.0",
     "psycopg2-binary>=2.9.0",
     "pydantic>=2.0.0",
-    "tasker-py>=0.1.4",
+    "tasker-py>=0.1.4",  # overridden by [tool.uv.sources] for local dev
     "python-dotenv>=1.0.0",
 ]
 
@@ -24,6 +24,9 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "httpx>=0.27.0",
 ]
+
+[tool.uv.sources]
+tasker-py = { path = "../../../tasker-core/workers/python", editable = true }
 
 [build-system]
 requires = ["hatchling"]

@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
-    "@tasker-systems/tasker": "^0.1.5",
+    "@tasker-systems/tasker": "file:../../../tasker-core/workers/typescript",
     "dotenv": "^16.6.1",
     "drizzle-kit": "^0.30.6",
     "drizzle-orm": "^0.38.4",
