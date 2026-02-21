@@ -28,15 +28,19 @@ module Ecommerce
     module_function
 
     def validate_cart_items(cart_items:, customer_email:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Cart is empty',
-        error_code: 'EMPTY_CART'
-      ) if cart_items.nil? || cart_items.empty?
+      if cart_items.nil? || cart_items.empty?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Cart is empty',
+          error_code: 'EMPTY_CART'
+        )
+      end
 
-      raise TaskerCore::Errors::PermanentError.new(
-        'Customer email is required',
-        error_code: 'MISSING_EMAIL'
-      ) if customer_email.blank?
+      if customer_email.blank?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Customer email is required',
+          error_code: 'MISSING_EMAIL'
+        )
+      end
 
       validated_items = []
       subtotal = 0.0
@@ -47,15 +51,19 @@ module Ecommerce
         quantity = item['quantity'].to_i
         price    = item['unit_price'].to_f
 
-        raise TaskerCore::Errors::PermanentError.new(
-          "Invalid quantity for #{sku}: #{quantity}",
-          error_code: 'INVALID_QUANTITY'
-        ) if quantity < 1 || quantity > MAX_QUANTITY_PER_ITEM
+        if quantity < 1 || quantity > MAX_QUANTITY_PER_ITEM
+          raise TaskerCore::Errors::PermanentError.new(
+            "Invalid quantity for #{sku}: #{quantity}",
+            error_code: 'INVALID_QUANTITY'
+          )
+        end
 
-        raise TaskerCore::Errors::PermanentError.new(
-          "Invalid price for #{sku}: #{price}",
-          error_code: 'INVALID_PRICE'
-        ) if price <= 0
+        if price <= 0
+          raise TaskerCore::Errors::PermanentError.new(
+            "Invalid price for #{sku}: #{price}",
+            error_code: 'INVALID_PRICE'
+          )
+        end
 
         line_total = (quantity * price).round(2)
         subtotal += line_total
@@ -94,24 +102,29 @@ module Ecommerce
       payment_token = payment_info[:token]
       payment_method = payment_info[:method] || 'card'
 
-      raise TaskerCore::Errors::PermanentError.new(
-        'Payment token is required',
-        error_code: 'MISSING_TOKEN'
-      ) if payment_token.blank?
+      if payment_token.blank?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Payment token is required',
+          error_code: 'MISSING_TOKEN'
+        )
+      end
 
-      raise TaskerCore::Errors::PermanentError.new(
-        'Order total must be greater than zero',
-        error_code: 'INVALID_TOTAL'
-      ) if total.nil? || total.to_f <= 0
+      if total.nil? || total.to_f <= 0
+        raise TaskerCore::Errors::PermanentError.new(
+          'Order total must be greater than zero',
+          error_code: 'INVALID_TOTAL'
+        )
+      end
 
       total = total.to_f
 
       if DECLINED_TOKENS.include?(payment_token)
-        decline_reason = case payment_token
-                         when 'tok_test_declined'       then 'Card declined by issuer'
-                         when 'tok_insufficient_funds'   then 'Insufficient funds'
-                         when 'tok_expired'              then 'Card expired'
-                         end
+        decline_reasons = {
+          'tok_test_declined' => 'Card declined by issuer',
+          'tok_insufficient_funds' => 'Insufficient funds',
+          'tok_expired' => 'Card expired'
+        }.freeze
+        decline_reason = decline_reasons[payment_token]
         raise TaskerCore::Errors::PermanentError.new(
           "Payment declined: #{decline_reason}",
           error_code: 'PAYMENT_DECLINED'
@@ -119,9 +132,7 @@ module Ecommerce
       end
 
       if GATEWAY_ERROR_TOKENS.include?(payment_token)
-        raise TaskerCore::Errors::RetryableError.new(
-          "Payment gateway temporarily unavailable for token #{payment_token}"
-        )
+        raise TaskerCore::Errors::RetryableError, "Payment gateway temporarily unavailable for token #{payment_token}"
       end
 
       payment_id = "pay_#{SecureRandom.hex(12)}"
@@ -143,17 +154,21 @@ module Ecommerce
     end
 
     def update_inventory(cart_validation:, customer_info: nil)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Cart validation data not available',
-        error_code: 'MISSING_CART_VALIDATION'
-      ) if cart_validation.nil?
+      if cart_validation.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Cart validation data not available',
+          error_code: 'MISSING_CART_VALIDATION'
+        )
+      end
 
       validated_items = cart_validation[:validated_items]
 
-      raise TaskerCore::Errors::PermanentError.new(
-        'No validated items found',
-        error_code: 'NO_ITEMS'
-      ) if validated_items.nil? || validated_items.empty?
+      if validated_items.nil? || validated_items.empty?
+        raise TaskerCore::Errors::PermanentError.new(
+          'No validated items found',
+          error_code: 'NO_ITEMS'
+        )
+      end
 
       reservation_id = "res_#{SecureRandom.hex(10)}"
       updated_products = []
@@ -219,10 +234,12 @@ module Ecommerce
     end
 
     def create_order(cart_validation:, payment_result:, inventory_result:, customer_email:, shipping_address: nil)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Missing upstream data for order creation',
-        error_code: 'MISSING_DEPENDENCIES'
-      ) if cart_validation.nil? || payment_result.nil? || inventory_result.nil?
+      if cart_validation.nil? || payment_result.nil? || inventory_result.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Missing upstream data for order creation',
+          error_code: 'MISSING_DEPENDENCIES'
+        )
+      end
 
       order_id = "ORD-#{Time.current.strftime('%Y%m%d')}-#{SecureRandom.hex(6).upcase}"
       validated_items = cart_validation[:validated_items] || []
@@ -273,15 +290,19 @@ module Ecommerce
     end
 
     def send_confirmation(order_result:, cart_validation:, customer_email:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Order data not available for confirmation',
-        error_code: 'MISSING_ORDER_DATA'
-      ) if order_result.nil?
+      if order_result.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Order data not available for confirmation',
+          error_code: 'MISSING_ORDER_DATA'
+        )
+      end
 
-      raise TaskerCore::Errors::PermanentError.new(
-        'Customer email is required for confirmation',
-        error_code: 'MISSING_EMAIL'
-      ) if customer_email.blank?
+      if customer_email.blank?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Customer email is required for confirmation',
+          error_code: 'MISSING_EMAIL'
+        )
+      end
 
       order_id = order_result[:order_id]
       total = order_result[:total_amount]
@@ -296,7 +317,7 @@ module Ecommerce
         'Thank you for your order!',
         "Order: #{order_id}",
         "Items: #{item_count}",
-        "Total: $#{'%.2f' % total.to_f}",
+        "Total: $#{format('%.2f', total.to_f)}",
         "Estimated delivery: #{estimated_delivery}",
         'A tracking number will be sent when your order ships.'
       ].join("\n")

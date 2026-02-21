@@ -25,14 +25,14 @@ module DataPipeline
     # ── Extract functions ──────────────────────────────────────────────
 
     def extract_sales_data(source:, date_range_start:, date_range_end:, granularity:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Source system is required',
-        error_code: 'MISSING_SOURCE'
-      ) if source.blank?
+      if source.blank?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Source system is required',
+          error_code: 'MISSING_SOURCE'
+        )
+      end
 
-      raise TaskerCore::Errors::RetryableError.new(
-        "Source system '#{source}' is temporarily unavailable"
-      ) if source == 'staging' && rand < 0.1
+      raise TaskerCore::Errors::RetryableError, "Source system '#{source}' is temporarily unavailable" if source == 'staging' && rand < 0.1
 
       start_date = date_range_start || (Date.current - 30).iso8601
       end_date = date_range_end || Date.current.iso8601
@@ -74,10 +74,12 @@ module DataPipeline
     end
 
     def extract_inventory_data(source:, filters:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Source system is required',
-        error_code: 'MISSING_SOURCE'
-      ) if source.blank?
+      if source.blank?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Source system is required',
+          error_code: 'MISSING_SOURCE'
+        )
+      end
 
       category_filter = filters&.dig('product_category')
 
@@ -125,10 +127,12 @@ module DataPipeline
     end
 
     def extract_customer_data(source:, date_range_start:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Source system is required',
-        error_code: 'MISSING_SOURCE'
-      ) if source.blank?
+      if source.blank?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Source system is required',
+          error_code: 'MISSING_SOURCE'
+        )
+      end
 
       _start_date = date_range_start || (Date.current - 30).iso8601
 
@@ -180,17 +184,21 @@ module DataPipeline
     # ── Transform functions ────────────────────────────────────────────
 
     def transform_sales(sales_data:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Sales extraction data not available',
-        error_code: 'MISSING_EXTRACTION'
-      ) if sales_data.nil?
+      if sales_data.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Sales extraction data not available',
+          error_code: 'MISSING_EXTRACTION'
+        )
+      end
 
       records = sales_data[:records] || sales_data['records'] || []
 
-      raise TaskerCore::Errors::PermanentError.new(
-        'No sales records to transform',
-        error_code: 'EMPTY_DATASET'
-      ) if records.empty?
+      if records.empty?
+        raise TaskerCore::Errors::PermanentError.new(
+          'No sales records to transform',
+          error_code: 'EMPTY_DATASET'
+        )
+      end
 
       # Group by product
       by_product = records.group_by { |r| r['product'] || r[:product] }
@@ -234,8 +242,14 @@ module DataPipeline
       channel_metrics.each { |m| m[:revenue_share] = ((m[:total_revenue] / total_revenue) * 100).round(1) }
 
       # Discount analysis
-      discounted = records.select { |r| (r['discount_rate'] || r[:discount_rate]).to_f > 0 }
-      avg_discount = discounted.empty? ? 0.0 : (discounted.sum { |r| (r['discount_rate'] || r[:discount_rate]).to_f } / discounted.size).round(3)
+      discounted = records.select { |r| (r['discount_rate'] || r[:discount_rate]).to_f.positive? }
+      _avg_discount_rate = if discounted.empty?
+                             0.0
+                           else
+                             (discounted.sum do |r|
+                               (r['discount_rate'] || r[:discount_rate]).to_f
+                             end / discounted.size).round(3)
+                           end
 
       # Build daily_sales and product_sales for source compatibility
       daily_sales = records.group_by { |r| r['sale_date'] || r[:sale_date] }
@@ -243,7 +257,9 @@ module DataPipeline
                              {
                                total_amount: day_records.sum { |r| (r['revenue'] || r[:revenue]).to_f },
                                order_count: day_records.count,
-                               avg_order_value: day_records.sum { |r| (r['revenue'] || r[:revenue]).to_f } / day_records.count.to_f
+                               avg_order_value: day_records.sum do |r|
+                                 (r['revenue'] || r[:revenue]).to_f
+                               end / day_records.count.to_f
                              }
       end
 
@@ -275,17 +291,21 @@ module DataPipeline
     end
 
     def transform_inventory(inventory_data:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Inventory extraction data not available',
-        error_code: 'MISSING_EXTRACTION'
-      ) if inventory_data.nil?
+      if inventory_data.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Inventory extraction data not available',
+          error_code: 'MISSING_EXTRACTION'
+        )
+      end
 
       records = inventory_data[:records] || inventory_data['records'] || []
 
-      raise TaskerCore::Errors::PermanentError.new(
-        'No inventory records to transform',
-        error_code: 'EMPTY_DATASET'
-      ) if records.empty?
+      if records.empty?
+        raise TaskerCore::Errors::PermanentError.new(
+          'No inventory records to transform',
+          error_code: 'EMPTY_DATASET'
+        )
+      end
 
       # Group by category
       by_category = records.group_by { |r| r['category'] || r[:category] }
@@ -320,11 +340,13 @@ module DataPipeline
       # Overall metrics
       total_inventory_value = records.sum { |r| (r['total_value'] || r[:total_value]).to_f }
       total_skus = records.size
-      avg_lead_time = (records.sum { |r| (r['supplier_lead_days'] || r[:supplier_lead_days]).to_i }.to_f / total_skus).round(1)
-      stockout_risk = records.count { |r| (r['on_hand_quantity'] || r[:on_hand_quantity]).to_i == 0 }
+      (records.sum do |r|
+        (r['supplier_lead_days'] || r[:supplier_lead_days]).to_i
+      end.to_f / total_skus).round(1)
+      records.count { |r| (r['on_hand_quantity'] || r[:on_hand_quantity]).to_i.zero? }
 
       # Turnover estimation (simplified)
-      turnover_rates = category_metrics.map do |cm|
+      category_metrics.map do |cm|
         { category: cm[:category], estimated_turnover: rand(2.0..12.0).round(1) }
       end
 
@@ -369,24 +391,30 @@ module DataPipeline
     end
 
     def transform_customers(customer_data:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Customer extraction data not available',
-        error_code: 'MISSING_EXTRACTION'
-      ) if customer_data.nil?
+      if customer_data.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Customer extraction data not available',
+          error_code: 'MISSING_EXTRACTION'
+        )
+      end
 
       records = customer_data[:records] || customer_data['records'] || []
 
-      raise TaskerCore::Errors::PermanentError.new(
-        'No customer records to transform',
-        error_code: 'EMPTY_DATASET'
-      ) if records.empty?
+      if records.empty?
+        raise TaskerCore::Errors::PermanentError.new(
+          'No customer records to transform',
+          error_code: 'EMPTY_DATASET'
+        )
+      end
 
       # Segment analysis
       by_segment = records.group_by { |r| r['segment'] || r[:segment] }
       segment_metrics = by_segment.map do |segment, customers|
         avg_ltv = (customers.sum { |c| (c['lifetime_value'] || c[:lifetime_value]).to_f } / customers.size).round(2)
         avg_orders = (customers.sum { |c| (c['total_orders'] || c[:total_orders]).to_i }.to_f / customers.size).round(1)
-        engagement = (customers.count { |c| c['email_engaged'] || c[:email_engaged] }.to_f / customers.size * 100).round(1)
+        engagement = (customers.count do |c|
+          c['email_engaged'] || c[:email_engaged]
+        end.to_f / customers.size * 100).round(1)
         {
           segment: segment,
           customer_count: customers.size,
@@ -394,7 +422,9 @@ module DataPipeline
           average_lifetime_value: avg_ltv,
           average_orders: avg_orders,
           email_engagement_rate: engagement,
-          average_days_since_order: (customers.sum { |c| (c['days_since_last_order'] || c[:days_since_last_order]).to_i }.to_f / customers.size).round(0)
+          average_days_since_order: (customers.sum do |c|
+            (c['days_since_last_order'] || c[:days_since_last_order]).to_i
+          end.to_f / customers.size).round(0)
         }
       end.sort_by { |m| -m[:average_lifetime_value] }
 
@@ -428,7 +458,9 @@ module DataPipeline
         {
           region: region,
           customer_count: customers.size,
-          average_ltv: (customers.sum { |c| (c['lifetime_value'] || c[:lifetime_value]).to_f } / customers.size).round(2)
+          average_ltv: (customers.sum do |c|
+            (c['lifetime_value'] || c[:lifetime_value]).to_f
+          end / customers.size).round(2)
         }
       end
 
@@ -441,7 +473,9 @@ module DataPipeline
         {
           customer_count: tier_records.count,
           total_lifetime_value: tier_records.sum { |r| (r['lifetime_value'] || r[:lifetime_value]).to_f },
-          avg_lifetime_value: tier_records.sum { |r| (r['lifetime_value'] || r[:lifetime_value]).to_f } / tier_records.count.to_f
+          avg_lifetime_value: tier_records.sum do |r|
+            (r['lifetime_value'] || r[:lifetime_value]).to_f
+          end / tier_records.count.to_f
         }
       end
 
@@ -470,7 +504,9 @@ module DataPipeline
         region_metrics: region_metrics,
         churn_risk_rate: churn_rate,
         at_risk_customer_count: at_risk.size,
-        overall_engagement_rate: (records.count { |r| r['email_engaged'] || r[:email_engaged] }.to_f / records.size * 100).round(1),
+        overall_engagement_rate: (records.count do |r|
+          r['email_engaged'] || r[:email_engaged]
+        end.to_f / records.size * 100).round(1),
         transformed_at: Time.current.iso8601
       )
     end
@@ -478,18 +514,20 @@ module DataPipeline
     # ── Aggregation functions ──────────────────────────────────────────
 
     def aggregate_metrics(sales_transform:, inventory_transform:, customer_transform:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'One or more transform results are missing',
-        error_code: 'MISSING_TRANSFORMS'
-      ) if sales_transform.nil? || inventory_transform.nil? || customer_transform.nil?
+      if sales_transform.nil? || inventory_transform.nil? || customer_transform.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'One or more transform results are missing',
+          error_code: 'MISSING_TRANSFORMS'
+        )
+      end
 
       total_revenue = (sales_transform['total_revenue'] || sales_transform[:total_revenue]).to_f
       total_inventory_value = (inventory_transform['total_inventory_value'] || inventory_transform[:total_inventory_value]).to_f
       total_customers = (customer_transform['source_record_count'] || customer_transform[:source_record_count]).to_i
 
       # Cross-source metrics
-      revenue_per_customer = total_customers > 0 ? (total_revenue / total_customers).round(2) : 0.0
-      inventory_to_revenue_ratio = total_revenue > 0 ? (total_inventory_value / total_revenue).round(3) : 0.0
+      revenue_per_customer = total_customers.positive? ? (total_revenue / total_customers).round(2) : 0.0
+      inventory_to_revenue_ratio = total_revenue.positive? ? (total_inventory_value / total_revenue).round(3) : 0.0
 
       # Sales velocity
       top_product = sales_transform['top_product'] || sales_transform[:top_product]
@@ -505,22 +543,25 @@ module DataPipeline
       engagement_rate = (customer_transform['overall_engagement_rate'] || customer_transform[:overall_engagement_rate]).to_f
 
       # Composite scores (0-100)
-      sales_health = [100, [(total_revenue / 10_000.0 * 100).round(0), 0].max].min
+      sales_health = (total_revenue / 10_000.0 * 100).round(0).clamp(0, 100)
       inventory_health = [100, (100 - overall_reorder_rate - stockout_risk).round(0)].max
-      customer_health = [100, (engagement_rate * (1 - churn_risk_rate / 100)).round(0)].max
+      customer_health = [100, (engagement_rate * (1 - (churn_risk_rate / 100))).round(0)].max
       overall_health = ((sales_health + inventory_health + customer_health) / 3.0).round(0)
 
       # Category cross-reference
       sales_by_channel = (sales_transform['channel_metrics'] || sales_transform[:channel_metrics] || []).map do |cm|
-        { channel: cm['channel'] || cm[:channel], revenue: cm['total_revenue'] || cm[:total_revenue], share: cm['revenue_share'] || cm[:revenue_share] }
+        { channel: cm['channel'] || cm[:channel], revenue: cm['total_revenue'] || cm[:total_revenue],
+          share: cm['revenue_share'] || cm[:revenue_share] }
       end
 
       customer_by_segment = (customer_transform['segment_metrics'] || customer_transform[:segment_metrics] || []).map do |sm|
-        { segment: sm['segment'] || sm[:segment], count: sm['customer_count'] || sm[:customer_count], avg_ltv: sm['average_lifetime_value'] || sm[:average_lifetime_value] }
+        { segment: sm['segment'] || sm[:segment], count: sm['customer_count'] || sm[:customer_count],
+          avg_ltv: sm['average_lifetime_value'] || sm[:average_lifetime_value] }
       end
 
       # Source-compatible flat keys
-      sales_record_count = sales_transform['record_count'] || sales_transform[:record_count] || sales_transform['source_record_count'] || sales_transform[:source_record_count] || 0
+      sales_record_count = sales_transform['record_count'] || sales_transform[:record_count] ||
+                           sales_transform['source_record_count'] || sales_transform[:source_record_count] || 0
       total_ltv = customer_transform['total_lifetime_value'] || customer_transform[:total_lifetime_value] || 0
       inventory_reorder_alerts = inventory_transform['reorder_alerts'] || inventory_transform[:reorder_alerts] || 0
       total_inventory_quantity = (inventory_transform['total_quantity_on_hand'] || inventory_transform[:total_quantity_on_hand] || total_inventory_value).to_f
@@ -575,10 +616,12 @@ module DataPipeline
     # ── Insight functions ──────────────────────────────────────────────
 
     def generate_insights(aggregation:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Aggregated metrics not available',
-        error_code: 'MISSING_AGGREGATION'
-      ) if aggregation.nil?
+      if aggregation.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Aggregated metrics not available',
+          error_code: 'MISSING_AGGREGATION'
+        )
+      end
 
       health_scores = aggregation['health_scores'] || aggregation[:health_scores] || {}
       highlights = aggregation['highlights'] || aggregation[:highlights] || {}
@@ -715,7 +758,9 @@ module DataPipeline
         business_health: health_label,
         overall_score: overall_health,
         component_scores: health_scores,
-        recommendations: recommendations.sort_by { |r| { 'urgent' => 0, 'high' => 1, 'medium' => 2, 'low' => 3 }[r[:priority]] || 4 },
+        recommendations: recommendations.sort_by do |r|
+          { 'urgent' => 0, 'high' => 1, 'medium' => 2, 'low' => 3 }[r[:priority]] || 4
+        end,
         insight_count: insights.size,
         recommendation_count: recommendations.size,
         critical_items: insights.count { |i| i[:severity] == 'critical' },

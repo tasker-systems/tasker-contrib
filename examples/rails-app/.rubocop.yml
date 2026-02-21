@@ -1,0 +1,105 @@
+# The behavior of RuboCop can be controlled via the .rubocop.yml
+# configuration file. It makes it possible to enable/disable
+# certain cops (checks) and to alter their behavior if they accept
+# any parameters. The file can be placed either in your home
+# directory or in some project directory.
+#
+# RuboCop will start looking for the configuration file in the directory
+# where the inspected file is and continue its way up to the root directory.
+#
+# See https://docs.rubocop.org/rubocop/configuration
+
+plugins:
+  - rubocop-rspec
+
+AllCops:
+  TargetRubyVersion: 3.4
+  NewCops: enable
+  SuggestExtensions: false # Example code files
+
+# ── Layout ──────────────────────────────────────────────────────────
+
+Layout/LineLength:
+  Max: 160
+
+# ── Style ───────────────────────────────────────────────────────────
+
+Style/Documentation:
+  Enabled: false
+
+# Data pipeline transforms commonly chain .map { }.sort_by { } — idiomatic Ruby
+Style/MultilineBlockChain:
+  Exclude:
+    - "app/services/**/*"
+
+# ── Lint ────────────────────────────────────────────────────────────
+
+# Handler DSL blocks receive context:, inputs:, etc. to show the full
+# signature available to real implementations. Prefixing with _ would
+# obscure the DSL for readers of this example code.
+Lint/UnusedBlockArgument:
+  Exclude:
+    - "app/handlers/**/*"
+
+# Service method signatures mirror the handler DSL interface;
+# some params exist to demonstrate the contract even when unused.
+Lint/UnusedMethodArgument:
+  Exclude:
+    - "app/services/**/*"
+
+# ── Metrics ─────────────────────────────────────────────────────────
+# This is example code that intentionally demonstrates complex, nuanced
+# business logic. Metric cops are relaxed for services, handlers, and
+# controllers so the examples stay readable and representative.
+
+Metrics/AbcSize:
+  Exclude:
+    - "spec/**/*"
+    - "db/**/*"
+    - "app/services/**/*"
+    - "app/controllers/**/*"
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+    - "db/**/*"
+    - "app/services/**/*"
+
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - "app/services/**/*"
+
+Metrics/PerceivedComplexity:
+  Exclude:
+    - "app/services/**/*"
+
+Metrics/MethodLength:
+  Max: 70
+  Exclude:
+    - "spec/examples/**/*" # Example code may have longer methods for demonstration
+    - "db/migrate/**/*" # Database migrations often have long setup methods
+    - "app/services/**/*" # Service examples demonstrate full business logic
+
+Metrics/ModuleLength:
+  Max: 400
+  Exclude:
+    - "spec/**/*" # Test support modules may be longer
+    - "app/services/**/*" # Service modules can be large for complete examples
+
+Metrics/ClassLength:
+  Max: 300
+  Exclude:
+    - "spec/**/*" # Example classes may be longer for demonstration
+    - "db/migrate/**/*" # Database migrations can be long
+
+Metrics/ParameterLists:
+  Exclude:
+    - "app/handlers/**/*" # Handler DSL blocks receive all upstream step results
+
+# ── RSpec ───────────────────────────────────────────────────────────
+
+RSpec/ExampleLength:
+  Max: 50
+
+RSpec/MultipleExpectations:
+  Max: 10

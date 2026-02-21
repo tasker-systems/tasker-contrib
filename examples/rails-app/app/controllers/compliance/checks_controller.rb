@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 module Compliance
   class ChecksController < ApplicationController
     def create
       check = ComplianceCheck.create!(
         order_ref: check_params[:order_ref],
         namespace: check_params[:namespace],
-        status:    'pending'
+        status: 'pending'
       )
 
       # Route to the correct template based on namespace
@@ -15,20 +17,20 @@ module Compliance
                       end
 
       task = TaskerCore::Client.create_task(
-        name:      template_name,
+        name: template_name,
         namespace: check_params[:namespace],
-        context:   check_params.to_h.merge(domain_record_id: check.id)
+        context: check_params.to_h.merge(domain_record_id: check.id)
       )
 
       check.update!(task_uuid: task.task_uuid, status: 'in_progress')
 
       render json: {
-        id:        check.id,
+        id: check.id,
         namespace: check.namespace,
         order_ref: check.order_ref,
-        status:    check.status,
+        status: check.status,
         task_uuid: check.task_uuid,
-        message:   "#{check.namespace} refund workflow submitted"
+        message: "#{check.namespace} refund workflow submitted"
       }, status: :created
     rescue StandardError => e
       Rails.logger.error("Compliance check creation failed: #{e.message}")

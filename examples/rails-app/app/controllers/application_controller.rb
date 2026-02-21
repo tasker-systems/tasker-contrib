@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class ApplicationController < ActionController::API
   rescue_from ActiveRecord::RecordNotFound, with: :not_found
   rescue_from ActiveRecord::RecordInvalid, with: :unprocessable_entity
@@ -26,7 +28,7 @@ class ApplicationController < ActionController::API
       task = TaskerCore::Client.get_task(record.task_uuid)
       base.merge(
         'task_status' => task.status,
-        'task_steps'  => task.steps&.map { |s| { name: s['name'], state: s['current_state'] } }
+        'task_steps' => task.steps&.map { |s| { name: s['name'], state: s['current_state'] } }
       )
     rescue StandardError => e
       Rails.logger.warn("Failed to fetch task status for #{record.task_uuid}: #{e.message}")

@@ -14,9 +14,11 @@ module Microservices
     VALID_PLANS = %w[free pro enterprise].freeze
 
     PLAN_PRICING = {
-      'free'       => { monthly: 0.00,    annual: 0.00,     features: %w[basic_access community_support 1gb_storage] },
-      'pro'        => { monthly: 29.99,   annual: 299.90,   features: %w[basic_access priority_support 50gb_storage api_access analytics] },
-      'enterprise' => { monthly: 299.99,  annual: 2999.90,  features: %w[basic_access dedicated_support unlimited_storage api_access analytics sso audit_logs custom_integrations] }
+      'free' => { monthly: 0.00, annual: 0.00, features: %w[basic_access community_support 1gb_storage] },
+      'pro' => { monthly: 29.99, annual: 299.90,
+                 features: %w[basic_access priority_support 50gb_storage api_access analytics] },
+      'enterprise' => { monthly: 299.99, annual: 2999.90,
+                        features: %w[basic_access dedicated_support unlimited_storage api_access analytics sso audit_logs custom_integrations] }
     }.freeze
 
     PLAN_DEFAULTS = {
@@ -60,10 +62,12 @@ module Microservices
       plan = input.plan
       referral_code = input.referral_code
 
-      raise TaskerCore::Errors::PermanentError.new(
-        "Invalid email format: #{email}",
-        error_code: 'INVALID_EMAIL'
-      ) unless email.match?(EMAIL_REGEX)
+      unless email.match?(EMAIL_REGEX)
+        raise TaskerCore::Errors::PermanentError.new(
+          "Invalid email format: #{email}",
+          error_code: 'INVALID_EMAIL'
+        )
+      end
 
       email_domain = email.split('@').last&.downcase
       if BLOCKED_DOMAINS.include?(email_domain)
@@ -74,10 +78,12 @@ module Microservices
       end
 
       plan ||= 'free'
-      raise TaskerCore::Errors::PermanentError.new(
-        "Invalid plan: #{plan}. Must be one of: #{VALID_PLANS.join(', ')}",
-        error_code: 'INVALID_PLAN'
-      ) unless VALID_PLANS.include?(plan)
+      unless VALID_PLANS.include?(plan)
+        raise TaskerCore::Errors::PermanentError.new(
+          "Invalid plan: #{plan}. Must be one of: #{VALID_PLANS.join(', ')}",
+          error_code: 'INVALID_PLAN'
+        )
+      end
 
       user_id = "usr_#{SecureRandom.hex(12)}"
       username = "#{name.downcase.gsub(/[^a-z0-9]/, '_')}_#{SecureRandom.hex(3)}"
@@ -101,33 +107,33 @@ module Microservices
     end
 
     def setup_billing_profile(account_data:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'User account data not available',
-        error_code: 'MISSING_ACCOUNT'
-      ) if account_data.nil?
+      if account_data.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'User account data not available',
+          error_code: 'MISSING_ACCOUNT'
+        )
+      end
 
       user_id = account_data['user_id']
       plan = account_data['plan']
       referral_valid = account_data['referral_valid']
 
       plan_details = PLAN_PRICING[plan]
-      raise TaskerCore::Errors::PermanentError.new(
-        "Unknown plan: #{plan}",
-        error_code: 'UNKNOWN_PLAN'
-      ) if plan_details.nil?
+      if plan_details.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          "Unknown plan: #{plan}",
+          error_code: 'UNKNOWN_PLAN'
+        )
+      end
 
       billing_id = "bill_#{SecureRandom.hex(10)}"
       subscription_id = "sub_#{SecureRandom.hex(10)}"
 
       monthly_price = plan_details[:monthly]
-      discount_percent = 0
-      if referral_valid && monthly_price > 0
-        discount_percent = 20
-        monthly_price = (monthly_price * 0.80).round(2)
-      end
+      monthly_price = (monthly_price * 0.80).round(2) if referral_valid && monthly_price.positive?
 
       trial_days = plan == 'free' ? 0 : 14
-      trial_end = trial_days > 0 ? (Time.current + trial_days.days).iso8601 : nil
+      trial_end = trial_days.positive? ? (Time.current + trial_days.days).iso8601 : nil
 
       Types::Microservices::SetupBillingResult.new(
         billing_id: billing_id,
@@ -142,7 +148,7 @@ module Microservices
         trial_days: trial_days,
         trial_end_date: trial_end,
         payment_method_required: plan != 'free',
-        next_billing_date: (Time.current + (trial_days > 0 ? trial_days : 30).days).to_date.iso8601,
+        next_billing_date: (Time.current + (trial_days.positive? ? trial_days : 30).days).to_date.iso8601,
         price: monthly_price,
         status: plan == 'free' ? 'active' : 'trial',
         billing_status: plan == 'free' ? 'active' : 'trial',
@@ -151,19 +157,23 @@ module Microservices
     end
 
     def initialize_preferences(account_data:, marketing_consent:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'User account data not available',
-        error_code: 'MISSING_ACCOUNT'
-      ) if account_data.nil?
+      if account_data.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'User account data not available',
+          error_code: 'MISSING_ACCOUNT'
+        )
+      end
 
       user_id = account_data['user_id']
       plan = account_data['plan']
 
       defaults = PLAN_DEFAULTS[plan]
-      raise TaskerCore::Errors::PermanentError.new(
-        "No defaults for plan: #{plan}",
-        error_code: 'UNKNOWN_PLAN'
-      ) if defaults.nil?
+      if defaults.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          "No defaults for plan: #{plan}",
+          error_code: 'UNKNOWN_PLAN'
+        )
+      end
 
       preferences_id = "pref_#{SecureRandom.hex(10)}"
 
@@ -204,16 +214,18 @@ module Microservices
     end
 
     def send_welcome_sequence(account_data:, billing_data:, preferences_data:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Upstream data not available for welcome sequence',
-        error_code: 'MISSING_DEPENDENCIES'
-      ) if account_data.nil? || billing_data.nil? || preferences_data.nil?
+      if account_data.nil? || billing_data.nil? || preferences_data.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Upstream data not available for welcome sequence',
+          error_code: 'MISSING_DEPENDENCIES'
+        )
+      end
 
       user_id = account_data['user_id']
       email = account_data['email']
       name = account_data['name']
       plan = account_data['plan']
-      has_trial = billing_data['trial_days'].to_i > 0
+      has_trial = billing_data['trial_days'].to_i.positive?
       notifications = preferences_data.dig('preferences', 'notifications') || {}
 
       sent_at = Time.current
@@ -289,7 +301,8 @@ module Microservices
       ]
 
       if has_trial
-        drip_schedule << { day: 10, template: 'trial_reminder', subject: "Your trial ends in #{billing_data['trial_days'].to_i - 10} days" }
+        drip_schedule << { day: 10, template: 'trial_reminder',
+                           subject: "Your trial ends in #{billing_data['trial_days'].to_i - 10} days" }
       end
 
       channels_used = notifications_sent.map { |n| n[:channel] }.uniq
@@ -317,10 +330,12 @@ module Microservices
     end
 
     def update_user_status(account_data:, billing_data:, preferences_data:, welcome_data:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Upstream data not available for status update',
-        error_code: 'MISSING_DEPENDENCIES'
-      ) if account_data.nil? || billing_data.nil? || preferences_data.nil? || welcome_data.nil?
+      if account_data.nil? || billing_data.nil? || preferences_data.nil? || welcome_data.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Upstream data not available for status update',
+          error_code: 'MISSING_DEPENDENCIES'
+        )
+      end
 
       user_id = account_data['user_id']
       plan = account_data['plan']
@@ -334,7 +349,7 @@ module Microservices
         notifications_sent: welcome_data['total_notifications'].to_i
       }
 
-      all_steps_completed = registration_steps.values.all? { |v| v == true || (v.is_a?(Integer) && v > 0) }
+      all_steps_completed = registration_steps.values.all? { |v| v == true || (v.is_a?(Integer) && v.positive?) }
 
       profile_summary = {
         user_id: user_id,
@@ -374,7 +389,12 @@ module Microservices
         registration_steps: registration_steps,
         onboarding_score: onboarding_score,
         profile_summary: profile_summary,
-        next_steps: all_steps_completed ? ['complete_onboarding_checklist', 'create_first_project'] : ['review_incomplete_steps'],
+        next_steps: if all_steps_completed
+                      %w[complete_onboarding_checklist
+                         create_first_project]
+                    else
+                      ['review_incomplete_steps']
+                    end,
         activated_at: activated_at.iso8601
       )
     end

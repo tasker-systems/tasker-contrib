@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class ComplianceCheck < ApplicationRecord
   validates :order_ref, presence: true
   validates :namespace, presence: true, inclusion: {

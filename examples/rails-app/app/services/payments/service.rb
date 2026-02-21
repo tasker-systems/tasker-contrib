@@ -25,13 +25,15 @@ module Payments
       currency = input.currency
       reason = input.reason
       idempotency_key = input.idempotency_key
-      partial_refund = input.partial_refund
+      input.partial_refund
 
       amount = input.refund_amount.to_f
-      raise TaskerCore::Errors::PermanentError.new(
-        "Invalid refund amount: #{amount}",
-        error_code: 'INVALID_AMOUNT'
-      ) if amount <= 0
+      if amount <= 0
+        raise TaskerCore::Errors::PermanentError.new(
+          "Invalid refund amount: #{amount}",
+          error_code: 'INVALID_AMOUNT'
+        )
+      end
 
       unless SUPPORTED_CURRENCIES.include?(currency)
         raise TaskerCore::Errors::PermanentError.new(
@@ -62,7 +64,7 @@ module Payments
       is_duplicate = false # In real system, would check against stored keys
 
       # Simulate previous refunds on this payment
-      previous_refund_total = (rand(0.0..[original_amount * 0.3, 0].max)).round(2)
+      previous_refund_total = rand(0.0..[original_amount * 0.3, 0].max).round(2)
       remaining_refundable = (original_amount - previous_refund_total).round(2)
 
       if amount > remaining_refundable
@@ -81,7 +83,7 @@ module Payments
         refund_amount: amount,
         payment_method: 'credit_card',
         gateway_provider: gateway,
-        eligibility_status: (within_window && !is_duplicate) ? 'eligible' : 'ineligible',
+        eligibility_status: within_window && !is_duplicate ? 'eligible' : 'ineligible',
         validation_timestamp: Time.current.iso8601,
         namespace: 'payments_rb',
         eligibility_id: eligibility_id,
@@ -98,7 +100,7 @@ module Payments
         refund_history: {
           previous_refund_total: previous_refund_total,
           remaining_refundable: remaining_refundable,
-          refund_count: previous_refund_total > 0 ? rand(1..3) : 0
+          refund_count: previous_refund_total.positive? ? rand(1..3) : 0
         },
         idempotency_key: idempotency_key,
         is_duplicate: is_duplicate,
@@ -108,10 +110,12 @@ module Payments
     end
 
     def process_gateway(eligibility:, refund_reason:, partial_refund:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Eligibility data not available',
-        error_code: 'MISSING_ELIGIBILITY'
-      ) if eligibility.nil?
+      if eligibility.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Eligibility data not available',
+          error_code: 'MISSING_ELIGIBILITY'
+        )
+      end
 
       unless eligibility['eligible'] || eligibility['payment_validated']
         raise TaskerCore::Errors::PermanentError.new(
@@ -120,7 +124,7 @@ module Payments
         )
       end
 
-      amount = (eligibility['refund_amount']).to_f
+      amount = eligibility['refund_amount'].to_f
       currency = eligibility['currency']
       gateway = eligibility.dig('original_payment', 'gateway') || eligibility['gateway_provider'] || 'unknown'
       idempotency_key = eligibility['idempotency_key']
@@ -130,11 +134,7 @@ module Payments
       processing_started_at = Time.current
 
       # Simulate potential gateway issues
-      if gateway == 'unknown'
-        raise TaskerCore::Errors::RetryableError.new(
-          'Unable to determine payment gateway - retrying'
-        )
-      end
+      raise TaskerCore::Errors::RetryableError, 'Unable to determine payment gateway - retrying' if gateway == 'unknown'
 
       # Simulate gateway response
       gateway_transaction_id = case gateway
@@ -156,11 +156,8 @@ module Payments
       estimated_settlement = (Date.current + settlement_days)
 
       # Calculate any gateway fees
-      gateway_fee_rate = case gateway
-                         when 'stripe'    then 0.0025
-                         when 'braintree' then 0.0020
-                         when 'adyen'     then 0.0030
-                         end
+      gateway_fee_rates = { 'stripe' => 0.0025, 'braintree' => 0.0020, 'adyen' => 0.0030 }.freeze
+      gateway_fee_rate = gateway_fee_rates[gateway]
       gateway_fee = (amount * gateway_fee_rate).round(2)
       net_refund = (amount - gateway_fee).round(2)
 
@@ -199,14 +196,16 @@ module Payments
     end
 
     def update_records(eligibility:, gateway_result:, refund_reason:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Upstream data not available for record update',
-        error_code: 'MISSING_DEPENDENCIES'
-      ) if eligibility.nil? || gateway_result.nil?
+      if eligibility.nil? || gateway_result.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Upstream data not available for record update',
+          error_code: 'MISSING_DEPENDENCIES'
+        )
+      end
 
       payment_id = gateway_result['payment_id'] || eligibility['payment_id']
       refund_id = gateway_result['refund_id']
-      amount = (gateway_result['refund_amount']).to_f
+      amount = gateway_result['refund_amount'].to_f
       currency = gateway_result['currency']
       gateway_transaction_id = gateway_result['gateway_transaction_id']
 
@@ -255,7 +254,7 @@ module Payments
 
       # 4. Gateway fee tracking
       gateway_fee = gateway_result['gateway_fee'].to_f
-      if gateway_fee > 0
+      if gateway_fee.positive?
         records_updated << {
           system: 'fee_tracking',
           record_id: "fee_#{SecureRandom.hex(8)}",
@@ -307,13 +306,15 @@ module Payments
     end
 
     def notify_customer(eligibility:, gateway_result:, records_result:, customer_email:, refund_reason:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Upstream data not available for customer notification',
-        error_code: 'MISSING_DEPENDENCIES'
-      ) if eligibility.nil? || gateway_result.nil? || records_result.nil?
+      if eligibility.nil? || gateway_result.nil? || records_result.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Upstream data not available for customer notification',
+          error_code: 'MISSING_DEPENDENCIES'
+        )
+      end
 
       payment_id = gateway_result['payment_id'] || eligibility['payment_id']
-      amount = (gateway_result['refund_amount']).to_f
+      amount = gateway_result['refund_amount'].to_f
       currency = gateway_result['currency']
       settlement = gateway_result['settlement'] || {}
       reason = refund_reason || eligibility['reason'] || 'refund_processed'
@@ -323,7 +324,7 @@ module Payments
       sent_at = Time.current
 
       # Build customer-facing notification content
-      formatted_amount = "#{currency} #{'%.2f' % amount}"
+      formatted_amount = "#{currency} #{format('%.2f', amount)}"
       settlement_message = if settlement['estimated_days']
                              "Please allow #{settlement['estimated_days']} business days for the refund to appear on your statement."
                            else

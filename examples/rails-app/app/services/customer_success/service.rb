@@ -14,10 +14,10 @@ module CustomerSuccess
     MAX_REFUNDS_PER_CUSTOMER = 5
 
     REASON_POLICIES = {
-      'defective'        => { window_days: 90, auto_approve_threshold: 500.00 },
+      'defective' => { window_days: 90, auto_approve_threshold: 500.00 },
       'not_as_described' => { window_days: 60, auto_approve_threshold: 200.00 },
-      'changed_mind'     => { window_days: 30, auto_approve_threshold: 50.00 },
-      'late_delivery'    => { window_days: 45, auto_approve_threshold: 100.00 },
+      'changed_mind' => { window_days: 30, auto_approve_threshold: 50.00 },
+      'late_delivery' => { window_days: 45, auto_approve_threshold: 100.00 },
       'duplicate_charge' => { window_days: 180, auto_approve_threshold: Float::INFINITY }
     }.freeze
 
@@ -31,15 +31,19 @@ module CustomerSuccess
       order_ref = input.order_ref
       customer_id = input.customer_id
       refund_reason = input.resolved_refund_reason
-      raise TaskerCore::Errors::PermanentError.new(
-        "Invalid refund amount: #{amount}. Must be greater than 0",
-        error_code: 'INVALID_AMOUNT'
-      ) if amount <= 0
+      if amount <= 0
+        raise TaskerCore::Errors::PermanentError.new(
+          "Invalid refund amount: #{amount}. Must be greater than 0",
+          error_code: 'INVALID_AMOUNT'
+        )
+      end
 
-      raise TaskerCore::Errors::PermanentError.new(
-        "Invalid refund amount: #{amount}. Maximum single refund is $10,000",
-        error_code: 'AMOUNT_EXCEEDS_LIMIT'
-      ) if amount > 10_000
+      if amount > 10_000
+        raise TaskerCore::Errors::PermanentError.new(
+          "Invalid refund amount: #{amount}. Maximum single refund is $10,000",
+          error_code: 'AMOUNT_EXCEEDS_LIMIT'
+        )
+      end
 
       unless VALID_REASONS.include?(refund_reason)
         raise TaskerCore::Errors::PermanentError.new(
@@ -85,10 +89,12 @@ module CustomerSuccess
     end
 
     def check_refund_policy(validation:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Validation data not available',
-        error_code: 'MISSING_VALIDATION'
-      ) if validation.nil?
+      if validation.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Validation data not available',
+          error_code: 'MISSING_VALIDATION'
+        )
+      end
 
       reason = validation['reason']
       amount = validation['refund_amount'].to_f
@@ -112,9 +118,7 @@ module CustomerSuccess
         violations << "Customer has #{previous_refunds} previous refunds, exceeding limit of #{MAX_REFUNDS_PER_CUSTOMER}"
       end
 
-      if previous_refunds >= 3
-        warnings << "Customer has #{previous_refunds} previous refunds - flagged for review"
-      end
+      warnings << "Customer has #{previous_refunds} previous refunds - flagged for review" if previous_refunds >= 3
 
       # VIP customers get extended windows
       if customer_tier == 'vip' && violations.any? { |v| v.include?('window') }
@@ -167,10 +171,12 @@ module CustomerSuccess
     end
 
     def get_manager_approval(validation:, policy_check:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Upstream data not available for approval routing',
-        error_code: 'MISSING_DEPENDENCIES'
-      ) if validation.nil? || policy_check.nil?
+      if validation.nil? || policy_check.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Upstream data not available for approval routing',
+          error_code: 'MISSING_DEPENDENCIES'
+        )
+      end
 
       customer_id_field = validation['customer_id']
 
@@ -229,15 +235,11 @@ module CustomerSuccess
       approved = rand < 0.85
       conditions = []
 
-      if approved && amount > 500
-        conditions << 'Customer must return defective items within 14 days'
-      end
+      conditions << 'Customer must return defective items within 14 days' if approved && amount > 500
 
-      if approved && validation.dig('order_data', 'previous_refunds').to_i > 1
-        conditions << 'Flag customer account for monitoring'
-      end
+      conditions << 'Flag customer account for monitoring' if approved && validation.dig('order_data', 'previous_refunds').to_i > 1
 
-      review_duration_minutes = rand(5..120)
+      rand(5..120)
 
       Types::CustomerSuccess::ApproveRefundResult.new(
         approval_obtained: approved,
@@ -263,10 +265,12 @@ module CustomerSuccess
     end
 
     def execute_refund_workflow(validation:, approval:, correlation_id: nil)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Upstream data not available for refund execution',
-        error_code: 'MISSING_DEPENDENCIES'
-      ) if validation.nil? || approval.nil?
+      if validation.nil? || approval.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Upstream data not available for refund execution',
+          error_code: 'MISSING_DEPENDENCIES'
+        )
+      end
 
       unless approval['approved'] || approval['approval_obtained']
         raise TaskerCore::Errors::PermanentError.new(
@@ -281,7 +285,7 @@ module CustomerSuccess
       payment_method = validation.dig('order_data', 'payment_method') || 'unknown'
 
       delegated_task_id = "task_#{SecureRandom.uuid}"
-      correlation_id = correlation_id || "cs-#{SecureRandom.hex(8)}"
+      correlation_id ||= "cs-#{SecureRandom.hex(8)}"
 
       execution_id = "exec_#{SecureRandom.hex(8)}"
       refund_transaction_id = "rfnd_#{SecureRandom.hex(12)}"
@@ -321,7 +325,11 @@ module CustomerSuccess
         status: 'completed',
         customer_id: customer_id,
         credit_amount: amount,
-        estimated_arrival: (Time.current + 5.business_days rescue Time.current + 7.days).iso8601,
+        estimated_arrival: begin
+          Time.current + 5.business_days
+        rescue StandardError
+          Time.current + 7.days
+        end.iso8601,
         completed_at: Time.current.iso8601
       }
 
@@ -360,13 +368,15 @@ module CustomerSuccess
     end
 
     def update_ticket_status(validation:, policy_check:, approval:, execution:)
-      raise TaskerCore::Errors::PermanentError.new(
-        'Upstream data not available for ticket update',
-        error_code: 'MISSING_DEPENDENCIES'
-      ) if validation.nil? || execution.nil?
+      if validation.nil? || execution.nil?
+        raise TaskerCore::Errors::PermanentError.new(
+          'Upstream data not available for ticket update',
+          error_code: 'MISSING_DEPENDENCIES'
+        )
+      end
 
       ticket_id = validation['ticket_id']
-      customer_id = validation['customer_id']
+      validation['customer_id']
       delegated_task_id = execution['delegated_task_id']
       correlation_id = execution['correlation_id']
 
@@ -397,26 +407,30 @@ module CustomerSuccess
       ]
 
       if policy_check
-        timeline << { event: 'policy_checked', result: policy_check['policy_passed'] ? 'passed' : 'failed', timestamp: policy_check['checked_at'] }
+        timeline << { event: 'policy_checked', result: policy_check['policy_passed'] ? 'passed' : 'failed',
+                      timestamp: policy_check['checked_at'] }
       end
 
       if approval
-        timeline << { event: 'approval_decision', result: approval['approved'] ? 'approved' : 'denied', timestamp: approval['decided_at'] }
+        timeline << { event: 'approval_decision', result: approval['approved'] ? 'approved' : 'denied',
+                      timestamp: approval['decided_at'] }
       end
 
       if execution
-        timeline << { event: 'refund_execution', result: was_executed ? 'completed' : 'skipped', timestamp: execution['executed_at'] || execution['delegation_timestamp'] }
+        timeline << { event: 'refund_execution', result: was_executed ? 'completed' : 'skipped',
+                      timestamp: execution['executed_at'] || execution['delegation_timestamp'] }
       end
 
       timeline << { event: 'ticket_closed', result: ticket_status, timestamp: Time.current.iso8601 }
 
-      resolution_note = "Refund of $#{'%.2f' % validation['refund_amount'].to_f} for order #{validation['order_ref']}. " \
+      resolution_note = "Refund of $#{format('%.2f',
+                                             validation['refund_amount'].to_f)} for order #{validation['order_ref']}. " \
                        "Reason: #{validation['reason']}. " \
                        "Delegated task ID: #{delegated_task_id}. " \
                        "Correlation ID: #{correlation_id}"
 
       notes = []
-      notes << "Refund of $#{'%.2f' % validation['refund_amount'].to_f} for order #{validation['order_ref']}"
+      notes << "Refund of $#{format('%.2f', validation['refund_amount'].to_f)} for order #{validation['order_ref']}"
       notes << "Reason: #{validation['reason']}"
       notes << "Policy: #{policy_check&.dig('policy_passed') ? 'Passed' : 'Failed'}"
       notes << "Approval: #{approval&.dig('approval_level') || 'N/A'} - #{approval&.dig('approved') ? 'Approved' : 'Denied'}"
@@ -444,9 +458,13 @@ module CustomerSuccess
         resolution_category: resolution_category,
         timeline: timeline,
         internal_notes: notes.join("\n"),
-        customer_facing_message: was_executed ?
-          "Your refund of $#{'%.2f' % validation['refund_amount'].to_f} has been processed. Please allow 5-7 business days for the credit to appear." :
-          "We were unable to process your refund request at this time. A customer success agent will follow up with more details.",
+        customer_facing_message: if was_executed
+                                   "Your refund of $#{format('%.2f', validation['refund_amount'].to_f)} " \
+                                     'has been processed. Please allow 5-7 business days for the credit to appear.'
+                                 else
+                                   'We were unable to process your refund request at this time. ' \
+                                     'A customer success agent will follow up with more details.'
+                                 end,
         satisfaction_survey_scheduled: was_executed,
         follow_up_required: !was_executed
       )
