@@ -7,8 +7,8 @@ describe('{{ name | pascal_case }}Handler', () => {
   const mockContext = {
     taskUuid: crypto.randomUUID(),
     stepUuid: crypto.randomUUID(),
-    inputData: { key: 'value' },
-    dependencyResults: {},
+    inputData: { field_name: 'test_value' },
+    dependencyResults: { previous_step_name: { status: 'completed', data: { id: 42 } } },
     stepConfig: {},
     stepInputs: {},
     retryCount: 0,
@@ -16,26 +16,29 @@ describe('{{ name | pascal_case }}Handler', () => {
     correlationId: crypto.randomUUID(),
     handlerName: '{{ name | snake_case }}',
     event: {} as any,
-    getDependencyResult: vi.fn(),
-    getInput: vi.fn(),
+    getDependencyResult: vi.fn((key: string) => {
+      if (key === 'previous_step_name') return { status: 'completed', data: { id: 42 } };
+      return undefined;
+    }),
+    getInput: vi.fn((key: string) => {
+      if (key === 'field_name') return 'test_value';
+      return undefined;
+    }),
   } as any;
 
   describe('call', () => {
-    it('returns a success result', async () => {
+    it('returns a success result with injected values', async () => {
       const result = await handler.call(mockContext);
 
       expect(result.success).toBe(true);
       expect(result.result?.processed).toBe(true);
+      expect(result.result?.inputReceived).toBe('test_value');
     });
   });
 
   describe('metadata', () => {
     it('has the correct handler name', () => {
       expect({{ name | pascal_case }}Handler.handlerName).toBe('{{ name | snake_case }}');
-    });
-
-    it('has a version', () => {
-      expect({{ name | pascal_case }}Handler.handlerVersion).toBe('1.0.0');
     });
   });
 });

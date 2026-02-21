@@ -1,46 +1,32 @@
 """{{ name | pascal_case }} step handler for Tasker workflow processing."""
 
-from tasker_core import StepContext, StepHandler, StepHandlerResult
+from tasker_core.step_handler.functional import depends_on, inputs, step_handler
 
 
-class {{ name | pascal_case }}Handler(StepHandler):
+@step_handler("{{ name | snake_case }}")
+@depends_on(prev_result="previous_step_name")
+@inputs("field_name")
+def {{ name | snake_case }}(prev_result, field_name, context):
     """{{ name | pascal_case }} step handler.
 
-    Implements the cross-language StepHandler contract:
-      - Receives a StepContext with task data, dependencies, and configuration
-      - Returns success/failure results via class methods
+    Uses the functional DSL — return a dict for success, raise
+    PermanentError / RetryableError for classified failures.
+
+    Args:
+        prev_result: dict from upstream "previous_step_name" step
+        field_name: value from task input "field_name"
+        context: step execution context
 
     Register this handler in your task definition YAML:
         handler:
-            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | pascal_case }}Handler
+            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | snake_case }}
+
+    Access the generated handler class for advanced registration:
+        {{ name | snake_case }}._handler_class
     """
-
-    handler_name = "{{ name | snake_case }}"
-    handler_version = "1.0.0"
-
-    def call(self, context: StepContext) -> StepHandlerResult:
-        """Execute the step handler logic.
-
-        Args:
-            context: Step execution context with input data, dependencies,
-                     and configuration.
-
-        Returns:
-            StepHandlerResult indicating success or failure.
-        """
-        # Access input data from the task context (TAS-137 cross-language standard)
-        # value = context.get_input("field_name")
-
-        # Access results from upstream dependency steps
-        # prev_result = context.get_dependency_result("previous_step_name")
-
-        # Access handler configuration from step definition
-        # config_value = context.step_config.get("some_setting")
-
-        # TODO: Implement your business logic here
-        result = {
-            "processed": True,
-            "handler": "{{ name | snake_case }}",
-        }
-
-        return StepHandlerResult.success(result=result)
+    # TODO: Implement your business logic here
+    return {
+        "processed": True,
+        "handler": "{{ name | snake_case }}",
+        "input_received": field_name,
+    }

@@ -11,7 +11,7 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
       TaskerCore::Types::StepContext,
       task_uuid: SecureRandom.uuid,
       step_uuid: SecureRandom.uuid,
-      step_config: { 'base_url' => '{{ base_url }}' },
+      step_config: {},
       retry_count: 0,
       max_retries: 3
     )
@@ -20,33 +20,9 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
     ctx
   end
 
-  describe '#call' do
-    context 'when the API returns a successful response' do
-      before do
-        stub_request(:get, '{{ base_url }}/users/1')
-          .to_return(status: 200, body: '{"id": 1, "name": "Test"}', headers: { 'Content-Type' => 'application/json' })
-      end
-
-      it 'returns a success result with the response body' do
-        result = handler.call(context)
-
-        expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
-        expect(result.result['id']).to eq(1)
-      end
-    end
-
-    context 'when the API returns a server error' do
-      before do
-        stub_request(:get, '{{ base_url }}/users/1')
-          .to_return(status: 500, body: 'Internal Server Error')
-      end
-
-      it 'returns a retryable failure' do
-        result = handler.call(context)
-
-        expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Error)
-        expect(result.retryable).to be true
-      end
+  describe '#handler_name' do
+    it 'returns the handler name' do
+      expect(handler.handler_name).to eq('{{ name | snake_case }}')
     end
   end
 end

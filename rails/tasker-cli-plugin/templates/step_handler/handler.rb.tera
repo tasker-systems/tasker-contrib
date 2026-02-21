@@ -5,42 +5,23 @@ require 'tasker_core/step_handler'
 module {{ module_name }}
   # {{ name | pascal_case }} step handler for Tasker workflow processing.
   #
-  # Implements the cross-language StepHandler contract:
-  #   - Receives a StepContext with task data, dependencies, and configuration
-  #   - Returns success/failure results via helper methods
+  # Uses the functional DSL — return a Hash for success, raise
+  # PermanentError / RetryableError for classified failures.
   #
   # Register this handler in your task definition YAML:
   #   handler:
   #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
-  class {{ name | pascal_case }}Handler < TaskerCore::StepHandler::Base
-    # Main execution method called by the Tasker orchestration layer.
-    #
-    # @param context [TaskerCore::Types::StepContext] Step execution context
-    # @return [TaskerCore::Types::StepHandlerCallResult] Success or failure result
-    def call(context)
-      # Access input data from the task context (TAS-137 cross-language standard)
-      # value = context.get_input('field_name')
+  include TaskerCore::StepHandler::Functional
 
-      # Access results from upstream dependency steps
-      # prev_result = context.get_dependency_result('previous_step_name')
+  {{ name | pascal_case }}Handler = step_handler '{{ name | snake_case }}',
+    depends_on: { prev_result: 'previous_step_name' },
+    inputs: [:field_name] do |prev_result:, field_name:, context:|
 
-      # Access handler configuration from step definition
-      # config_value = context.step_config['some_setting']
-
-      # TODO: Implement your business logic here
-      result = {
-        processed: true,
-        handler: '{{ name | snake_case }}'
-      }
-
-      success(result: result)
-    rescue StandardError => e
-      failure(
-        message: e.message,
-        error_type: 'RetryableError',
-        retryable: true,
-        metadata: { handler: '{{ name | snake_case }}' }
-      )
-    end
+    # TODO: Implement your business logic here
+    {
+      processed: true,
+      handler: '{{ name | snake_case }}',
+      input_received: field_name
+    }
   end
 end

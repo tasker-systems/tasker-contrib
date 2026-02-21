@@ -1,47 +1,43 @@
-import {
-  DecisionHandler,
-  type StepContext,
-  type StepHandlerResult,
-} from '@tasker-systems/tasker';
+import { defineDecisionHandler, Decision } from '@tasker-systems/tasker';
 
 /**
  * {{ name | pascal_case }} decision step handler.
  *
  * Evaluates conditions and routes the workflow to different downstream
- * steps based on the decision outcome. Extends DecisionHandler for
- * standardized decision result formatting.
+ * steps. Return Decision.route([...]) to activate steps, or
+ * Decision.skip('reason') to skip all branches.
  *
  * Register this handler in your task definition YAML:
  *   handler:
  *     callable: {{ name | pascal_case }}Handler
  */
-export class {{ name | pascal_case }}Handler extends DecisionHandler {
-  static handlerName = '{{ name | snake_case }}';
-  static handlerVersion = '1.0.0';
-
-  async call(context: StepContext): Promise<StepHandlerResult> {
+export const {{ name | pascal_case }}Handler = defineDecisionHandler(
+  '{{ name | snake_case }}',
+  {
+    inputs: { routeKey: 'route_key' },
+  },
+  async ({ routeKey, context }) => {
     // TODO: Implement your routing logic here
-    // Example: route based on a field value
-    const routeKey = context.getInput<string>('route_key') || 'default';
+    const route = routeKey || 'default';
 
-    switch (routeKey) {
+    switch (route) {
       case 'fast_track':
-        return this.decisionSuccess(
+        return Decision.route(
           ['fast_track_processing'],
           { route: 'fast_track', reason: 'Meets fast-track criteria' },
         );
 
       case 'review_required':
-        return this.decisionSuccess(
+        return Decision.route(
           ['manual_review', 'approval_gate'],
           { route: 'review', reason: 'Review required' },
         );
 
       default:
-        return this.decisionSuccess(
+        return Decision.route(
           ['standard_processing'],
           { route: 'standard', reason: 'Default routing' },
         );
     }
-  }
-}
+  },
+);

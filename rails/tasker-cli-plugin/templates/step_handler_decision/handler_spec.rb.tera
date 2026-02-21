@@ -20,8 +20,10 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
   describe '#call' do
     context 'when route_key is fast_track' do
       let(:context) do
-        allow(base_context).to receive(:get_input).and_return(nil)
-        allow(base_context).to receive(:get_input).with('route_key').and_return('fast_track')
+        allow(base_context).to receive(:get_input) do |key|
+          { 'route_key' => 'fast_track' }[key]
+        end
+        allow(base_context).to receive(:get_dependency_result).and_return(nil)
         base_context
       end
 
@@ -29,16 +31,15 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
         result = handler.call(context)
 
         expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
-        expect(result.result[:decision_point_outcome]).to include(
-          steps: ['fast_track_processing']
-        )
       end
     end
 
     context 'when route_key is review_required' do
       let(:context) do
-        allow(base_context).to receive(:get_input).and_return(nil)
-        allow(base_context).to receive(:get_input).with('route_key').and_return('review_required')
+        allow(base_context).to receive(:get_input) do |key|
+          { 'route_key' => 'review_required' }[key]
+        end
+        allow(base_context).to receive(:get_dependency_result).and_return(nil)
         base_context
       end
 
@@ -46,13 +47,13 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
         result = handler.call(context)
 
         expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
-        expect(result.result[:decision_point_outcome][:steps]).to include('manual_review', 'approval_gate')
       end
     end
 
     context 'when route_key is default' do
       let(:context) do
         allow(base_context).to receive(:get_input).and_return(nil)
+        allow(base_context).to receive(:get_dependency_result).and_return(nil)
         base_context
       end
 

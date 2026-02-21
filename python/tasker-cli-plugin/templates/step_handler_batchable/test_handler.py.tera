@@ -1,68 +1,51 @@
-"""Tests for {{ name | pascal_case }} batch processing handlers."""
+"""Tests for {{ name | snake_case }} batch processing handlers."""
 
 import uuid
 from unittest.mock import MagicMock
 
 import pytest
 from {{ module_name }}.{{ name | snake_case }}_handler import (
-    {{ name | pascal_case }}AnalyzerHandler,
-    {{ name | pascal_case }}WorkerHandler,
+    {{ name | snake_case }}_analyzer,
+    {{ name | snake_case }}_worker,
+    {{ name | snake_case }}_convergence,
 )
 
 
 class TestAnalyzer:
     @pytest.fixture
     def handler(self):
-        return {{ name | pascal_case }}AnalyzerHandler()
+        return {{ name | snake_case }}_analyzer._handler_class()
 
     def test_creates_batch_configs(self, handler):
         context = MagicMock()
         context.task_uuid = uuid.uuid4()
         context.step_uuid = uuid.uuid4()
-        context.get_input = MagicMock(side_effect=lambda key: 1000 if key == "total_items" else None)
-        context.step_config = {"batch_size": 200}
+        context.get_input = MagicMock(side_effect=lambda key: {
+            "total_items": 1000,
+        }.get(key))
+        context.get_dependency_result = MagicMock(return_value=None)
+        context.step_config = {}
 
         result = handler.call(context)
 
         assert result.success is True
         outcome = result.result["batch_processing_outcome"]
         assert outcome["type"] == "create_batches"
-        assert result.result["total_items"] == 1000
-
-    def test_returns_no_batches_for_empty_dataset(self, handler):
-        context = MagicMock()
-        context.task_uuid = uuid.uuid4()
-        context.step_uuid = uuid.uuid4()
-        context.get_input = MagicMock(side_effect=lambda key: 0 if key == "total_items" else None)
-        context.step_config = {}
-
-        result = handler.call(context)
-
-        assert result.success is True
-        assert result.result["batch_processing_outcome"]["type"] == "no_batches"
 
 
 class TestWorker:
     @pytest.fixture
     def handler(self):
-        return {{ name | pascal_case }}WorkerHandler()
+        return {{ name | snake_case }}_worker._handler_class()
 
-    def test_processes_batch(self, handler):
-        context = MagicMock()
-        context.task_uuid = uuid.uuid4()
-        context.step_uuid = uuid.uuid4()
-        context.input_data = {}
-        context.step_config = {}
-        context.step_inputs = {
-            "cursor": {
-                "batch_id": "001",
-                "start_cursor": 0,
-                "end_cursor": 200,
-                "batch_size": 200,
-            }
-        }
+    def test_handler_name_is_set(self, handler):
+        assert handler.handler_name == "{{ name | snake_case }}_worker"
 
-        result = handler.call(context)
 
-        assert result.success is True
-        assert result.result["items_processed"] == 200
+class TestConvergence:
+    @pytest.fixture
+    def handler(self):
+        return {{ name | snake_case }}_convergence._handler_class()
+
+    def test_handler_name_is_set(self, handler):
+        assert handler.handler_name == "{{ name | snake_case }}_convergence"

@@ -3,72 +3,72 @@
 require 'tasker_core/step_handler'
 
 module {{ module_name }}
-  # {{ name | pascal_case }} batchable step handler.
-  #
-  # Implements the Batchable mixin for parallel batch processing.
-  # This handler can serve as both an analyzer (creating batch configs)
-  # and a worker (processing individual batches).
+  # {{ name | pascal_case }} batchable step handlers for parallel processing.
   #
   # Workflow pattern:
-  #   1. Analyzer step: creates cursor configs dividing work into batches
+  #   1. Analyzer step: returns BatchConfig to divide work into batches
   #   2. Worker steps: process individual batches in parallel
-  #   3. Aggregator step: combines results from all workers
+  #   3. Convergence step: aggregates results from all workers
   #
-  # Register this handler in your task definition YAML:
-  #   handler:
-  #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
-  class {{ name | pascal_case }}Handler < TaskerCore::StepHandler::Base
-    include TaskerCore::StepHandler::Mixins::Batchable
+  # Register handlers in your task definition YAML:
+  #   - name: {{ name | snake_case }}_analyze
+  #     type: batchable
+  #     handler:
+  #       callable: {{ module_name }}::{{ name | pascal_case }}AnalyzerHandler
+  #   - name: {{ name | snake_case }}_batch
+  #     type: batch_worker
+  #     dependencies: [{{ name | snake_case }}_analyze]
+  #     handler:
+  #       callable: {{ module_name }}::{{ name | pascal_case }}WorkerHandler
+  #   - name: {{ name | snake_case }}_converge
+  #     type: deferred_convergence
+  #     dependencies: [{{ name | snake_case }}_batch]
+  #     handler:
+  #       callable: {{ module_name }}::{{ name | pascal_case }}ConvergenceHandler
+  include TaskerCore::StepHandler::Functional
 
-    def call(context)
-      batch_ctx = get_batch_context(context)
+  {{ name | pascal_case }}AnalyzerHandler = batch_analyzer '{{ name | snake_case }}_analyzer',
+    worker_template: '{{ name | snake_case }}_batch',
+    inputs: [:total_items] do |total_items:, context:|
 
-      # If this is a batch worker invocation, process the batch
-      if batch_ctx
-        return process_batch(context, batch_ctx)
-      end
+    # TODO: Determine total items from your data source
+    count = total_items&.to_i || 1000
+    batch_size = 200
 
-      # Otherwise, this is the analyzer — create batch configs
-      analyze_and_create_batches(context)
+    BatchConfig.new(total_items: count, batch_size: batch_size)
+  end
+
+  {{ name | pascal_case }}WorkerHandler = batch_worker '{{ name | snake_case }}_worker' do |batch_context:, context:|
+    # TODO: Process items in the batch range
+    cursor = batch_context&.dig(:cursor_config)
+    items_processed = (cursor[:end_cursor] || 0) - (cursor[:start_cursor] || 0)
+
+    {
+      items_processed: items_processed,
+      batch_id: cursor[:batch_id]
+    }
+  end
+
+  # Convergence step — aggregates results from all batch workers.
+  # Runs automatically after all batch workers complete.
+  {{ name | pascal_case }}ConvergenceHandler = step_handler '{{ name | snake_case }}_convergence' do |context:|
+    total_processed = 0
+    worker_count = 0
+
+    context.dependency_results.each do |dep_name, _|
+      next unless dep_name.start_with?('{{ name | snake_case }}_batch_')
+
+      result = context.get_dependency_result(dep_name)
+      next unless result.is_a?(Hash)
+
+      total_processed += result['items_processed'] || 0
+      worker_count += 1
     end
 
-    private
-
-    def analyze_and_create_batches(context)
-      # TODO: Determine total items from your data source
-      total_items = context.get_input('total_items')&.to_i || 1000
-      worker_count = context.step_config['worker_count']&.to_i || 5
-
-      cursor_configs = create_cursor_configs(total_items, worker_count)
-
-      create_batches_outcome(
-        worker_template_name: '{{ name | snake_case }}_batch',
-        cursor_configs: cursor_configs,
-        total_items: total_items,
-        metadata: { 'analyzed_at' => Time.now.iso8601 }
-      )
-    end
-
-    def process_batch(context, batch_ctx)
-      # Handle no-op placeholder
-      no_op_result = handle_no_op_worker(batch_ctx)
-      return no_op_result if no_op_result
-
-      # TODO: Process items in the batch range
-      items_processed = batch_ctx.end_cursor - batch_ctx.start_cursor
-
-      batch_worker_success(
-        items_processed: items_processed,
-        items_succeeded: items_processed,
-        metadata: { 'batch_id' => batch_ctx.batch_id }
-      )
-    rescue StandardError => e
-      failure(
-        message: "Batch processing failed: #{e.message}",
-        error_type: 'RetryableError',
-        retryable: true,
-        metadata: { 'batch_id' => batch_ctx.batch_id }
-      )
-    end
+    # TODO: Add your domain-specific aggregation logic here
+    {
+      total_processed: total_processed,
+      worker_count: worker_count
+    }
   end
 end

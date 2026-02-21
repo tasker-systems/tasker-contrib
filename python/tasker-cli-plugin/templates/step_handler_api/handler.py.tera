@@ -1,48 +1,39 @@
 """{{ name | pascal_case }} API step handler for Tasker workflow processing."""
 
-import httpx
-from tasker_core.step_handler import StepHandler
-from tasker_core.step_handler.mixins import APIMixin
+from tasker_core.step_handler.functional import api_handler, depends_on, inputs
 
 
-class {{ name | pascal_case }}Handler(APIMixin, StepHandler):
+@api_handler("{{ name | snake_case }}", base_url="{{ base_url }}")
+@inputs("endpoint")
+def {{ name | snake_case }}(endpoint, api, context):
     """{{ name | pascal_case }} API step handler.
 
     Makes HTTP requests to external services as part of a Tasker workflow.
-    Uses the APIMixin for built-in HTTP client, error classification,
-    and retry support.
+    The `api` object provides pre-configured HTTP methods (get, post, put,
+    patch, delete) and result helpers (api_success, api_failure,
+    connection_error, timeout_error).
+
+    Args:
+        endpoint: value from task input "endpoint"
+        api: pre-configured HTTP client
+        context: step execution context
 
     Register this handler in your task definition YAML:
         handler:
-            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | pascal_case }}Handler
-            initialization:
-                base_url: "{{ base_url }}"
+            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | snake_case }}
     """
+    import httpx
 
-    handler_name = "{{ name | snake_case }}"
-    handler_version = "1.0.0"
-    base_url = "{{ base_url }}"
-    default_timeout = 30.0
+    path = endpoint or "/resource"
 
-    def call(self, context):
-        """Execute an API request based on step context.
+    try:
+        response = api.get(path)
 
-        Args:
-            context: Step execution context with endpoint and configuration.
+        if response.ok:
+            return api.api_success(response)
+        return api.api_failure(response)
 
-        Returns:
-            StepHandlerResult with the API response data.
-        """
-        endpoint = context.get_input("endpoint") or "/resource"
-
-        try:
-            response = self.get(endpoint)
-
-            if response.ok:
-                return self.api_success(response)
-            return self.api_failure(response)
-
-        except httpx.ConnectError as exc:
-            return self.connection_error(exc, f"requesting {endpoint}")
-        except httpx.TimeoutException as exc:
-            return self.timeout_error(exc, f"requesting {endpoint}")
+    except httpx.ConnectError as exc:
+        return api.connection_error(exc, f"requesting {path}")
+    except httpx.TimeoutException as exc:
+        return api.timeout_error(exc, f"requesting {path}")
