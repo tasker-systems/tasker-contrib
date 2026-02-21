@@ -30,7 +30,7 @@ module CustomerSuccess
       ticket_id = input.ticket_id
       order_ref = input.order_ref
       customer_id = input.customer_id
-      refund_reason = input.refund_reason
+      refund_reason = input.resolved_refund_reason
       raise TaskerCore::Errors::PermanentError.new(
         "Invalid refund amount: #{amount}. Must be greater than 0",
         error_code: 'INVALID_AMOUNT'
@@ -97,7 +97,7 @@ module CustomerSuccess
       previous_refunds = order_data['previous_refunds'].to_i
       customer_tier = validation['customer_tier'] || order_data['customer_tier'] || 'standard'
 
-      policy = REASON_POLICIES[reason] || { window_days: REFUND_WINDOW_DAYS, auto_approve_threshold: 0 }
+      policy = REASON_POLICIES[reason] || { window_days: REFUND_WINDOW_DAYS, auto_approve_threshold: 0.0 }
       days_since_order = (Date.current - order_date).to_i
 
       # Policy checks
@@ -145,7 +145,7 @@ module CustomerSuccess
         days_since_purchase: days_since_order,
         within_refund_window: days_since_order <= policy[:window_days],
         requires_approval: requires_manager,
-        max_allowed_amount: policy[:auto_approve_threshold] == Float::INFINITY ? 999_999 : policy[:auto_approve_threshold],
+        max_allowed_amount: (policy[:auto_approve_threshold] == Float::INFINITY ? 999_999.0 : policy[:auto_approve_threshold]).to_f,
         policy_checked_at: Time.current.iso8601,
         namespace: 'customer_success_rb',
         check_id: check_id,

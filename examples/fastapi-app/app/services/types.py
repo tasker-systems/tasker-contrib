@@ -52,7 +52,7 @@ class ValidateRefundRequestInput(BaseModel):
         missing = []
         if not self.resolved_ticket_id:
             missing.append("ticket_id")
-        if not self.customer_id:
+        if not self.customer_id and not self.customer_email:
             missing.append("customer_id")
         if not self.resolved_amount:
             missing.append("refund_amount")
@@ -69,10 +69,20 @@ class ValidateRefundRequestInput(BaseModel):
 class ValidatePaymentEligibilityInput(BaseModel):
     payment_id: str | None = None
     refund_amount: float | None = None
+    amount: float | None = None
     refund_reason: str | None = None
+    reason: str | None = None
     partial_refund: bool | None = None
     order_ref: str | None = None
     customer_email: str | None = None
+
+    @property
+    def resolved_amount(self) -> float | None:
+        return self.refund_amount or self.amount
+
+    @property
+    def resolved_reason(self) -> str | None:
+        return self.refund_reason or self.reason
 
     @model_validator(mode='after')
     def check_required_fields(self) -> 'ValidatePaymentEligibilityInput':
@@ -80,7 +90,7 @@ class ValidatePaymentEligibilityInput(BaseModel):
         missing = []
         if not self.payment_id and not self.order_ref:
             missing.append("payment_id")
-        if not self.refund_amount:
+        if not self.resolved_amount:
             missing.append("refund_amount")
         if missing:
             raise PermanentError(f"Missing required fields: {', '.join(missing)}")
@@ -95,6 +105,7 @@ class ValidatePaymentEligibilityInput(BaseModel):
 class CreateUserAccountInput(BaseModel):
     email: str | None = None
     username: str | None = None
+    full_name: str | None = None
     plan: str | None = None
     referral_code: str | None = None
     preferences: dict[str, Any] | None = None
@@ -105,8 +116,8 @@ class CreateUserAccountInput(BaseModel):
         missing = []
         if not self.email:
             missing.append("email")
-        if not self.username:
-            missing.append("username")
+        if not self.full_name and not self.username:
+            missing.append("full_name")
         if missing:
             raise PermanentError(f"Missing required fields: {', '.join(missing)}")
         return self
@@ -122,7 +133,7 @@ class EcommerceOrderInput(BaseModel):
     cart_items: list[dict[str, Any]] | None = None
     payment_token: str | None = None
     customer_email: str | None = None
-    shipping_address: dict[str, Any] | None = None
+    shipping_address: str | None = None
 
     @property
     def resolved_items(self) -> list[dict[str, Any]]:

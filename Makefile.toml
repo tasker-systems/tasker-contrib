@@ -15,6 +15,7 @@
 #   cargo make test-example-bun       # Run bun-app integration tests
 #   cargo make test-example-fastapi   # Run fastapi-app integration tests
 #   cargo make test-example-rails     # Run rails-app integration tests
+#   cargo make test-db-setup          # Run migrations for example apps (rails, fastapi, bun)
 #   cargo make test-examples          # Run all example app tests
 
 [config]
@@ -144,6 +145,43 @@ dependencies = ["validate", "test-templates", "ci-sanity-check"]
 # These require the shared infrastructure stack to be running:
 #   cd examples && docker compose up -d
 # ---------------------------------------------------------------------------
+
+# --- Database migrations (axum runs its own via sqlx::migrate!) ---
+
+[tasks.db-setup-rails]
+description = "Run Rails database migrations for example app"
+script_runner = "@shell"
+script = '''
+cd "${EXAMPLES_DIR}/rails-app" && bundle exec rails db:migrate
+'''
+
+[tasks.db-setup-fastapi]
+description = "Run Alembic database migrations for FastAPI example app"
+script_runner = "@shell"
+script = '''
+cd "${EXAMPLES_DIR}/fastapi-app" && uv run alembic upgrade head
+'''
+
+[tasks.db-setup-bun]
+description = "Run Drizzle database migrations for Bun example app"
+script_runner = "@shell"
+script = '''
+cd "${EXAMPLES_DIR}/bun-app" && bun run db:migrate
+'''
+
+[tasks.test-db-setup]
+description = "Run database migrations for all example apps (requires docker-compose services)"
+dependencies = [
+  "db-setup-rails",
+  "db-setup-fastapi",
+  "db-setup-bun",
+]
+
+[tasks.tds]
+alias = "test-db-setup"
+
+# --- Example app integration tests ---
+
 [tasks.test-example-axum]
 description = "Run axum-app integration tests (requires docker-compose services)"
 script_runner = "@shell"

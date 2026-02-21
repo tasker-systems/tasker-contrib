@@ -10,8 +10,8 @@ module DataPipeline
     ) do |inputs:, context:|
       DataPipeline::Service.extract_sales_data(
         source: inputs.source,
-        date_range_start: inputs.date_range_start,
-        date_range_end: inputs.date_range_end,
+        date_range_start: inputs.resolved_date_range_start,
+        date_range_end: inputs.resolved_date_range_end,
         granularity: inputs.granularity
       )
     end

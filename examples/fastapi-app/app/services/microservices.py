@@ -58,21 +58,21 @@ def create_user_account(
 ) -> MicroservicesCreateUserResult:
     """Validate user input, generate a unique user ID, and create the initial account."""
     email = input.email
-    username = input.username
+    full_name = input.full_name or input.username
     plan = input.plan or "starter"
     referral_code = input.referral_code
 
     # Fields guaranteed non-None by @model_validator (raises PermanentError if missing)
     assert email is not None
-    assert username is not None
+    assert full_name is not None
 
     if "@" not in email:
         raise PermanentError(f"Invalid email address: {email}")
 
-    full_name = username
     if len(full_name.strip()) < 2:
         raise PermanentError("Name must be at least 2 characters")
 
+    username = input.username or email.split("@")[0].lower()
     if username.lower() in RESERVED_USERNAMES:
         raise PermanentError(f"Username '{username}' is reserved")
 

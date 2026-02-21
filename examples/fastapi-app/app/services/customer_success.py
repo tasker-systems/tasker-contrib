@@ -52,7 +52,7 @@ def validate_refund_request(
     order_ref = input.resolved_ticket_id
     amount = input.resolved_amount
     reason = input.refund_reason
-    customer_id = input.customer_id
+    customer_id = input.customer_id or input.customer_email
 
     # Fields guaranteed non-None by @model_validator (raises PermanentError if missing)
     assert amount is not None

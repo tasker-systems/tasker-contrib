@@ -11,7 +11,7 @@ module Payments
     ) do |eligibility:, inputs:, context:|
       Payments::Service.process_gateway(
         eligibility: eligibility,
-        refund_reason: inputs.refund_reason || 'customer_request',
+        refund_reason: inputs.resolved_refund_reason || 'customer_request',
         partial_refund: inputs.partial_refund
       )
     end

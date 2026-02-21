@@ -15,7 +15,7 @@ module Payments
       Payments::Service.update_records(
         eligibility: eligibility,
         gateway_result: gateway_result,
-        refund_reason: inputs.refund_reason || 'customer_request'
+        refund_reason: inputs.resolved_refund_reason || 'customer_request'
       )
     end
   end

@@ -523,7 +523,7 @@ module DataPipeline
       sales_record_count = sales_transform['record_count'] || sales_transform[:record_count] || sales_transform['source_record_count'] || sales_transform[:source_record_count] || 0
       total_ltv = customer_transform['total_lifetime_value'] || customer_transform[:total_lifetime_value] || 0
       inventory_reorder_alerts = inventory_transform['reorder_alerts'] || inventory_transform[:reorder_alerts] || 0
-      total_inventory_quantity = inventory_transform['total_quantity_on_hand'] || inventory_transform[:total_quantity_on_hand] || total_inventory_value
+      total_inventory_quantity = (inventory_transform['total_quantity_on_hand'] || inventory_transform[:total_quantity_on_hand] || total_inventory_value).to_f
 
       Types::DataPipeline::AggregateMetricsResult.new(
         total_revenue: total_revenue,

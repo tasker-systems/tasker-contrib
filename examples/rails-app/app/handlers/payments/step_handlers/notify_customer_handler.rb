@@ -18,7 +18,7 @@ module Payments
         gateway_result: gateway_result,
         records_result: records_result,
         customer_email: inputs.customer_email,
-        refund_reason: inputs.refund_reason || 'customer_request'
+        refund_reason: inputs.resolved_refund_reason || 'customer_request'
       )
     end
   end

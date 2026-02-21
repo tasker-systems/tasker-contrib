@@ -52,7 +52,7 @@ def check_refund_policy(
     )
 
 
-@step_handler("approve_refund")
+@step_handler("get_manager_approval")
 @depends_on(
     policy=("check_refund_policy", CustomerSuccessCheckPolicyResult),
     validation=("validate_refund_request", CustomerSuccessValidateRefundResult),
@@ -71,7 +71,7 @@ def approve_refund(
     )
 
 
-@step_handler("execute_refund")
+@step_handler("execute_refund_workflow")
 @depends_on(
     approval=("get_manager_approval", CustomerSuccessApproveRefundResult),
     validation=("validate_refund_request", CustomerSuccessValidateRefundResult),
@@ -91,7 +91,7 @@ def execute_refund(
     )
 
 
-@step_handler("update_ticket")
+@step_handler("update_ticket_status")
 @depends_on(
     delegation_result=("execute_refund_workflow", CustomerSuccessExecuteRefundResult),
     validation=("validate_refund_request", CustomerSuccessValidateRefundResult),

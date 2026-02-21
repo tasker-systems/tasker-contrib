@@ -26,6 +26,39 @@ module Types
         type.optional.omittable
       end
     end
+
+    # Allow both string and symbol key access so that service code using
+    # hash-style access (e.g., result['user_id']) works with Dry::Struct
+    # attributes which are stored as symbols internally.
+    def [](name)
+      key = name.respond_to?(:to_sym) ? name.to_sym : name
+      return nil unless self.class.attribute_names.include?(key)
+
+      super(key)
+    end
+
+    # Enable nested access via dig, e.g. validation.dig('order_data', 'payment_method')
+    def dig(key, *rest)
+      value = self[key]
+      if rest.empty? || value.nil?
+        value
+      else
+        value.dig(*rest)
+      end
+    end
+  end
+
+  # Base class for input types that receive the full task context hash.
+  # Like ResultStruct, all attributes are optional and omittable so that
+  # missing keys don't raise — handlers validate required fields explicitly.
+  class InputStruct < Dry::Struct
+    transform_types do |type|
+      if type.default?
+        type
+      else
+        type.optional.omittable
+      end
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -33,15 +66,21 @@ module Types
   # ---------------------------------------------------------------------------
 
   module CustomerSuccess
-    class ValidateRefundRequestInput < Dry::Struct
+    class ValidateRefundRequestInput < Types::InputStruct
       attribute :ticket_id, Types::String.optional
       attribute :order_ref, Types::String.optional
       attribute :customer_id, Types::String.optional
       attribute :refund_amount, Types::Float.optional
       attribute :refund_reason, Types::String.optional
+      attribute :reason, Types::String.optional
       attribute :correlation_id, Types::String.optional
       attribute :agent_id, Types::String.optional
       attribute :priority, Types::String.optional
+
+      # Resolve refund_reason from either field name (controller sends 'reason')
+      def resolved_refund_reason
+        refund_reason || reason
+      end
 
       # Input validation — required fields are enforced at the model level.
       def validate!
@@ -49,7 +88,7 @@ module Types
         missing << 'ticket_id' if ticket_id.blank?
         missing << 'customer_id' if customer_id.blank?
         missing << 'refund_amount' if refund_amount.nil?
-        missing << 'refund_reason' if refund_reason.blank?
+        missing << 'refund_reason' if resolved_refund_reason.blank?
         return if missing.empty?
 
         raise TaskerCore::Errors::PermanentError.new(
@@ -65,7 +104,7 @@ module Types
   # ---------------------------------------------------------------------------
 
   module Payments
-    class ValidateEligibilityInput < Dry::Struct
+    class ValidateEligibilityInput < Types::InputStruct
       attribute :payment_id, Types::String.optional
       attribute :refund_amount, Types::Float.optional
       attribute :currency, Types::String.optional
@@ -74,6 +113,11 @@ module Types
       attribute :idempotency_key, Types::String.optional
       attribute :partial_refund, Types::Bool.optional
       attribute :customer_email, Types::String.optional
+
+      # Resolve refund_reason from either field name (controller sends 'reason')
+      def resolved_refund_reason
+        refund_reason || reason
+      end
 
       # Input validation — required fields are enforced at the model level.
       def validate!
@@ -95,7 +139,7 @@ module Types
   # ---------------------------------------------------------------------------
 
   module Microservices
-    class CreateUserAccountInput < Dry::Struct
+    class CreateUserAccountInput < Types::InputStruct
       attribute :email, Types::String.optional
       attribute :name, Types::String.optional
       attribute :plan, Types::String.optional
@@ -126,7 +170,7 @@ module Types
   # ---------------------------------------------------------------------------
 
   module Ecommerce
-    class OrderInput < Dry::Struct
+    class OrderInput < Types::InputStruct
       attribute :cart_items, Types::Array.optional
       attribute :customer_email, Types::String.optional
       attribute :payment_info, Types::Hash.optional
@@ -140,12 +184,23 @@ module Types
   # ---------------------------------------------------------------------------
 
   module DataPipeline
-    class PipelineInput < Dry::Struct
+    class PipelineInput < Types::InputStruct
       attribute :source, Types::String.optional
       attribute :date_range_start, Types::String.optional
       attribute :date_range_end, Types::String.optional
+      attribute :date_range, Types::Hash.optional
       attribute :granularity, Types::String.optional
       attribute :filters, Types::Hash.optional
+
+      # Resolve date_range_start from flat field or nested date_range hash
+      def resolved_date_range_start
+        date_range_start || date_range&.dig('start_date') || date_range&.dig(:start_date)
+      end
+
+      # Resolve date_range_end from flat field or nested date_range hash
+      def resolved_date_range_end
+        date_range_end || date_range&.dig('end_date') || date_range&.dig(:end_date)
+      end
     end
   end
 
