@@ -6,42 +6,27 @@ module {{ module_name }}
   # {{ name | pascal_case }} API step handler.
   #
   # Makes HTTP requests to external services as part of a Tasker workflow.
-  # Uses the API mixin for HTTP client functionality with automatic
-  # error classification and retry support.
+  # The `api` object provides pre-configured HTTP methods (get, post, put,
+  # delete) and result helpers (api_success, api_failure).
   #
   # Register this handler in your task definition YAML:
   #   handler:
   #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
-  #     initialization:
-  #       base_url: "{{ base_url }}"
-  class {{ name | pascal_case }}Handler < TaskerCore::StepHandler::Base
-    include TaskerCore::StepHandler::Mixins::API
+  include TaskerCore::StepHandler::Functional
 
-    def call(context)
-      # Build the API request from context
-      endpoint = context.get_input('endpoint') || '/resource'
+  {{ name | pascal_case }}Handler = api_handler '{{ name | snake_case }}',
+    base_url: '{{ base_url }}',
+    inputs: [:endpoint] do |endpoint:, api:, context:|
 
-      # Make the HTTP request using the API mixin
-      response = get(endpoint)
-      body = JSON.parse(response.body)
+    path = endpoint || '/resource'
 
-      api_success(
-        data: body,
-        status: response.status,
-        metadata: { endpoint: endpoint }
-      )
-    rescue Faraday::TimeoutError => e
-      api_failure(
-        message: "API timeout: #{e.message}",
-        status: 408,
-        metadata: { endpoint: endpoint }
-      )
-    rescue Faraday::ConnectionFailed => e
-      api_failure(
-        message: "API connection failed: #{e.message}",
-        status: 503,
-        metadata: { endpoint: endpoint }
-      )
-    end
+    response = api.get(path)
+    body = JSON.parse(response.body)
+
+    api.api_success(
+      data: body,
+      status: response.status,
+      metadata: { endpoint: path }
+    )
   end
 end

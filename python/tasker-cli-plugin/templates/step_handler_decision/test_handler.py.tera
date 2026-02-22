@@ -1,22 +1,25 @@
-"""Tests for {{ name | pascal_case }}Handler decision routing."""
+"""Tests for {{ name | snake_case }} decision routing."""
 
 import uuid
 from unittest.mock import MagicMock
 
 import pytest
-from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
+from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | snake_case }}
 
 
 @pytest.fixture
 def handler():
-    return {{ name | pascal_case }}Handler()
+    return {{ name | snake_case }}._handler_class()
 
 
 def make_context(route_key=None):
     ctx = MagicMock()
     ctx.task_uuid = uuid.uuid4()
     ctx.step_uuid = uuid.uuid4()
-    ctx.get_input = MagicMock(side_effect=lambda key: route_key if key == "route_key" else None)
+    ctx.get_input = MagicMock(side_effect=lambda key: {
+        "route_key": route_key,
+    }.get(key))
+    ctx.get_dependency_result = MagicMock(return_value=None)
     ctx.step_config = {}
     ctx.retry_count = 0
     ctx.max_retries = 3

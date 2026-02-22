@@ -1,15 +1,15 @@
-"""Tests for {{ name | pascal_case }}Handler."""
+"""Tests for {{ name | snake_case }} API handler."""
 
 import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
-from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
+from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | snake_case }}
 
 
 @pytest.fixture
 def handler():
-    return {{ name | pascal_case }}Handler()
+    return {{ name | snake_case }}._handler_class()
 
 
 @pytest.fixture

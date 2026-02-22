@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Analytics
   class JobsController < ApplicationController
     def create
@@ -7,12 +9,12 @@ module Analytics
       )
 
       task = TaskerCore::Client.create_task(
-        name:      'analytics_pipeline',
+        name: 'analytics_pipeline',
         namespace: 'data_pipeline_rb',
-        context:   {
-          source:           job_params[:source],
-          date_range:       job_params[:date_range],
-          filters:          job_params[:filters] || {},
+        context: {
+          source: job_params[:source],
+          date_range: job_params[:date_range],
+          filters: job_params[:filters] || {},
           domain_record_id: job.id
         }
       )
@@ -20,11 +22,11 @@ module Analytics
       job.update!(task_uuid: task.task_uuid, status: 'running')
 
       render json: {
-        id:        job.id,
-        source:    job.source,
-        status:    job.status,
+        id: job.id,
+        source: job.source,
+        status: job.status,
         task_uuid: job.task_uuid,
-        message:   'Analytics pipeline submitted'
+        message: 'Analytics pipeline submitted'
       }, status: :created
     rescue StandardError => e
       Rails.logger.error("Analytics job creation failed: #{e.message}")
@@ -41,8 +43,8 @@ module Analytics
     def job_params
       params.require(:job).permit(
         :source,
-        date_range: [:start_date, :end_date],
-        filters: [:region, :product_category, :min_revenue]
+        date_range: %i[start_date end_date],
+        filters: %i[region product_category min_revenue]
       )
     end
   end

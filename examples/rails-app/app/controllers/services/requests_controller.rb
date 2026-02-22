@@ -1,33 +1,35 @@
+# frozen_string_literal: true
+
 module Services
   class RequestsController < ApplicationController
     def create
       service_request = ServiceRequest.create!(
-        user_id:      request_params[:user_id],
+        user_id: request_params[:user_id],
         request_type: 'user_registration',
-        status:       'pending'
+        status: 'pending'
       )
 
       task = TaskerCore::Client.create_task(
-        name:      'user_registration',
+        name: 'user_registration',
         namespace: 'microservices_rb',
-        context:   {
-          email:             request_params[:email],
-          name:              request_params[:name],
-          plan:              request_params[:plan],
-          referral_code:     request_params[:referral_code],
+        context: {
+          email: request_params[:email],
+          name: request_params[:name],
+          plan: request_params[:plan],
+          referral_code: request_params[:referral_code],
           marketing_consent: request_params[:marketing_consent] || false,
-          domain_record_id:  service_request.id
+          domain_record_id: service_request.id
         }
       )
 
       service_request.update!(task_uuid: task.task_uuid, status: 'in_progress')
 
       render json: {
-        id:           service_request.id,
+        id: service_request.id,
         request_type: service_request.request_type,
-        status:       service_request.status,
-        task_uuid:    service_request.task_uuid,
-        message:      'User registration workflow submitted'
+        status: service_request.status,
+        task_uuid: service_request.task_uuid,
+        message: 'User registration workflow submitted'
       }, status: :created
     rescue StandardError => e
       Rails.logger.error("Service request creation failed: #{e.message}")

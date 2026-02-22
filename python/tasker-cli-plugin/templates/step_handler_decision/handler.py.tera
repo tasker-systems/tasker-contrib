@@ -1,49 +1,30 @@
 """{{ name | pascal_case }} decision step handler for Tasker workflow routing."""
 
-from tasker_core import DecisionHandler, StepContext, StepHandlerResult
+from tasker_core.step_handler.functional import Decision, decision_handler, depends_on, inputs
 
 
-class {{ name | pascal_case }}Handler(DecisionHandler):
+@decision_handler("{{ name | snake_case }}")
+@inputs("route_key")
+def {{ name | snake_case }}(route_key, context):
     """{{ name | pascal_case }} decision step handler.
 
     Evaluates conditions and routes the workflow to different downstream
-    steps based on the decision outcome. Extends DecisionHandler for
-    standardized decision result formatting.
+    steps. Return Decision.route([...]) or Decision.skip("reason").
+
+    Args:
+        route_key: value from task input "route_key"
+        context: step execution context
 
     Register this handler in your task definition YAML:
         handler:
-            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | pascal_case }}Handler
+            callable: {{ module_name }}.{{ name | snake_case }}_handler.{{ name | snake_case }}
     """
+    # TODO: Implement your routing logic here
+    route = route_key or "default"
 
-    handler_name = "{{ name | snake_case }}"
-    handler_version = "1.0.0"
-
-    def call(self, context: StepContext) -> StepHandlerResult:
-        """Evaluate routing conditions and return a decision.
-
-        Args:
-            context: Step execution context with input data for decision.
-
-        Returns:
-            StepHandlerResult with decision_point_outcome indicating
-            which downstream steps should execute.
-        """
-        # TODO: Implement your routing logic here
-        # Example: route based on a field value
-        route_key = context.get_input("route_key") or "default"
-
-        if route_key == "fast_track":
-            return self.decision_success(
-                steps=["fast_track_processing"],
-                routing_context={"route": "fast_track", "reason": "Meets fast-track criteria"},
-            )
-        elif route_key == "review_required":
-            return self.decision_success(
-                steps=["manual_review", "approval_gate"],
-                routing_context={"route": "review", "reason": "Review required"},
-            )
-        else:
-            return self.decision_success(
-                steps=["standard_processing"],
-                routing_context={"route": "standard", "reason": "Default routing"},
-            )
+    if route == "fast_track":
+        return Decision.route(["fast_track_processing"], route="fast_track")
+    elif route == "review_required":
+        return Decision.route(["manual_review", "approval_gate"], route="review")
+    else:
+        return Decision.route(["standard_processing"], route="standard")

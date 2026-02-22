@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Asynchronous job that creates a Tasker workflow task for an order.
 #
 # Demonstrates the background job pattern: controller saves the record,
@@ -10,12 +12,12 @@ class CreateOrderTaskJob < ApplicationJob
     order = Order.find(order_id)
 
     task = TaskerCore::Client.create_task(
-      name:      'ecommerce_order_processing',
+      name: 'ecommerce_order_processing',
       namespace: 'ecommerce_rb',
-      context:   {
-        customer_email:   order.customer_email,
-        cart_items:       order.items,
-        payment_info:     { token: 'tok_background', method: 'card' },
+      context: {
+        customer_email: order.customer_email,
+        cart_items: order.items,
+        payment_info: { token: 'tok_background', method: 'card' },
         domain_record_id: order.id
       }
     )

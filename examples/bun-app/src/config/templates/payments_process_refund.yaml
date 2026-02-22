@@ -73,7 +73,7 @@ steps:
   - name: validate_payment_eligibility
     description: "Check if payment can be refunded via gateway"
     handler:
-      callable: Payments.StepHandlers.ValidatePaymentEligibilityHandler
+      callable: Payments.StepHandlers.ProcessRefundPaymentHandler
       initialization:
         scenario: payments_refund
     dependencies: []
@@ -88,7 +88,7 @@ steps:
   - name: process_gateway_refund
     description: "Execute refund through payment processor"
     handler:
-      callable: Payments.StepHandlers.ProcessGatewayRefundHandler
+      callable: Payments.StepHandlers.UpdateLedgerHandler
       initialization:
         scenario: payments_refund
     dependencies:
@@ -104,7 +104,7 @@ steps:
   - name: update_payment_records
     description: "Update internal payment status and history"
     handler:
-      callable: Payments.StepHandlers.UpdatePaymentRecordsHandler
+      callable: Payments.StepHandlers.ReconcileAccountHandler
       initialization:
         scenario: payments_refund
     dependencies:
@@ -120,7 +120,7 @@ steps:
   - name: notify_customer
     description: "Send refund confirmation to customer"
     handler:
-      callable: Payments.StepHandlers.NotifyCustomerHandler
+      callable: Payments.StepHandlers.GenerateRefundReceiptHandler
       initialization:
         scenario: payments_refund
     dependencies:

@@ -1,15 +1,15 @@
-"""Tests for {{ name | pascal_case }}Handler."""
+"""Tests for {{ name | snake_case }} step handler."""
 
 import uuid
 from unittest.mock import MagicMock
 
 import pytest
-from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | pascal_case }}Handler
+from {{ module_name }}.{{ name | snake_case }}_handler import {{ name | snake_case }}
 
 
 @pytest.fixture
 def handler():
-    return {{ name | pascal_case }}Handler()
+    return {{ name | snake_case }}._handler_class()
 
 
 @pytest.fixture
@@ -17,7 +17,12 @@ def context():
     ctx = MagicMock()
     ctx.task_uuid = uuid.uuid4()
     ctx.step_uuid = uuid.uuid4()
-    ctx.get_input = MagicMock(return_value=None)
+    ctx.get_input = MagicMock(side_effect=lambda key: {
+        "field_name": "test_value",
+    }.get(key))
+    ctx.get_dependency_result = MagicMock(side_effect=lambda key: {
+        "previous_step_name": {"status": "completed", "data": {"id": 42}},
+    }.get(key))
     ctx.step_config = {}
     ctx.retry_count = 0
     ctx.max_retries = 3
@@ -30,6 +35,7 @@ class TestCall:
 
         assert result.success is True
         assert result.result["processed"] is True
+        assert result.result["input_received"] == "test_value"
 
     def test_handler_name_is_set(self, handler):
         assert handler.handler_name == "{{ name | snake_case }}"

@@ -96,7 +96,7 @@ steps:
   - name: check_refund_policy
     description: "Verify request complies with refund policies"
     handler:
-      callable: CustomerSuccess.StepHandlers.CheckRefundPolicyHandler
+      callable: CustomerSuccess.StepHandlers.CheckRefundEligibilityHandler
       initialization:
         scenario: customer_success_refund
     dependencies:
@@ -112,7 +112,7 @@ steps:
   - name: get_manager_approval
     description: "Route to manager for approval if needed"
     handler:
-      callable: CustomerSuccess.StepHandlers.GetManagerApprovalHandler
+      callable: CustomerSuccess.StepHandlers.CalculateRefundAmountHandler
       initialization:
         scenario: customer_success_refund
     dependencies:
@@ -128,7 +128,7 @@ steps:
   - name: execute_refund_workflow
     description: "Call payments team refund workflow"
     handler:
-      callable: CustomerSuccess.StepHandlers.ExecuteRefundWorkflowHandler
+      callable: CustomerSuccess.StepHandlers.NotifyCustomerSuccessHandler
       initialization:
         scenario: customer_success_refund
     dependencies:
@@ -144,7 +144,7 @@ steps:
   - name: update_ticket_status
     description: "Update customer support ticket"
     handler:
-      callable: CustomerSuccess.StepHandlers.UpdateTicketStatusHandler
+      callable: CustomerSuccess.StepHandlers.UpdateCrmRecordHandler
       initialization:
         scenario: customer_success_refund
     dependencies:

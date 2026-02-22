@@ -76,7 +76,7 @@ steps:
   - name: create_user_account
     description: "Create user account in user service with idempotency"
     handler:
-      callable: Microservices.StepHandlers.CreateUserAccountHandler
+      callable: Microservices.StepHandlers.CreateUserHandler
       initialization:
         scenario: user_registration
     system_dependency:
@@ -94,7 +94,7 @@ steps:
   - name: setup_billing_profile
     description: "Setup billing profile in billing service"
     handler:
-      callable: Microservices.StepHandlers.SetupBillingProfileHandler
+      callable: Microservices.StepHandlers.SetupBillingHandler
       initialization:
         scenario: user_registration
     system_dependency:
@@ -112,7 +112,7 @@ steps:
   - name: initialize_preferences
     description: "Initialize user preferences in preferences service"
     handler:
-      callable: Microservices.StepHandlers.InitializePreferencesHandler
+      callable: Microservices.StepHandlers.InitPreferencesHandler
       initialization:
         scenario: user_registration
     system_dependency:
@@ -131,7 +131,7 @@ steps:
   - name: send_welcome_sequence
     description: "Send welcome emails via notification service"
     handler:
-      callable: Microservices.StepHandlers.SendWelcomeSequenceHandler
+      callable: Microservices.StepHandlers.SendWelcomeHandler
       initialization:
         scenario: user_registration
     system_dependency:
@@ -151,7 +151,7 @@ steps:
   - name: update_user_status
     description: "Update user status to active in user service"
     handler:
-      callable: Microservices.StepHandlers.UpdateUserStatusHandler
+      callable: Microservices.StepHandlers.UpdateStatusHandler
       initialization:
         scenario: user_registration
     system_dependency:

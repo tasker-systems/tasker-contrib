@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class ServiceRequest < ApplicationRecord
   validates :request_type, presence: true, inclusion: {
     in: %w[user_registration account_update plan_change]

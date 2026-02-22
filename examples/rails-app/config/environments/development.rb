@@ -1,4 +1,6 @@
-require "active_support/core_ext/integer/time"
+# frozen_string_literal: true
+
+require 'active_support/core_ext/integer/time'
 
 Rails.application.configure do
   config.enable_reloading = true
@@ -6,8 +8,8 @@ Rails.application.configure do
   config.consider_all_requests_local = true
   config.server_timing = true
 
-  if Rails.root.join("tmp/caching-dev.txt").exist?
-    config.public_file_server.headers = { "cache-control" => "public, max-age=#{2.days.to_i}" }
+  if Rails.root.join('tmp/caching-dev.txt').exist?
+    config.public_file_server.headers = { 'cache-control' => "public, max-age=#{2.days.to_i}" }
   else
     config.action_controller.perform_caching = false
   end

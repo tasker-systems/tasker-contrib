@@ -12,4 +12,16 @@
 | #7252 | 10:14 AM | 🔵 | FastAPI Handler Classes Use handler_name Class Attribute for Registration | ~544 |
 | #7193 | 9:41 AM | 🔵 | Comprehensive Handler Failure Root Cause Analysis Across All Frameworks | ~743 |
 | #7189 | 9:40 AM | 🔵 | FastAPI Handler Implementation Using Python StepHandler Base Class | ~545 |
+
+### Feb 16, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #7583 | 12:06 AM | 🔵 | Python Handler Pattern with StepHandler Base Class and StepContext | ~535 |
+
+### Feb 21, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #10356 | 8:04 AM | 🔵 | Batchable handler pattern requires three-phase workflow with deferred_convergence | ~1008 |
 </claude-mem-context>

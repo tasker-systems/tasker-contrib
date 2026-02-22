@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 RSpec.describe 'Tasker Workflow Integration', type: :request do
@@ -275,8 +277,6 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
         validate_step = steps.find { |s| s['name'] == 'validate_cart' }
         expect(validate_step).to be_present
         expect(validate_step['attempts']).to be >= 1
-
-        puts "  E-commerce task (sync): #{task['status']} (#{completed}/5 steps complete)"
       end
 
       it 'creates task via async endpoint (background job) and all steps complete' do
@@ -318,8 +318,6 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
 
         completed = task['steps'].count { |s| s['current_state'] == 'complete' }
         expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
-
-        puts "  E-commerce task (async): #{task['status']} (#{completed}/5 steps complete)"
       end
     end
 
@@ -361,8 +359,6 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
         # All steps must have reached "complete" state
         completed = steps.count { |s| s['current_state'] == 'complete' }
         expect(completed).to eq(8), "Expected all 8 steps to complete, got #{completed}"
-
-        puts "  Analytics task: #{task['status']} (#{completed}/8 steps complete)"
       end
     end
 
@@ -392,15 +388,14 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
         step_names = steps.map { |s| s['name'] }
 
         # Verify diamond dependency: billing + preferences run in parallel after account creation
-        %w[create_user_account setup_billing_profile initialize_preferences send_welcome_sequence update_user_status].each do |name|
+        %w[create_user_account setup_billing_profile initialize_preferences send_welcome_sequence
+           update_user_status].each do |name|
           expect(step_names).to include(name), "Expected step '#{name}' to be present"
         end
 
         # All steps must have reached "complete" state
         completed = steps.count { |s| s['current_state'] == 'complete' }
         expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
-
-        puts "  User registration task: #{task['status']} (#{completed}/5 steps complete)"
       end
     end
 
@@ -431,8 +426,6 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
         # All steps must have reached "complete" state
         completed = task['steps'].count { |s| s['current_state'] == 'complete' }
         expect(completed).to eq(5), "Expected all 5 steps to complete, got #{completed}"
-
-        puts "  Customer success refund task: #{task['status']} (#{completed}/5 steps complete)"
       end
     end
 
@@ -463,8 +456,6 @@ RSpec.describe 'Tasker Workflow Integration', type: :request do
         # All steps must have reached "complete" state
         completed = task['steps'].count { |s| s['current_state'] == 'complete' }
         expect(completed).to eq(4), "Expected all 4 steps to complete, got #{completed}"
-
-        puts "  Payments refund task: #{task['status']} (#{completed}/4 steps complete)"
       end
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'tasker_core'
 
 # Bootstrap the Tasker worker FFI bridge.

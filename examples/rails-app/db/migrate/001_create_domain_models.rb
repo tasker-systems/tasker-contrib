@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class CreateDomainModels < ActiveRecord::Migration[7.1]
   def change
     enable_extension 'pgcrypto' unless extension_enabled?('pgcrypto')
@@ -19,9 +21,9 @@ class CreateDomainModels < ActiveRecord::Migration[7.1]
 
     # Analytics / data pipeline jobs
     create_table :analytics_jobs, id: :uuid do |t|
-      t.string   :source,      null: false
+      t.string   :source, null: false
       t.string   :dataset_url
-      t.string   :status,      null: false, default: 'pending'
+      t.string   :status, null: false, default: 'pending'
       t.uuid     :task_uuid
 
       t.timestamps

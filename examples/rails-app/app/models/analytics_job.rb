@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class AnalyticsJob < ApplicationRecord
   validates :source, presence: true, inclusion: {
     in: %w[production staging warehouse]

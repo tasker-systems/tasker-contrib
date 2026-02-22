@@ -1,70 +1,86 @@
-import {
-  BatchableStepHandler,
-  type StepContext,
-  type StepHandlerResult,
-} from '@tasker-systems/tasker';
+import { defineBatchAnalyzer, defineBatchWorker, defineHandler } from '@tasker-systems/tasker';
 
 /**
- * {{ name | pascal_case }} batchable step handler.
- *
- * Implements batch processing for parallel work distribution.
- * Extends BatchableStepHandler for cursor config creation,
- * worker outcome building, and aggregation helpers.
+ * {{ name | pascal_case }} batchable step handlers for parallel processing.
  *
  * Workflow pattern:
- *   1. Analyzer step: creates cursor configs dividing work into batches
+ *   1. Analyzer step: returns BatchConfig to divide work into batches
  *   2. Worker steps: process individual batches in parallel
- *   3. Aggregator step: combines results from all workers
+ *   3. Convergence step: aggregates results from all workers
  *
- * Register this handler in your task definition YAML:
- *   handler:
- *     callable: {{ name | pascal_case }}Handler
+ * Register handlers in your task definition YAML:
+ *   - name: {{ name | snake_case }}_analyze
+ *     type: batchable
+ *     handler:
+ *       callable: {{ name | pascal_case }}AnalyzerHandler
+ *   - name: {{ name | snake_case }}_batch
+ *     type: batch_worker
+ *     dependencies: [{{ name | snake_case }}_analyze]
+ *     handler:
+ *       callable: {{ name | pascal_case }}WorkerHandler
+ *   - name: {{ name | snake_case }}_converge
+ *     type: deferred_convergence
+ *     dependencies: [{{ name | snake_case }}_batch]
+ *     handler:
+ *       callable: {{ name | pascal_case }}ConvergenceHandler
  */
-export class {{ name | pascal_case }}Handler extends BatchableStepHandler {
-  static handlerName = '{{ name | snake_case }}';
-  static handlerVersion = '1.0.0';
 
-  async call(context: StepContext): Promise<StepHandlerResult> {
-    // Check if this is a batch worker invocation
-    const batchInputs = context.stepInputs || {};
-    if (batchInputs['cursor'] || batchInputs['is_no_op']) {
-      return this.processBatch(context);
-    }
-
-    // Otherwise, this is the analyzer
-    return this.analyzeAndCreateBatches(context);
-  }
-
-  private analyzeAndCreateBatches(context: StepContext): StepHandlerResult {
+export const {{ name | pascal_case }}AnalyzerHandler = defineBatchAnalyzer(
+  '{{ name | snake_case }}_analyzer',
+  {
+    workerTemplate: '{{ name | snake_case }}_batch',
+    inputs: { totalItems: 'total_items' },
+  },
+  async ({ totalItems, context }) => {
     // TODO: Determine total items from your data source
-    const totalItems = context.getInput<number>('total_items') || 1000;
-    const workerCount = (context.stepConfig['worker_count'] as number) || 5;
+    const count = Number(totalItems) || 1000;
+    const batchSize = 200;
 
-    const batchConfigs = this.createCursorConfigs(totalItems, workerCount);
+    return { totalItems: count, batchSize };
+  },
+);
 
-    return this.batchSuccess(
-      '{{ name | snake_case }}_batch',
-      batchConfigs,
-      { analyzed_at: new Date().toISOString() },
-    );
-  }
-
-  private processBatch(context: StepContext): StepHandlerResult {
-    // Handle no-op placeholder
-    const noOpResult = this.handleNoOpWorker(context);
-    if (noOpResult) {
-      return noOpResult;
-    }
-
-    const batchCtx = this.getBatchContext(context);
-    if (!batchCtx) {
-      return this.failure('No batch context found');
-    }
-
+export const {{ name | pascal_case }}WorkerHandler = defineBatchWorker(
+  '{{ name | snake_case }}_worker',
+  {},
+  async ({ batchContext }) => {
     // TODO: Process items in the batch range
-    const itemsProcessed = batchCtx.endCursor - batchCtx.startCursor;
+    const cursor = batchContext?.cursorConfig;
+    const itemsProcessed = (cursor?.endCursor ?? 0) - (cursor?.startCursor ?? 0);
 
-    const outcome = this.createWorkerOutcome(itemsProcessed, itemsProcessed);
-    return this.batchWorkerSuccess(outcome);
-  }
-}
+    return {
+      itemsProcessed,
+      batchId: cursor?.batchId,
+    };
+  },
+);
+
+/**
+ * Convergence step — aggregates results from all batch workers.
+ * Runs automatically after all batch workers complete.
+ * context.getAllDependencyResults() collects results by worker name prefix.
+ */
+export const {{ name | pascal_case }}ConvergenceHandler = defineHandler(
+  '{{ name | snake_case }}_convergence',
+  {},
+  async ({ context }) => {
+    const batchResults = context.getAllDependencyResults(
+      '{{ name | snake_case }}_batch',
+    ) as Array<Record<string, unknown> | null>;
+
+    let totalProcessed = 0;
+    const workerCount = batchResults?.length ?? 0;
+
+    for (const result of batchResults ?? []) {
+      if (result) {
+        totalProcessed += (result.itemsProcessed as number) ?? 0;
+      }
+    }
+
+    // TODO: Add your domain-specific aggregation logic here
+    return {
+      totalProcessed,
+      workerCount,
+    };
+  },
+);

@@ -26,7 +26,6 @@ examples/**/.env
 !examples/**/.env.template
 
 # Example app build artifacts
-examples/rails-app/Gemfile.lock
 examples/rails-app/tmp/
 examples/rails-app/log/
 examples/fastapi-app/*.egg-info/

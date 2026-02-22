@@ -1,49 +1,28 @@
-import {
-  StepHandler,
-  type StepContext,
-  type StepHandlerResult,
-  ErrorType,
-} from '@tasker-systems/tasker';
+import { defineHandler } from '@tasker-systems/tasker';
 
 /**
  * {{ name | pascal_case }} step handler for Tasker workflow processing.
  *
- * Implements the cross-language StepHandler contract:
- *   - Receives a StepContext with task data, dependencies, and configuration
- *   - Returns success/failure results via helper methods
+ * Uses the functional DSL to define a handler with automatic result
+ * wrapping and error classification. Return a plain object for success;
+ * throw PermanentError or RetryableError for typed failures.
  *
  * Register this handler in your task definition YAML:
  *   handler:
  *     callable: {{ name | pascal_case }}Handler
  */
-export class {{ name | pascal_case }}Handler extends StepHandler {
-  static handlerName = '{{ name | snake_case }}';
-  static handlerVersion = '1.0.0';
-
-  async call(context: StepContext): Promise<StepHandlerResult> {
-    try {
-      // Access input data from the task context (TAS-137 cross-language standard)
-      // const value = context.getInput('field_name');
-
-      // Access results from upstream dependency steps
-      // const prevResult = context.getDependencyResult('previous_step_name');
-
-      // Access handler configuration from step definition
-      // const configValue = context.stepConfig['some_setting'];
-
-      // TODO: Implement your business logic here
-      const result = {
-        processed: true,
-        handler: '{{ name | snake_case }}',
-      };
-
-      return this.success(result);
-    } catch (error) {
-      return this.failure(
-        error instanceof Error ? error.message : String(error),
-        ErrorType.RETRYABLE_ERROR,
-        true,
-      );
-    }
-  }
-}
+export const {{ name | pascal_case }}Handler = defineHandler(
+  '{{ name | snake_case }}',
+  {
+    depends: { prevResult: 'previous_step_name' },
+    inputs: { fieldName: 'field_name' },
+  },
+  async ({ prevResult, fieldName, context }) => {
+    // TODO: Implement your business logic here
+    return {
+      processed: true,
+      handler: '{{ name | snake_case }}',
+      inputReceived: fieldName,
+    };
+  },
+);

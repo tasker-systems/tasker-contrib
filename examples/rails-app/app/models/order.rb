@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Order < ApplicationRecord
   validates :customer_email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
   validates :items, presence: true

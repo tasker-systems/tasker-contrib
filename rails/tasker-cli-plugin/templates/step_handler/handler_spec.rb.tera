@@ -16,8 +16,12 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
         retry_count: 0,
         max_retries: 3
       )
-      allow(ctx).to receive(:get_input).and_return(nil)
-      allow(ctx).to receive(:get_input).with('key').and_return('value')
+      allow(ctx).to receive(:get_input) do |key|
+        { 'field_name' => 'test_value' }[key]
+      end
+      allow(ctx).to receive(:get_dependency_result) do |key|
+        { 'previous_step_name' => { 'status' => 'completed', 'data' => { 'id' => 42 } } }[key]
+      end
       ctx
     end
 
@@ -27,6 +31,7 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
 
         expect(result).to be_a(TaskerCore::Types::StepHandlerCallResult::Success)
         expect(result.result[:processed]).to be true
+        expect(result.result[:input_received]).to eq('test_value')
       end
     end
 
@@ -47,7 +52,7 @@ RSpec.describe {{ module_name }}::{{ name | pascal_case }}Handler do
 
   describe '#handler_name' do
     it 'returns the snake_case handler name' do
-      expect(handler.handler_name).to be_a(String)
+      expect(handler.handler_name).to eq('{{ name | snake_case }}')
     end
   end
 end
