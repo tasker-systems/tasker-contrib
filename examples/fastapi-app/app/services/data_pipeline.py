@@ -85,8 +85,7 @@ def extract_sales_data(
                 "unit_price": unit_price,
                 "revenue": revenue,
                 "timestamp": (
-                    datetime(2026, 1, 1, tzinfo=timezone.utc)
-                    + timedelta(days=i % 31)
+                    datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=i % 31)
                 ).isoformat(),
             }
         )
@@ -118,7 +117,9 @@ def extract_inventory_data(
     source = source or "default"
     date_start = date_range_start or "2026-01-01"
 
-    seed = int(hashlib.md5(f"traffic:{source}:{date_start}".encode()).hexdigest()[:8], 16)
+    seed = int(
+        hashlib.md5(f"traffic:{source}:{date_start}".encode()).hexdigest()[:8], 16
+    )
     rng = random.Random(seed)
 
     records: list[dict[str, Any]] = []
@@ -143,7 +144,9 @@ def extract_inventory_data(
                 "bounce_rate": bounce_rate,
                 "avg_session_duration_seconds": avg_session_duration,
                 "conversions": conversions,
-                "conversion_rate": round(conversions / sessions, 4) if sessions > 0 else 0.0,
+                "conversion_rate": round(conversions / sessions, 4)
+                if sessions > 0
+                else 0.0,
                 "date": (
                     datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=i)
                 ).strftime("%Y-%m-%d"),
@@ -162,9 +165,7 @@ def extract_inventory_data(
         total_sessions=total_sessions,
         total_conversions=total_conversions,
         overall_conversion_rate=(
-            round(total_conversions / total_sessions, 4)
-            if total_sessions > 0
-            else 0.0
+            round(total_conversions / total_sessions, 4) if total_sessions > 0 else 0.0
         ),
         warehouses=warehouses,
         products_tracked=len(records),
@@ -220,7 +221,9 @@ def extract_customer_data(
         )
 
     total_value = round(sum(r["inventory_value"] for r in records), 2)
-    low_stock_count = sum(1 for r in records if r["status"] in ("low_stock", "out_of_stock"))
+    low_stock_count = sum(
+        1 for r in records if r["status"] in ("low_stock", "out_of_stock")
+    )
 
     # Source-aligned keys: total_customers, total_lifetime_value, tier_breakdown, avg_lifetime_value
     tier_breakdown: dict[str, int] = {}
@@ -265,27 +268,39 @@ def transform_sales(
 
         if cat not in by_category:
             by_category[cat] = {"revenue": 0.0, "quantity": 0, "transaction_count": 0}
-        by_category[cat]["revenue"] = round(by_category[cat]["revenue"] + record["revenue"], 2)
+        by_category[cat]["revenue"] = round(
+            by_category[cat]["revenue"] + record["revenue"], 2
+        )
         by_category[cat]["quantity"] += record["quantity"]
         by_category[cat]["transaction_count"] += 1
 
         if region not in by_region:
             by_region[region] = {"revenue": 0.0, "quantity": 0, "transaction_count": 0}
-        by_region[region]["revenue"] = round(by_region[region]["revenue"] + record["revenue"], 2)
+        by_region[region]["revenue"] = round(
+            by_region[region]["revenue"] + record["revenue"], 2
+        )
         by_region[region]["quantity"] += record["quantity"]
         by_region[region]["transaction_count"] += 1
 
     for summary in by_category.values():
-        summary["avg_revenue"] = round(
-            summary["revenue"] / summary["transaction_count"], 2
-        ) if summary["transaction_count"] > 0 else 0.0
+        summary["avg_revenue"] = (
+            round(summary["revenue"] / summary["transaction_count"], 2)
+            if summary["transaction_count"] > 0
+            else 0.0
+        )
 
     for summary in by_region.values():
-        summary["avg_revenue"] = round(
-            summary["revenue"] / summary["transaction_count"], 2
-        ) if summary["transaction_count"] > 0 else 0.0
+        summary["avg_revenue"] = (
+            round(summary["revenue"] / summary["transaction_count"], 2)
+            if summary["transaction_count"] > 0
+            else 0.0
+        )
 
-    top_category = max(by_category, key=lambda k: by_category[k]["revenue"]) if by_category else None
+    top_category = (
+        max(by_category, key=lambda k: by_category[k]["revenue"])
+        if by_category
+        else None
+    )
     total_revenue = round(sum(r["revenue"] for r in records), 2)
 
     return PipelineTransformSalesResult(
@@ -321,10 +336,16 @@ def transform_inventory(
         page = record["landing_page"]
 
         if src not in by_source:
-            by_source[src] = {"sessions": 0, "conversions": 0, "total_bounce_weighted": 0.0}
+            by_source[src] = {
+                "sessions": 0,
+                "conversions": 0,
+                "total_bounce_weighted": 0.0,
+            }
         by_source[src]["sessions"] += record["sessions"]
         by_source[src]["conversions"] += record["conversions"]
-        by_source[src]["total_bounce_weighted"] += record["bounce_rate"] * record["sessions"]
+        by_source[src]["total_bounce_weighted"] += (
+            record["bounce_rate"] * record["sessions"]
+        )
 
         if page not in by_page:
             by_page[page] = {"sessions": 0, "page_views": 0, "conversions": 0}
@@ -334,16 +355,28 @@ def transform_inventory(
 
     for src_data in by_source.values():
         s = src_data["sessions"]
-        src_data["conversion_rate"] = round(src_data["conversions"] / s, 4) if s > 0 else 0.0
-        src_data["avg_bounce_rate"] = round(src_data["total_bounce_weighted"] / s, 4) if s > 0 else 0.0
+        src_data["conversion_rate"] = (
+            round(src_data["conversions"] / s, 4) if s > 0 else 0.0
+        )
+        src_data["avg_bounce_rate"] = (
+            round(src_data["total_bounce_weighted"] / s, 4) if s > 0 else 0.0
+        )
         del src_data["total_bounce_weighted"]
 
     for page_data in by_page.values():
         s = page_data["sessions"]
-        page_data["conversion_rate"] = round(page_data["conversions"] / s, 4) if s > 0 else 0.0
-        page_data["pages_per_session"] = round(page_data["page_views"] / s, 2) if s > 0 else 0.0
+        page_data["conversion_rate"] = (
+            round(page_data["conversions"] / s, 4) if s > 0 else 0.0
+        )
+        page_data["pages_per_session"] = (
+            round(page_data["page_views"] / s, 2) if s > 0 else 0.0
+        )
 
-    best_source = max(by_source, key=lambda k: by_source[k]["conversion_rate"]) if by_source else None
+    best_source = (
+        max(by_source, key=lambda k: by_source[k]["conversion_rate"])
+        if by_source
+        else None
+    )
     total_sessions = sum(r["sessions"] for r in records)
 
     return PipelineTransformInventoryResult(
@@ -451,8 +484,12 @@ def aggregate_metrics(
     total_ltv = inventory_transform.total_lifetime_value or 0
 
     # Cross-source metrics
-    revenue_per_customer = round(total_revenue / total_customers, 2) if total_customers > 0 else 0
-    inventory_turnover = round(total_revenue / total_inventory, 4) if total_inventory > 0 else 0
+    revenue_per_customer = (
+        round(total_revenue / total_customers, 2) if total_customers > 0 else 0
+    )
+    inventory_turnover = (
+        round(total_revenue / total_inventory, 4) if total_inventory > 0 else 0
+    )
 
     total_records = (
         (sales_transform.records_processed or 0)
@@ -584,7 +621,9 @@ def generate_insights(
     # Customer insights
     avg_ltv = total_ltv / customers if customers > 0 else 0
     recommendation = (
-        "Focus on retention programs" if avg_ltv > 3000 else "Increase customer engagement"
+        "Focus on retention programs"
+        if avg_ltv > 3000
+        else "Increase customer engagement"
     )
     insights.append(
         {
@@ -614,9 +653,12 @@ def generate_insights(
         "score": health_score_value,
         "max_score": 100,
         "rating": (
-            "Excellent" if health_score_value >= 80
-            else "Good" if health_score_value >= 60
-            else "Fair" if health_score_value >= 40
+            "Excellent"
+            if health_score_value >= 80
+            else "Good"
+            if health_score_value >= 60
+            else "Fair"
+            if health_score_value >= 40
             else "Needs Improvement"
         ),
     }
@@ -624,7 +666,7 @@ def generate_insights(
     return PipelineGenerateInsightsResult(
         insights=insights,
         health_score=health_score,
-        total_metrics_analyzed=len(metrics.model_fields),
+        total_metrics_analyzed=len(type(metrics).model_fields),
         pipeline_complete=True,
         insight_count=len(insights),
         health_status=health_score["rating"].lower().replace(" ", "_"),
