@@ -62,7 +62,23 @@ module Types
   end
 
   # ---------------------------------------------------------------------------
-  # Customer Success input types
+  # Customer Success input types (schema-derived from input_schema)
+  # ---------------------------------------------------------------------------
+
+  class CustomerSuccessProcessRefundInput < InputStruct
+    attribute :ticket_id, Types::String
+    attribute :customer_id, Types::String
+    attribute :customer_email, Types::String
+    attribute :refund_amount, Types::Float
+    attribute :refund_reason, Types::String.optional
+    attribute :requires_approval, Types::Bool.optional
+    attribute :payment_id, Types::String.optional
+    attribute :correlation_id, Types::String.optional
+    attribute :agent_notes, Types::String.optional
+  end
+
+  # ---------------------------------------------------------------------------
+  # Customer Success input types (hand-written with validation)
   # ---------------------------------------------------------------------------
 
   module CustomerSuccess
@@ -100,7 +116,20 @@ module Types
   end
 
   # ---------------------------------------------------------------------------
-  # Payments input types
+  # Payments input types (schema-derived from input_schema)
+  # ---------------------------------------------------------------------------
+
+  class PaymentsProcessRefundInput < InputStruct
+    attribute :payment_id, Types::String
+    attribute :refund_amount, Types::Float
+    attribute :refund_reason, Types::String.optional
+    attribute :customer_email, Types::String.optional
+    attribute :partial_refund, Types::Bool.optional
+    attribute :correlation_id, Types::String.optional
+  end
+
+  # ---------------------------------------------------------------------------
+  # Payments input types (hand-written with validation)
   # ---------------------------------------------------------------------------
 
   module Payments
@@ -135,7 +164,19 @@ module Types
   end
 
   # ---------------------------------------------------------------------------
-  # Microservices input types
+  # Microservices input types (schema-derived from input_schema)
+  # ---------------------------------------------------------------------------
+
+  class MicroservicesUserRegistrationInput < InputStruct
+    attribute :email, Types::String
+    attribute :name, Types::String
+    attribute :plan, Types::String.optional
+    attribute :referral_code, Types::String.optional
+    attribute :marketing_consent, Types::Bool.optional
+  end
+
+  # ---------------------------------------------------------------------------
+  # Microservices input types (hand-written with validation)
   # ---------------------------------------------------------------------------
 
   module Microservices
@@ -162,11 +203,25 @@ module Types
   end
 
   # ---------------------------------------------------------------------------
-  # Ecommerce result types
+  # Ecommerce input types (schema-derived from input_schema)
   # ---------------------------------------------------------------------------
 
+  class EcommerceOrderProcessingInputCartItems < InputStruct
+    attribute :name, Types::String
+    attribute :quantity, Types::Integer
+    attribute :sku, Types::String
+    attribute :unit_price, Types::Float
+  end
+
+  class EcommerceOrderProcessingInput < InputStruct
+    attribute :cart_items, Types::Array.of(EcommerceOrderProcessingInputCartItems)
+    attribute :customer_email, Types::String
+    attribute :payment_token, Types::String.optional
+    attribute :shipping_address, Types::String.optional
+  end
+
   # ---------------------------------------------------------------------------
-  # Ecommerce input types
+  # Ecommerce input types (hand-written with validation)
   # ---------------------------------------------------------------------------
 
   module Ecommerce
@@ -177,36 +232,27 @@ module Types
       attribute :shipping_address, Types::Hash.optional
       attribute :customer_info, Types::Hash.optional
     end
-  end
 
-  # ---------------------------------------------------------------------------
-  # Data Pipeline input types
-  # ---------------------------------------------------------------------------
-
-  module DataPipeline
-    class PipelineInput < Types::InputStruct
-      attribute :source, Types::String.optional
-      attribute :date_range_start, Types::String.optional
-      attribute :date_range_end, Types::String.optional
-      attribute :date_range, Types::Hash.optional
-      attribute :granularity, Types::String.optional
-      attribute :filters, Types::Hash.optional
-
-      # Resolve date_range_start from flat field or nested date_range hash
-      def resolved_date_range_start
-        date_range_start || date_range&.dig('start_date') || date_range&.dig(:start_date)
-      end
-
-      # Resolve date_range_end from flat field or nested date_range hash
-      def resolved_date_range_end
-        date_range_end || date_range&.dig('end_date') || date_range&.dig(:end_date)
-      end
+    # Inner struct for validated cart items and order line items.
+    class CartItem < Types::ResultStruct
+      attribute :sku, Types::String
+      attribute :name, Types::String
+      attribute :quantity, Types::Integer
+      attribute :unit_price, Types::Float
+      attribute :line_total, Types::Float
     end
-  end
 
-  module Ecommerce
+    # Inner struct for inventory update records per product.
+    class UpdatedProduct < Types::ResultStruct
+      attribute :product_id, Types::String
+      attribute :sku, Types::String
+      attribute :previous_quantity, Types::Integer
+      attribute :new_quantity, Types::Integer
+      attribute :reserved, Types::Integer
+    end
+
     class ValidateCartResult < Types::ResultStruct
-      attribute :validated_items, Types::Array
+      attribute :validated_items, Types::Array.of(CartItem)
       attribute :item_count, Types::Integer
       attribute :subtotal, Types::Float
       attribute :tax, Types::Float
@@ -232,7 +278,7 @@ module Types
     end
 
     class UpdateInventoryResult < Types::ResultStruct
-      attribute :updated_products, Types::Array
+      attribute :updated_products, Types::Array.of(UpdatedProduct)
       attribute :total_items_reserved, Types::Integer
       attribute :inventory_changes, Types::Array
       attribute :inventory_log_id, Types::String
@@ -250,7 +296,7 @@ module Types
       attribute :customer_email, Types::String
       attribute :created_at, Types::String
       attribute :estimated_delivery, Types::String
-      attribute :items, Types::Array
+      attribute :items, Types::Array.of(CartItem)
       attribute :subtotal, Types::Float
       attribute :tax, Types::Float
       attribute :shipping, Types::Float
@@ -277,16 +323,90 @@ module Types
   end
 
   # ---------------------------------------------------------------------------
-  # Data Pipeline result types
+  # Data Pipeline input types (schema-derived from input_schema)
+  # ---------------------------------------------------------------------------
+
+  class DataPipelineAnalyticsPipelineInputDateRange < InputStruct
+    attribute :end_date, Types::String.optional
+    attribute :start_date, Types::String.optional
+  end
+
+  class DataPipelineAnalyticsPipelineInput < InputStruct
+    attribute :date_range, DataPipelineAnalyticsPipelineInputDateRange.optional
+    attribute :pipeline_id, Types::String.optional
+  end
+
+  # ---------------------------------------------------------------------------
+  # Data Pipeline input types (hand-written with validation)
   # ---------------------------------------------------------------------------
 
   module DataPipeline
+    class PipelineInput < Types::InputStruct
+      attribute :source, Types::String.optional
+      attribute :date_range_start, Types::String.optional
+      attribute :date_range_end, Types::String.optional
+      attribute :date_range, Types::Hash.optional
+      attribute :granularity, Types::String.optional
+      attribute :filters, Types::Hash.optional
+
+      # Resolve date_range_start from flat field or nested date_range hash
+      def resolved_date_range_start
+        date_range_start || date_range&.dig('start_date') || date_range&.dig(:start_date)
+      end
+
+      # Resolve date_range_end from flat field or nested date_range hash
+      def resolved_date_range_end
+        date_range_end || date_range&.dig('end_date') || date_range&.dig(:end_date)
+      end
+    end
+
+    # Inner struct for date ranges with start/end dates.
+    class DateRange < Types::ResultStruct
+      attribute :start_date, Types::String
+      attribute :end_date, Types::String
+    end
+
+    # Inner struct for individual sales records.
+    class SalesRecord < Types::ResultStruct
+      attribute :category, Types::String
+      attribute :date, Types::String
+      attribute :product, Types::String
+      attribute :quantity, Types::Integer
+      attribute :region, Types::String
+      attribute :total, Types::Float
+      attribute :unit_price, Types::Float
+    end
+
+    # Inner struct for customer tier breakdown counts.
+    class TierBreakdown < Types::ResultStruct
+      attribute :gold, Types::Integer
+      attribute :premium, Types::Integer
+      attribute :standard, Types::Integer
+    end
+
+    # Inner struct for business health score details.
+    class HealthScore < Types::ResultStruct
+      attribute :score, Types::Integer
+      attribute :max_score, Types::Integer
+      attribute :rating, Types::String
+      attribute :details, Types::String
+    end
+
+    # Inner struct for individual business insights.
+    class Insight < Types::ResultStruct
+      attribute :type, Types::String
+      attribute :severity, Types::String
+      attribute :metric, Types::String
+      attribute :message, Types::String
+      attribute :recommendation, Types::String
+    end
+
     class ExtractSalesResult < Types::ResultStruct
       attribute :source, Types::String
       attribute :extraction_id, Types::String
-      attribute :date_range, Types::Hash
+      attribute :date_range, DateRange
       attribute :record_count, Types::Integer
-      attribute :records, Types::Array
+      attribute :records, Types::Array.of(SalesRecord)
       attribute :total_amount, Types::Float
       attribute :total_revenue, Types::Float
       attribute :extracted_at, Types::String
@@ -313,7 +433,7 @@ module Types
       attribute :records, Types::Array
       attribute :total_customers, Types::Integer
       attribute :total_lifetime_value, Types::Float
-      attribute :tier_breakdown, Types::Hash
+      attribute :tier_breakdown, TierBreakdown
       attribute :avg_lifetime_value, Types::Float
       attribute :average_lifetime_value, Types::Float
       attribute :segment_distribution, Types::Hash
@@ -396,8 +516,8 @@ module Types
     end
 
     class GenerateInsightsResult < Types::ResultStruct
-      attribute :insights, Types::Array
-      attribute :health_score, Types::Hash
+      attribute :insights, Types::Array.of(Insight)
+      attribute :health_score, HealthScore
       attribute :total_metrics_analyzed, Types::Integer
       attribute :pipeline_complete, Types::Bool
       attribute :generated_at, Types::String
@@ -418,6 +538,13 @@ module Types
   # ---------------------------------------------------------------------------
 
   module Microservices
+    # Inner struct for welcome sequence message details.
+    class MessageDetail < Types::ResultStruct
+      attribute :channel, Types::String
+      attribute :status, Types::String
+      attribute :template, Types::String
+    end
+
     class CreateUserResult < Types::ResultStruct
       attribute :user_id, Types::String
       attribute :username, Types::String
@@ -478,7 +605,7 @@ module Types
       attribute :sent_at, Types::String
       attribute :sequence_id, Types::String
       attribute :email, Types::String
-      attribute :notifications_sent, Types::Array
+      attribute :notifications_sent, Types::Array.of(MessageDetail)
       attribute :total_notifications, Types::Integer
       attribute :all_delivered, Types::Bool
       attribute :drip_campaign, Types::Hash
@@ -572,6 +699,13 @@ module Types
       attribute :decided_at, Types::String
     end
 
+    # Inner struct for refund execution step records.
+    class ExecutionStep < Types::ResultStruct
+      attribute :step, Types::String
+      attribute :status, Types::String
+      attribute :timestamp, Types::String
+    end
+
     class ExecuteRefundResult < Types::ResultStruct
       attribute :task_delegated, Types::Bool
       attribute :target_namespace, Types::String
@@ -588,11 +722,18 @@ module Types
       attribute :order_ref, Types::String
       attribute :customer_id, Types::String
       attribute :payment_method, Types::String
-      attribute :steps_executed, Types::Array
+      attribute :steps_executed, Types::Array.of(ExecutionStep)
       attribute :total_steps, Types::Integer
       attribute :all_steps_completed, Types::Bool
       attribute :conditions_applied, Types::Array.of(Types::String)
       attribute :executed_at, Types::String
+    end
+
+    # Inner struct for ticket timeline entries.
+    class TimelineEntry < Types::ResultStruct
+      attribute :action, Types::String
+      attribute :timestamp, Types::String
+      attribute :details, Types::String
     end
 
     class UpdateTicketResult < Types::ResultStruct
@@ -608,7 +749,7 @@ module Types
       attribute :update_id, Types::String
       attribute :ticket_status, Types::String
       attribute :resolution_category, Types::String
-      attribute :timeline, Types::Array
+      attribute :timeline, Types::Array.of(TimelineEntry)
       attribute :internal_notes, Types::String
       attribute :customer_facing_message, Types::String
       attribute :satisfaction_survey_scheduled, Types::Bool
@@ -621,6 +762,14 @@ module Types
   # ---------------------------------------------------------------------------
 
   module Payments
+    # Inner struct for ledger entries in payment records.
+    class LedgerEntry < Types::ResultStruct
+      attribute :type, Types::String
+      attribute :amount, Types::Float
+      attribute :currency, Types::String
+      attribute :timestamp, Types::String
+    end
+
     class ValidateEligibilityResult < Types::ResultStruct
       attribute :payment_validated, Types::Bool
       attribute :payment_id, Types::String
@@ -677,7 +826,7 @@ module Types
       attribute :updated_at, Types::String
       attribute :namespace, Types::String
       attribute :record_update_id, Types::String
-      attribute :records_updated_details, Types::Array
+      attribute :records_updated_details, Types::Array.of(LedgerEntry)
       attribute :total_records, Types::Integer
       attribute :all_successful, Types::Bool
       attribute :ledger_entry_id, Types::String

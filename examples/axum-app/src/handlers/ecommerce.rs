@@ -11,8 +11,9 @@
 //! 4. **ecommerce_create_order**: Aggregate upstream data, generate order ID
 //! 5. **ecommerce_send_confirmation**: Simulate confirmation email
 
+use crate::types::ecommerce::*;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use tracing::info;
 use uuid::Uuid;
@@ -31,6 +32,7 @@ pub struct CartItem {
 struct Product {
     id: i64,
     name: String,
+    sku: String,
     price: f64,
     stock: i64,
 }
@@ -42,6 +44,7 @@ fn get_product_catalog() -> HashMap<i64, Product> {
         Product {
             id: 1,
             name: "Widget A".into(),
+            sku: "WGT-A-001".into(),
             price: 29.99,
             stock: 100,
         },
@@ -51,6 +54,7 @@ fn get_product_catalog() -> HashMap<i64, Product> {
         Product {
             id: 2,
             name: "Widget B".into(),
+            sku: "WGT-B-002".into(),
             price: 49.99,
             stock: 50,
         },
@@ -60,6 +64,7 @@ fn get_product_catalog() -> HashMap<i64, Product> {
         Product {
             id: 3,
             name: "Widget C".into(),
+            sku: "WGT-C-003".into(),
             price: 99.99,
             stock: 25,
         },
@@ -69,6 +74,7 @@ fn get_product_catalog() -> HashMap<i64, Product> {
         Product {
             id: 4,
             name: "Gadget X".into(),
+            sku: "GDG-X-004".into(),
             price: 149.99,
             stock: 30,
         },
@@ -78,6 +84,7 @@ fn get_product_catalog() -> HashMap<i64, Product> {
         Product {
             id: 5,
             name: "Gadget Y".into(),
+            sku: "GDG-Y-005".into(),
             price: 199.99,
             stock: 15,
         },
@@ -92,9 +99,17 @@ fn get_product_catalog() -> HashMap<i64, Product> {
 /// Validates cart items against the product catalog, checks stock availability,
 /// and calculates pricing including subtotal, tax (8%), shipping, and total.
 pub fn validate_cart(context: &Value) -> Result<Value, String> {
-    let cart_items: Vec<CartItem> =
-        serde_json::from_value(context.get("cart_items").cloned().unwrap_or(json!([])))
-            .map_err(|e| format!("Invalid cart_items format: {}", e))?;
+    let input: OrderProcessingInput = serde_json::from_value(context.clone())
+        .map_err(|e| format!("Invalid order processing input: {}", e))?;
+
+    let cart_items: Vec<CartItem> = input
+        .cart_items
+        .iter()
+        .map(|item| CartItem {
+            product_id: item.product_id,
+            quantity: item.quantity,
+        })
+        .collect();
 
     if cart_items.is_empty() {
         return Err("Cart cannot be empty".to_string());
@@ -128,16 +143,17 @@ pub fn validate_cart(context: &Value) -> Result<Value, String> {
         subtotal += line_total;
         item_count += cart_item.quantity;
 
-        validated_items.push(json!({
-            "product_id": product.id,
-            "product_name": product.name,
-            "quantity": cart_item.quantity,
-            "unit_price": product.price,
-            "line_total": (line_total * 100.0).round() / 100.0
-        }));
+        validated_items.push(ValidateCartResultValidatedItems {
+            sku: product.sku.clone(),
+            name: product.name.clone(),
+            quantity: cart_item.quantity,
+            unit_price: product.price,
+            line_total: (line_total * 100.0).round() / 100.0,
+        });
     }
 
-    let tax = (subtotal * 0.08 * 100.0).round() / 100.0;
+    let tax_rate = 0.08;
+    let tax = (subtotal * tax_rate * 100.0).round() / 100.0;
     let shipping = if subtotal > 100.0 { 0.0 } else { 5.99 };
     let total = ((subtotal + tax + shipping) * 100.0).round() / 100.0;
 
@@ -146,14 +162,18 @@ pub fn validate_cart(context: &Value) -> Result<Value, String> {
         item_count, subtotal, tax, shipping, total
     );
 
-    Ok(json!({
-        "validated_items": validated_items,
-        "subtotal": subtotal,
-        "tax": tax,
-        "shipping": shipping,
-        "total": total,
-        "item_count": item_count
-    }))
+    let result = ValidateCartResult {
+        validated_items,
+        subtotal,
+        tax_rate,
+        tax,
+        shipping,
+        total,
+        item_count,
+        validated_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }
 
 // ============================================================================
@@ -161,16 +181,11 @@ pub fn validate_cart(context: &Value) -> Result<Value, String> {
 // ============================================================================
 
 /// Simulates payment processing through a payment gateway.
-/// Supports test tokens for simulating various payment outcomes:
-/// - `tok_test_success` or any other token: successful payment
-/// - `tok_test_declined`: card declined (permanent error)
-/// - `tok_test_insufficient_funds`: insufficient funds (permanent error)
-/// - `tok_test_network_error`: gateway unreachable (retryable error)
+/// Supports test tokens for simulating various payment outcomes.
 pub fn process_payment(
     context: &Value,
     dependency_results: &HashMap<String, Value>,
 ) -> Result<Value, String> {
-    // Route sends flat fields: payment_token, payment_method
     let token = context
         .get("payment_token")
         .and_then(|v| v.as_str())
@@ -181,25 +196,19 @@ pub fn process_payment(
         .and_then(|v| v.as_str())
         .unwrap_or("credit_card");
 
-    // Get cart total from validate_cart dependency
-    let cart_result = dependency_results
+    let cart: ValidateCartResult = dependency_results
         .get("validate_cart")
-        .ok_or("Missing validate_cart dependency result")?;
-    let cart_total = cart_result
-        .get("total")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
+        .ok_or("Missing validate_cart dependency result".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize cart result: {}", e))
+        })?;
 
-    // Check for test failure tokens
     match token {
-        "tok_test_declined" => {
-            return Err("Card was declined".to_string());
-        }
-        "tok_test_insufficient_funds" => {
-            return Err("Insufficient funds on card".to_string());
-        }
+        "tok_test_declined" => return Err("Card was declined".to_string()),
+        "tok_test_insufficient_funds" => return Err("Insufficient funds on card".to_string()),
         "tok_test_network_error" => {
-            return Err("Payment gateway unreachable (retryable)".to_string());
+            return Err("Payment gateway unreachable (retryable)".to_string())
         }
         _ => {}
     }
@@ -209,21 +218,26 @@ pub fn process_payment(
         "AUTH{}",
         &Uuid::new_v4().to_string().replace('-', "")[..6].to_uppercase()
     );
+    let payment_id = format!("pay_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
 
     info!(
         "Payment processed: ${:.2} via {} (txn: {}, auth: {})",
-        cart_total, method, transaction_id, authorization_code
+        cart.total, method, transaction_id, authorization_code
     );
 
-    Ok(json!({
-        "transaction_id": transaction_id,
-        "authorization_code": authorization_code,
-        "amount_charged": cart_total,
-        "payment_method": method,
-        "status": "completed",
-        "gateway": "stripe_mock",
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    }))
+    let result = ProcessPaymentResult {
+        payment_id,
+        transaction_id,
+        status: "completed".to_string(),
+        amount_charged: cart.total,
+        currency: "USD".to_string(),
+        payment_method_type: method.to_string(),
+        authorization_code,
+        processed_at: chrono::Utc::now().to_rfc3339(),
+        gateway_response: Some("approved".to_string()),
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }
 
 // ============================================================================
@@ -231,54 +245,56 @@ pub fn process_payment(
 // ============================================================================
 
 /// Creates inventory reservations for each validated cart item.
-/// Each reservation gets a unique ID and is marked with a 24-hour expiration window.
 pub fn update_inventory(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let cart_result = dependency_results
+    let cart: ValidateCartResult = dependency_results
         .get("validate_cart")
-        .ok_or("Missing validate_cart dependency result")?;
+        .ok_or("Missing validate_cart dependency result".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize cart result: {}", e))
+        })?;
 
-    let validated_items = cart_result
-        .get("validated_items")
-        .and_then(|v| v.as_array())
-        .ok_or("Missing validated_items in cart result")?;
-
-    let mut reservations = Vec::new();
+    let mut updated_products = Vec::new();
     let mut total_reserved = 0_i64;
-    let reservation_expires = chrono::Utc::now() + chrono::Duration::hours(24);
+    let catalog = get_product_catalog();
 
-    for item in validated_items {
-        let product_id = item.get("product_id").and_then(|v| v.as_i64()).unwrap_or(0);
-        let product_name = item
-            .get("product_name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("Unknown");
-        let quantity = item.get("quantity").and_then(|v| v.as_i64()).unwrap_or(0);
-        let reservation_id = format!("res_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
+    for item in &cart.validated_items {
+        let product = catalog.values().find(|p| p.sku == item.sku);
+        let previous_quantity = product.map(|p| p.stock).unwrap_or(100);
+        let product_id = product
+            .map(|p| format!("PROD-{}", p.id))
+            .unwrap_or_else(|| "PROD-0".to_string());
 
-        reservations.push(json!({
-            "reservation_id": reservation_id,
-            "product_id": product_id,
-            "product_name": product_name,
-            "quantity_reserved": quantity,
-            "status": "reserved",
-            "warehouse": "WH-PRIMARY",
-            "expires_at": reservation_expires.to_rfc3339()
-        }));
-        total_reserved += quantity;
+        updated_products.push(UpdateInventoryResultUpdatedProducts {
+            product_id,
+            sku: item.sku.clone(),
+            previous_quantity,
+            new_quantity: previous_quantity - item.quantity,
+            reserved: item.quantity,
+        });
+        total_reserved += item.quantity;
     }
+
+    let inventory_log_id = format!(
+        "inv_{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..12]
+    );
 
     info!(
         "Inventory reserved: {} units across {} products",
         total_reserved,
-        reservations.len()
+        updated_products.len()
     );
 
-    Ok(json!({
-        "reservations": reservations,
-        "total_items_reserved": total_reserved,
-        "reservation_timestamp": chrono::Utc::now().to_rfc3339(),
-        "expiration": reservation_expires.to_rfc3339()
-    }))
+    let result = UpdateInventoryResult {
+        updated_products,
+        total_items_reserved: total_reserved,
+        inventory_log_id,
+        updated_at: chrono::Utc::now().to_rfc3339(),
+        inventory_changes: None,
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }
 
 // ============================================================================
@@ -286,95 +302,89 @@ pub fn update_inventory(dependency_results: &HashMap<String, Value>) -> Result<V
 // ============================================================================
 
 /// Aggregates data from cart validation, payment processing, and inventory reservation
-/// to create a complete order record. Generates an order ID in the format ORD-{date}-{hex}.
+/// to create a complete order record.
 pub fn create_order(
     context: &Value,
     dependency_results: &HashMap<String, Value>,
 ) -> Result<Value, String> {
-    // Route sends flat fields: customer_email, customer_name
     let customer_email = context
         .get("customer_email")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown@example.com");
 
-    let customer_name = context
-        .get("customer_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Unknown Customer");
-
-    // Collect data from all upstream steps
-    let cart_result = dependency_results
+    let cart: ValidateCartResult = dependency_results
         .get("validate_cart")
-        .ok_or("Missing validate_cart dependency")?;
+        .ok_or("Missing validate_cart dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize cart result: {}", e))
+        })?;
 
-    let payment_result = dependency_results
+    let payment: ProcessPaymentResult = dependency_results
         .get("process_payment")
-        .ok_or("Missing process_payment dependency")?;
+        .ok_or("Missing process_payment dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize payment result: {}", e))
+        })?;
 
-    let inventory_result = dependency_results
+    let inventory: UpdateInventoryResult = dependency_results
         .get("update_inventory")
-        .ok_or("Missing update_inventory dependency")?;
+        .ok_or("Missing update_inventory dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize inventory result: {}", e))
+        })?;
 
-    let validated_items = cart_result
-        .get("validated_items")
-        .cloned()
-        .unwrap_or(json!([]));
-    let order_total = cart_result
-        .get("total")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    let subtotal = cart_result
-        .get("subtotal")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    let tax = cart_result
-        .get("tax")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    let shipping = cart_result
-        .get("shipping")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    let transaction_id = payment_result
-        .get("transaction_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-    let reservations = inventory_result
-        .get("reservations")
-        .cloned()
-        .unwrap_or(json!([]));
+    // Convert validated items to order items (same shape)
+    let items: Vec<CreateOrderResultItems> = cart
+        .validated_items
+        .iter()
+        .map(|vi| CreateOrderResultItems {
+            sku: vi.sku.clone(),
+            name: vi.name.clone(),
+            quantity: vi.quantity,
+            unit_price: vi.unit_price,
+            line_total: vi.line_total,
+        })
+        .collect();
 
     // Generate order ID: ORD-{YYYYMMDD}-{hex}
     let date_str = chrono::Utc::now().format("%Y%m%d").to_string();
     let hex_suffix = &Uuid::new_v4().to_string().replace('-', "")[..6].to_uppercase();
     let order_id = format!("ORD-{}-{}", date_str, hex_suffix);
+    let order_number = order_id.clone();
+
+    let estimated_delivery =
+        (chrono::Utc::now() + chrono::Duration::days(5)).format("%Y-%m-%d").to_string();
 
     info!(
         "Order created: {} for {} (total: ${:.2})",
-        order_id, customer_email, order_total
+        order_id, customer_email, cart.total
     );
 
-    Ok(json!({
-        "order_id": order_id,
-        "customer": {
-            "email": customer_email,
-            "name": customer_name
-        },
-        "items": validated_items,
-        "pricing": {
-            "subtotal": subtotal,
-            "tax": tax,
-            "shipping": shipping,
-            "total": order_total
-        },
-        "payment": {
-            "transaction_id": transaction_id,
-            "amount": order_total
-        },
-        "inventory_reservations": reservations,
-        "status": "confirmed",
-        "created_at": chrono::Utc::now().to_rfc3339()
-    }))
+    let result = CreateOrderResult {
+        order_id,
+        order_number,
+        status: "confirmed".to_string(),
+        items,
+        item_count: cart.item_count,
+        subtotal: cart.subtotal,
+        tax: cart.tax,
+        shipping: cart.shipping,
+        total: cart.total,
+        total_amount: cart.total,
+        customer_email: customer_email.to_string(),
+        payment_id: payment.payment_id,
+        transaction_id: payment.transaction_id,
+        authorization_code: payment.authorization_code,
+        inventory_log_id: inventory.inventory_log_id,
+        estimated_delivery,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        updated_products: None,
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }
 
 // ============================================================================
@@ -382,60 +392,46 @@ pub fn create_order(
 // ============================================================================
 
 /// Simulates sending an order confirmation email to the customer.
-/// Generates a unique email ID and includes order summary details.
 pub fn send_confirmation(
     context: &Value,
     dependency_results: &HashMap<String, Value>,
 ) -> Result<Value, String> {
-    // Route sends flat field: customer_email
     let customer_email = context
         .get("customer_email")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown@example.com");
 
-    let order_result = dependency_results
+    let order: CreateOrderResult = dependency_results
         .get("create_order")
-        .ok_or("Missing create_order dependency")?;
+        .ok_or("Missing create_order dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize order result: {}", e))
+        })?;
 
-    let order_id = order_result
-        .get("order_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("ORD-UNKNOWN");
-
-    let order_total = order_result
-        .get("pricing")
-        .and_then(|p| p.get("total"))
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-
-    let item_count = dependency_results
-        .get("validate_cart")
-        .and_then(|r| r.get("item_count"))
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0);
-
-    let email_id = format!(
+    let message_id = format!(
         "email_{}",
         &Uuid::new_v4().to_string().replace('-', "")[..12]
     );
-    let subject = format!("Order Confirmation - {}", order_id);
+    let subject = format!("Order Confirmation - {}", order.order_id);
 
     info!(
-        "Confirmation sent: {} to {} for order {} (${:.2})",
-        email_id, customer_email, order_id, order_total
+        "Confirmation sent: {} to {} for order {}",
+        message_id, customer_email, order.order_id
     );
 
-    Ok(json!({
-        "email_id": email_id,
-        "recipient": customer_email,
-        "subject": subject,
-        "order_id": order_id,
-        "summary": {
-            "item_count": item_count,
-            "order_total": order_total
-        },
-        "template": "order_confirmation_v2",
-        "status": "sent",
-        "sent_at": chrono::Utc::now().to_rfc3339()
-    }))
+    let result = SendConfirmationResult {
+        message_id,
+        status: "sent".to_string(),
+        email_sent: true,
+        recipient: customer_email.to_string(),
+        subject,
+        template: "order_confirmation_v2".to_string(),
+        channel: "email".to_string(),
+        sent_at: chrono::Utc::now().to_rfc3339(),
+        body_preview: Some(format!("Your order {} has been confirmed!", order.order_id)),
+        email_type: Some("transactional".to_string()),
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }

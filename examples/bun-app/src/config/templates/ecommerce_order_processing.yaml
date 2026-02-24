@@ -105,6 +105,53 @@ input_schema:
 steps:
   - name: validate_cart
     description: "Validate cart items, check availability, calculate totals (subtotal, tax, shipping)"
+    result_schema:
+      type: object
+      required:
+        - item_count
+        - subtotal
+        - tax_rate
+        - tax
+        - shipping
+        - total
+        - validated_at
+        - validated_items
+      properties:
+        validated_items:
+          type: array
+          items:
+            type: object
+            required:
+              - sku
+              - name
+              - quantity
+              - unit_price
+              - line_total
+            properties:
+              sku:
+                type: string
+              name:
+                type: string
+              quantity:
+                type: integer
+              unit_price:
+                type: number
+              line_total:
+                type: number
+        item_count:
+          type: integer
+        subtotal:
+          type: number
+        tax:
+          type: number
+        tax_rate:
+          type: number
+        shipping:
+          type: number
+        total:
+          type: number
+        validated_at:
+          type: string
     handler:
       callable: Ecommerce.StepHandlers.ValidateCartHandler
       initialization:
@@ -122,6 +169,40 @@ steps:
 
   - name: process_payment
     description: "Process customer payment using mock payment service"
+    result_schema:
+      type: object
+      required:
+        - payment_id
+        - transaction_id
+        - status
+        - amount_charged
+        - currency
+        - payment_method_type
+        - authorization_code
+        - processed_at
+      properties:
+        payment_id:
+          type: string
+        transaction_id:
+          type: string
+        authorization_code:
+          type: string
+        amount_charged:
+          type: number
+        currency:
+          type: string
+          enum:
+            - USD
+        payment_method_type:
+          type: string
+        gateway_response:
+          type: string
+        status:
+          type: string
+          enum:
+            - completed
+        processed_at:
+          type: string
     handler:
       callable: Ecommerce.StepHandlers.ProcessPaymentHandler
       initialization:
@@ -140,6 +221,43 @@ steps:
 
   - name: update_inventory
     description: "Reserve inventory for order items using mock inventory service"
+    result_schema:
+      type: object
+      required:
+        - updated_products
+        - total_items_reserved
+        - inventory_log_id
+        - updated_at
+      properties:
+        updated_products:
+          type: array
+          items:
+            type: object
+            required:
+              - product_id
+              - sku
+              - previous_quantity
+              - new_quantity
+              - reserved
+            properties:
+              product_id:
+                type: string
+              sku:
+                type: string
+              previous_quantity:
+                type: integer
+              new_quantity:
+                type: integer
+              reserved:
+                type: integer
+        total_items_reserved:
+          type: integer
+        inventory_changes:
+          type: array
+        inventory_log_id:
+          type: string
+        updated_at:
+          type: string
     handler:
       callable: Ecommerce.StepHandlers.UpdateInventoryHandler
       initialization:
@@ -158,6 +276,84 @@ steps:
 
   - name: create_order
     description: "Create order record with customer, payment, and inventory details"
+    result_schema:
+      type: object
+      required:
+        - order_id
+        - order_number
+        - status
+        - items
+        - item_count
+        - subtotal
+        - tax
+        - shipping
+        - total
+        - total_amount
+        - customer_email
+        - payment_id
+        - transaction_id
+        - authorization_code
+        - inventory_log_id
+        - estimated_delivery
+        - created_at
+      properties:
+        order_id:
+          type: string
+        order_number:
+          type: string
+        customer_email:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - sku
+              - name
+              - quantity
+              - unit_price
+              - line_total
+            properties:
+              sku:
+                type: string
+              name:
+                type: string
+              quantity:
+                type: integer
+              unit_price:
+                type: number
+              line_total:
+                type: number
+        item_count:
+          type: integer
+        subtotal:
+          type: number
+        tax:
+          type: number
+        shipping:
+          type: number
+        total:
+          type: number
+        total_amount:
+          type: number
+        payment_id:
+          type: string
+        transaction_id:
+          type: string
+        authorization_code:
+          type: string
+        updated_products:
+          type: array
+        inventory_log_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - confirmed
+        created_at:
+          type: string
+        estimated_delivery:
+          type: string
     handler:
       callable: Ecommerce.StepHandlers.CreateOrderHandler
       initialization:
@@ -176,6 +372,42 @@ steps:
 
   - name: send_confirmation
     description: "Send order confirmation email to customer using mock email service"
+    result_schema:
+      type: object
+      required:
+        - message_id
+        - status
+        - email_sent
+        - recipient
+        - subject
+        - template
+        - channel
+        - sent_at
+      properties:
+        email_sent:
+          type: boolean
+        recipient:
+          type: string
+        email_type:
+          type: string
+        message_id:
+          type: string
+        subject:
+          type: string
+        body_preview:
+          type: string
+        channel:
+          type: string
+          enum:
+            - email
+        template:
+          type: string
+        status:
+          type: string
+          enum:
+            - sent
+        sent_at:
+          type: string
     handler:
       callable: Ecommerce.StepHandlers.SendConfirmationHandler
       initialization:

@@ -75,6 +75,44 @@ steps:
   # SEQUENTIAL PHASE - User creation must complete first
   - name: create_user_account
     description: "Create user account in user service with idempotency"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - email
+        - status
+        - created_at
+      properties:
+        user_id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        plan:
+          type: string
+        phone:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        internal_id:
+          type: string
+        username:
+          type: string
+        full_name:
+          type: string
+        referral_code:
+          type: string
+        verification_token:
+          type: string
+        email_verified:
+          type: boolean
+        account_status:
+          type: string
+        created_at:
+          type: string
     handler:
       callable: Microservices.StepHandlers.CreateUserHandler
       initialization:
@@ -93,6 +131,57 @@ steps:
   # PARALLEL PHASE - Billing and preferences run concurrently after user creation
   - name: setup_billing_profile
     description: "Setup billing profile in billing service"
+    result_schema:
+      type: object
+      required:
+        - billing_id
+        - user_id
+        - plan
+        - status
+        - created_at
+      properties:
+        billing_id:
+          type: string
+        user_id:
+          type: string
+        plan:
+          type: string
+          enum:
+            - free
+            - pro
+            - enterprise
+        price:
+          type: number
+        currency:
+          type: string
+        billing_cycle:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        billing_required:
+          type: boolean
+        next_billing_date:
+          type: string
+        subscription_id:
+          type: string
+        user_internal_id:
+          type: string
+        pricing:
+          type: object
+        limits:
+          type: object
+        billing_status:
+          type: string
+        trial_end:
+          type: string
+        payment_method_required:
+          type: boolean
+        created_at:
+          type: string
     handler:
       callable: Microservices.StepHandlers.SetupBillingHandler
       initialization:
@@ -111,6 +200,42 @@ steps:
 
   - name: initialize_preferences
     description: "Initialize user preferences in preferences service"
+    result_schema:
+      type: object
+      required:
+        - preferences_id
+        - user_id
+        - status
+        - created_at
+      properties:
+        preferences_id:
+          type: string
+        user_id:
+          type: string
+        plan:
+          type: string
+        preferences:
+          type: object
+        defaults_applied:
+          type: integer
+        customizations:
+          type: integer
+        status:
+          type: string
+        user_internal_id:
+          type: string
+        notifications:
+          type: object
+        ui_settings:
+          type: object
+        feature_flags:
+          type: object
+        onboarding_completed:
+          type: boolean
+        created_at:
+          type: string
+        updated_at:
+          type: string
     handler:
       callable: Microservices.StepHandlers.InitPreferencesHandler
       initialization:
@@ -130,6 +255,50 @@ steps:
   # COORDINATION PHASE - Welcome sequence waits for both billing and preferences
   - name: send_welcome_sequence
     description: "Send welcome emails via notification service"
+    result_schema:
+      type: object
+      required:
+        - sequence_id
+        - user_id
+        - messages_sent
+        - status
+        - sent_at
+      properties:
+        user_id:
+          type: string
+        plan:
+          type: string
+        channels_used:
+          type: array
+          items:
+            type: string
+        messages_sent:
+          type: integer
+        welcome_sequence_id:
+          type: string
+        status:
+          type: string
+        messages_sent_details:
+          type: array
+          items:
+            type: object
+            required:
+              - channel
+              - template
+              - status
+            properties:
+              channel:
+                type: string
+              template:
+                type: string
+              status:
+                type: string
+        total_messages:
+          type: integer
+        sequence_id:
+          type: string
+        sent_at:
+          type: string
     handler:
       callable: Microservices.StepHandlers.SendWelcomeHandler
       initialization:
@@ -150,6 +319,48 @@ steps:
   # COMPLETION PHASE - Final status update after welcome sequence
   - name: update_user_status
     description: "Update user status to active in user service"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - status
+        - registration_complete
+        - activated_at
+      properties:
+        user_id:
+          type: string
+        status:
+          type: string
+        plan:
+          type: string
+        registration_summary:
+          type: object
+        activation_timestamp:
+          type: string
+        all_services_coordinated:
+          type: boolean
+        services_completed:
+          type: array
+          items:
+            type: string
+        internal_id:
+          type: string
+        email:
+          type: string
+        account_status:
+          type: string
+        billing_id:
+          type: string
+        subscription_id:
+          type: string
+        onboarding_status:
+          type: string
+        welcome_messages_sent:
+          type: integer
+        registration_complete:
+          type: boolean
+        activated_at:
+          type: string
     handler:
       callable: Microservices.StepHandlers.UpdateStatusHandler
       initialization:

@@ -51,11 +51,6 @@ metadata:
   created_at: "2026-01-12T00:00:00Z"
   updated_at: "2026-01-12T00:00:00Z"
   notes: "Axum example app demonstrating DAG analytics pipeline from Blog Post 02"
-task_handler:
-  callable: DataPipeline.TaskHandlers.AnalyticsPipelineHandler
-  initialization:
-    timeout_seconds: 120
-    max_retries: 2
 system_dependencies:
   primary: default
   secondary: []
@@ -79,6 +74,66 @@ steps:
   # EXTRACT PHASE - 3 parallel steps (no dependencies)
   - name: extract_sales_data
     description: "Extract sales records from database"
+    result_schema:
+      type: object
+      required:
+        - source
+        - record_count
+        - records
+        - total_revenue
+        - total_quantity
+        - extracted_at
+        - date_range
+      properties:
+        source:
+          type: string
+        record_count:
+          type: integer
+        records:
+          type: array
+          items:
+            type: object
+            required:
+              - date
+              - product
+              - category
+              - region
+              - quantity
+              - unit_price
+              - total
+            properties:
+              date:
+                type: string
+              product:
+                type: string
+              category:
+                type: string
+              region:
+                type: string
+              quantity:
+                type: integer
+              unit_price:
+                type: number
+              total:
+                type: number
+        total_amount:
+          type: number
+        total_revenue:
+          type: number
+        total_quantity:
+          type: integer
+        date_range:
+          type: object
+          required:
+            - start_date
+            - end_date
+          properties:
+            start_date:
+              type: string
+            end_date:
+              type: string
+        extracted_at:
+          type: string
     handler:
       callable: data_pipeline_extract_sales
       initialization:
@@ -96,6 +151,38 @@ steps:
 
   - name: extract_inventory_data
     description: "Extract inventory records from warehouse system"
+    result_schema:
+      type: object
+      required:
+        - source
+        - record_count
+        - records
+        - extracted_at
+      properties:
+        source:
+          type: string
+        record_count:
+          type: integer
+        records:
+          type: array
+          items:
+            type: object
+        total_quantity:
+          type: integer
+        total_sessions:
+          type: integer
+        total_conversions:
+          type: integer
+        overall_conversion_rate:
+          type: number
+        warehouses:
+          type: array
+          items:
+            type: string
+        products_tracked:
+          type: integer
+        extracted_at:
+          type: string
     handler:
       callable: data_pipeline_extract_inventory
       initialization:
@@ -113,6 +200,43 @@ steps:
 
   - name: extract_customer_data
     description: "Extract customer records from CRM"
+    result_schema:
+      type: object
+      required:
+        - source
+        - record_count
+        - records
+        - extracted_at
+      properties:
+        source:
+          type: string
+        record_count:
+          type: integer
+        records:
+          type: array
+          items:
+            type: object
+        total_customers:
+          type: integer
+        total_lifetime_value:
+          type: number
+        avg_lifetime_value:
+          type: number
+        tier_breakdown:
+          type: object
+          properties:
+            standard:
+              type: integer
+            premium:
+              type: integer
+            gold:
+              type: integer
+        total_inventory_value:
+          type: number
+        low_stock_alerts:
+          type: integer
+        extracted_at:
+          type: string
     handler:
       callable: data_pipeline_extract_customers
       initialization:
@@ -131,6 +255,36 @@ steps:
   # TRANSFORM PHASE - 3 sequential steps (each depends on its extract)
   - name: transform_sales
     description: "Transform sales data for analytics"
+    result_schema:
+      type: object
+      required:
+        - records_processed
+        - total_revenue
+        - transformed_at
+        - record_count
+      properties:
+        record_count:
+          type: integer
+        daily_sales:
+          type: object
+        product_sales:
+          type: object
+        total_revenue:
+          type: number
+        by_category:
+          type: object
+        by_region:
+          type: object
+        top_category:
+          type: string
+        total_categories:
+          type: integer
+        total_regions:
+          type: integer
+        records_processed:
+          type: integer
+        transformed_at:
+          type: string
     handler:
       callable: data_pipeline_transform_sales
       initialization:
@@ -149,6 +303,37 @@ steps:
 
   - name: transform_inventory
     description: "Transform inventory data for analytics"
+    result_schema:
+      type: object
+      required:
+        - records_processed
+        - transformed_at
+        - record_count
+      properties:
+        record_count:
+          type: integer
+        warehouse_summary:
+          type: object
+        product_inventory:
+          type: object
+        total_quantity_on_hand:
+          type: integer
+        reorder_alerts:
+          type: integer
+        by_source:
+          type: object
+        by_page:
+          type: object
+        best_converting_source:
+          type: string
+        total_sources:
+          type: integer
+        total_pages:
+          type: integer
+        records_processed:
+          type: integer
+        transformed_at:
+          type: string
     handler:
       callable: data_pipeline_transform_inventory
       initialization:
@@ -167,6 +352,37 @@ steps:
 
   - name: transform_customers
     description: "Transform customer data for analytics"
+    result_schema:
+      type: object
+      required:
+        - records_processed
+        - transformed_at
+        - record_count
+      properties:
+        record_count:
+          type: integer
+        tier_analysis:
+          type: object
+        value_segments:
+          type: object
+        total_lifetime_value:
+          type: number
+        avg_customer_value:
+          type: number
+        by_warehouse:
+          type: object
+        by_category:
+          type: object
+        low_stock_items:
+          type: array
+        low_stock_count:
+          type: integer
+        total_skus:
+          type: integer
+        records_processed:
+          type: integer
+        transformed_at:
+          type: string
     handler:
       callable: data_pipeline_transform_customers
       initialization:
@@ -186,6 +402,49 @@ steps:
   # AGGREGATE PHASE - 1 step (depends on all 3 transforms - DAG convergence)
   - name: aggregate_metrics
     description: "Aggregate metrics from all transformed sources"
+    result_schema:
+      type: object
+      required:
+        - total_records_processed
+        - sources_included
+        - aggregated_at
+        - data_sources
+        - aggregation_complete
+      properties:
+        total_revenue:
+          type: number
+        total_inventory_quantity:
+          type: integer
+        total_customers:
+          type: integer
+        total_customer_lifetime_value:
+          type: number
+        sales_transactions:
+          type: integer
+        inventory_reorder_alerts:
+          type: integer
+        revenue_per_customer:
+          type: number
+        inventory_turnover_indicator:
+          type: number
+        aggregation_complete:
+          type: boolean
+        sources_included:
+          type: integer
+        sales_summary:
+          type: object
+        traffic_summary:
+          type: object
+        inventory_summary:
+          type: object
+        total_records_processed:
+          type: integer
+        data_sources:
+          type: array
+          items:
+            type: string
+        aggregated_at:
+          type: string
     handler:
       callable: data_pipeline_aggregate_metrics
       initialization:
@@ -207,6 +466,63 @@ steps:
   # INSIGHTS PHASE - 1 step (depends on aggregation)
   - name: generate_insights
     description: "Generate business insights from aggregated data"
+    result_schema:
+      type: object
+      required:
+        - insight_count
+        - recommendations_count
+        - total_metrics_analyzed
+        - generated_at
+        - pipeline_complete
+      properties:
+        insights:
+          type: array
+          items:
+            type: object
+            required:
+              - type
+              - severity
+              - message
+              - metric
+              - recommendation
+            properties:
+              type:
+                type: string
+              severity:
+                type: string
+              message:
+                type: string
+              metric:
+                type: string
+              recommendation:
+                type: string
+        health_score:
+          type: object
+          required:
+            - score
+            - max_score
+            - rating
+          properties:
+            score:
+              type: integer
+            max_score:
+              type: integer
+            rating:
+              type: string
+            details:
+              type: string
+        total_metrics_analyzed:
+          type: integer
+        pipeline_complete:
+          type: boolean
+        insight_count:
+          type: integer
+        health_status:
+          type: string
+        recommendations_count:
+          type: integer
+        generated_at:
+          type: string
     handler:
       callable: data_pipeline_generate_insights
       initialization:

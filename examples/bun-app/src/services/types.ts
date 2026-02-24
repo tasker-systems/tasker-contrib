@@ -7,8 +7,28 @@
  */
 
 // ---------------------------------------------------------------------------
-// Ecommerce input types
+// Ecommerce input types (schema-derived)
 // ---------------------------------------------------------------------------
+
+export interface EcommerceOrderProcessingInputCartItems {
+  name: string;
+  price: number;
+  quantity: number;
+  sku: string;
+}
+
+export interface EcommerceOrderProcessingInputPaymentInfo {
+  card_last_four?: string;
+  method?: string;
+}
+
+export interface EcommerceOrderProcessingInput {
+  cart_items: EcommerceOrderProcessingInputCartItems[];
+  customer_email: string;
+  payment_info?: EcommerceOrderProcessingInputPaymentInfo;
+}
+
+// Ecommerce input types (hand-written aliases for handler compatibility)
 
 export interface CartItem {
   sku: string;
@@ -45,9 +65,9 @@ export interface EcommerceProcessPaymentResult {
   [key: string]: unknown;
   payment_id: string;
   transaction_id: string;
-  status: string;
+  status: "completed";
   amount_charged: number;
-  currency: string;
+  currency: "USD";
   payment_method: string;
   auth_code: string;
   processing_fee: number;
@@ -77,20 +97,28 @@ export interface EcommerceUpdateInventoryResult {
   all_items_available: boolean;
 }
 
+export interface OrderItem {
+  sku: string;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+}
+
 export interface EcommerceCreateOrderResult {
   [key: string]: unknown;
   order_id: number;
   order_number: string;
-  status: string;
-  total_amount: unknown;
+  status: "confirmed";
+  total_amount: number;
   customer_email: string;
   created_at: string;
   estimated_delivery: string;
-  items: unknown;
-  subtotal: unknown;
-  tax: unknown;
-  shipping: unknown;
-  transaction_id: unknown;
+  items: OrderItem[];
+  subtotal: number;
+  tax: number;
+  shipping: number;
+  transaction_id: string;
   inventory_reservations: number;
 }
 
@@ -99,7 +127,7 @@ export interface EcommerceSendConfirmationResult {
   email_id: string;
   recipient: string;
   subject: string;
-  status: string;
+  status: "sent";
   sent_at: string;
   template: string;
   template_data: {
@@ -107,14 +135,26 @@ export interface EcommerceSendConfirmationResult {
     order_number: string;
     total_amount: number;
     estimated_delivery: string;
-    items: unknown;
+    items: OrderItem[];
   };
   provider: string;
 }
 
 // ---------------------------------------------------------------------------
-// Data Pipeline input types
+// Data Pipeline input types (schema-derived)
 // ---------------------------------------------------------------------------
+
+export interface AnalyticsPipelineInputDateRange {
+  end_date?: string;
+  start_date?: string;
+}
+
+export interface AnalyticsPipelineInput {
+  date_range?: AnalyticsPipelineInputDateRange;
+  pipeline_id?: string;
+}
+
+// Data Pipeline inner types (hand-written)
 
 export interface DataRecord {
   id: string;
@@ -290,6 +330,7 @@ export interface PipelineGenerateInsightsResult {
     score: number;
     max_score: number;
     rating: string;
+    details?: string;
   };
   total_metrics_analyzed: number;
   pipeline_complete: boolean;
@@ -297,8 +338,22 @@ export interface PipelineGenerateInsightsResult {
 }
 
 // ---------------------------------------------------------------------------
-// Customer Success input types
+// Customer Success input types (schema-derived)
 // ---------------------------------------------------------------------------
+
+export interface CustomerSuccessProcessRefundInput {
+  agent_notes?: string;
+  correlation_id?: string;
+  customer_email: string;
+  customer_id: string;
+  payment_id?: string;
+  refund_amount: number;
+  refund_reason?: string;
+  requires_approval?: boolean;
+  ticket_id: string;
+}
+
+// Customer Success input types (hand-written aliases for handler compatibility)
 
 export interface ValidateRefundRequestInput {
   ticketId: string;
@@ -308,8 +363,19 @@ export interface ValidateRefundRequestInput {
 }
 
 // ---------------------------------------------------------------------------
-// Payments input types
+// Payments input types (schema-derived)
 // ---------------------------------------------------------------------------
+
+export interface PaymentsProcessRefundInput {
+  correlation_id?: string;
+  customer_email?: string;
+  partial_refund?: boolean;
+  payment_id: string;
+  refund_amount: number;
+  refund_reason?: "customer_request" | "fraud" | "system_error" | "chargeback";
+}
+
+// Payments input types (hand-written aliases for handler compatibility)
 
 export interface ValidatePaymentEligibilityInput {
   paymentId: string;
@@ -317,8 +383,17 @@ export interface ValidatePaymentEligibilityInput {
 }
 
 // ---------------------------------------------------------------------------
-// Microservices input types
+// Microservices input types (schema-derived)
 // ---------------------------------------------------------------------------
+
+export interface UserRegistrationInput {
+  email: string;
+  metadata?: unknown;
+  plan?: "free" | "pro" | "enterprise" | "basic" | "standard" | "premium";
+  username: string;
+}
+
+// Microservices input types (hand-written aliases for handler compatibility)
 
 export interface CreateUserAccountInput {
   email: string;
@@ -355,7 +430,7 @@ export interface MicroservicesSetupBillingActiveResult {
   [key: string]: unknown;
   billing_id: string;
   user_id: string;
-  plan: string;
+  plan: "free" | "pro" | "enterprise";
   price: number;
   currency: string;
   billing_cycle: string;
@@ -368,7 +443,7 @@ export interface MicroservicesSetupBillingActiveResult {
 export interface MicroservicesSetupBillingSkippedResult {
   [key: string]: unknown;
   user_id: string;
-  plan: string;
+  plan: "free" | "pro" | "enterprise";
   billing_required: false;
   status: string;
   message: string;
@@ -440,6 +515,7 @@ export interface CustomerSuccessCheckRefundPolicyResult {
   days_since_purchase: number;
   within_refund_window: boolean;
   requires_approval: boolean;
+  approval_path?: "auto" | "manager" | "director";
   max_allowed_amount: number;
   policy_checked_at: string;
   namespace: string;
