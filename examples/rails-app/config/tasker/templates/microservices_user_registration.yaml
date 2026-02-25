@@ -71,11 +71,20 @@ steps:
       type: object
       required:
         - user_id
+        - username
         - email
+        - name
+        - plan
+        - referral_valid
         - status
+        - account_status
+        - email_verified
+        - verification_token
         - created_at
       properties:
         user_id:
+          type: string
+        username:
           type: string
         email:
           type: string
@@ -83,25 +92,17 @@ steps:
           type: string
         plan:
           type: string
-        phone:
-          type: string
-        source:
-          type: string
-        status:
-          type: string
-        internal_id:
-          type: string
-        username:
-          type: string
-        full_name:
-          type: string
         referral_code:
           type: string
-        verification_token:
+        referral_valid:
+          type: boolean
+        status:
+          type: string
+        account_status:
           type: string
         email_verified:
           type: boolean
-        account_status:
+        verification_token:
           type: string
         created_at:
           type: string
@@ -122,51 +123,56 @@ steps:
       type: object
       required:
         - billing_id
+        - subscription_id
         - user_id
         - plan
+        - billing_cycle
+        - monthly_price
+        - annual_price
+        - currency
+        - features
+        - trial_days
+        - payment_method_required
+        - next_billing_date
+        - price
         - status
+        - billing_status
         - created_at
       properties:
         billing_id:
+          type: string
+        subscription_id:
           type: string
         user_id:
           type: string
         plan:
           type: string
-          enum:
-            - free
-            - pro
-            - enterprise
-        price:
+        billing_cycle:
+          type: string
+        monthly_price:
+          type: number
+        annual_price:
           type: number
         currency:
-          type: string
-        billing_cycle:
           type: string
         features:
           type: array
           items:
             type: string
-        status:
-          type: string
-        billing_required:
-          type: boolean
-        next_billing_date:
-          type: string
-        subscription_id:
-          type: string
-        user_internal_id:
-          type: string
-        pricing:
-          type: object
-        limits:
-          type: object
-        billing_status:
-          type: string
-        trial_end:
+        trial_days:
+          type: integer
+        trial_end_date:
           type: string
         payment_method_required:
           type: boolean
+        next_billing_date:
+          type: string
+        price:
+          type: number
+        status:
+          type: string
+        billing_status:
+          type: string
         created_at:
           type: string
     handler:
@@ -187,8 +193,16 @@ steps:
       required:
         - preferences_id
         - user_id
+        - plan
+        - preferences
+        - defaults_applied
+        - customizations
         - status
         - created_at
+        - updated_at
+        - feature_flags
+        - quotas
+        - initialized_at
       properties:
         preferences_id:
           type: string
@@ -204,19 +218,15 @@ steps:
           type: integer
         status:
           type: string
-        user_internal_id:
-          type: string
-        notifications:
-          type: object
-        ui_settings:
-          type: object
-        feature_flags:
-          type: object
-        onboarding_completed:
-          type: boolean
         created_at:
           type: string
         updated_at:
+          type: string
+        feature_flags:
+          type: object
+        quotas:
+          type: object
+        initialized_at:
           type: string
     handler:
       callable: Microservices::StepHandlers::InitializePreferencesHandler
@@ -235,11 +245,20 @@ steps:
     result_schema:
       type: object
       required:
-        - sequence_id
         - user_id
+        - plan
+        - channels_used
         - messages_sent
+        - welcome_sequence_id
         - status
         - sent_at
+        - sequence_id
+        - email
+        - notifications_sent
+        - total_notifications
+        - all_delivered
+        - drip_campaign
+        - welcome_sequence_completed_at
       properties:
         user_id:
           type: string
@@ -255,26 +274,21 @@ steps:
           type: string
         status:
           type: string
-        messages_sent_details:
-          type: array
-          items:
-            type: object
-            required:
-              - channel
-              - template
-              - status
-            properties:
-              channel:
-                type: string
-              template:
-                type: string
-              status:
-                type: string
-        total_messages:
-          type: integer
+        sent_at:
+          type: string
         sequence_id:
           type: string
-        sent_at:
+        email:
+          type: string
+        notifications_sent:
+          type: array
+        total_notifications:
+          type: integer
+        all_delivered:
+          type: boolean
+        drip_campaign:
+          type: object
+        welcome_sequence_completed_at:
           type: string
     handler:
       callable: Microservices::StepHandlers::SendWelcomeSequenceHandler
@@ -296,7 +310,16 @@ steps:
       required:
         - user_id
         - status
+        - plan
+        - registration_summary
+        - activation_timestamp
+        - all_services_coordinated
+        - services_completed
         - registration_complete
+        - registration_steps
+        - onboarding_score
+        - profile_summary
+        - next_steps
         - activated_at
       properties:
         user_id:
@@ -315,22 +338,18 @@ steps:
           type: array
           items:
             type: string
-        internal_id:
-          type: string
-        email:
-          type: string
-        account_status:
-          type: string
-        billing_id:
-          type: string
-        subscription_id:
-          type: string
-        onboarding_status:
-          type: string
-        welcome_messages_sent:
-          type: integer
         registration_complete:
           type: boolean
+        registration_steps:
+          type: object
+        onboarding_score:
+          type: integer
+        profile_summary:
+          type: object
+        next_steps:
+          type: array
+          items:
+            type: string
         activated_at:
           type: string
     handler:

@@ -98,14 +98,16 @@ steps:
     result_schema:
       type: object
       required:
+        - validated_items
         - item_count
         - subtotal
-        - tax_rate
         - tax
+        - tax_rate
         - shipping
         - total
+        - free_shipping
+        - validation_id
         - validated_at
-        - validated_items
       properties:
         validated_items:
           type: array
@@ -117,6 +119,8 @@ steps:
               - quantity
               - unit_price
               - line_total
+              - available
+              - validated_at
             properties:
               sku:
                 type: string
@@ -128,6 +132,10 @@ steps:
                 type: number
               line_total:
                 type: number
+              available:
+                type: boolean
+              validated_at:
+                type: string
         item_count:
           type: integer
         subtotal:
@@ -140,6 +148,10 @@ steps:
           type: number
         total:
           type: number
+        free_shipping:
+          type: boolean
+        validation_id:
+          type: string
         validated_at:
           type: string
     handler:
@@ -164,11 +176,13 @@ steps:
       required:
         - payment_id
         - transaction_id
-        - status
+        - authorization_code
         - amount_charged
         - currency
         - payment_method_type
-        - authorization_code
+        - last_four
+        - status
+        - gateway_response_code
         - processed_at
       properties:
         payment_id:
@@ -181,16 +195,14 @@ steps:
           type: number
         currency:
           type: string
-          enum:
-            - USD
         payment_method_type:
           type: string
-        gateway_response:
+        last_four:
           type: string
         status:
           type: string
-          enum:
-            - completed
+        gateway_response_code:
+          type: string
         processed_at:
           type: string
     handler:
@@ -216,8 +228,12 @@ steps:
       required:
         - updated_products
         - total_items_reserved
+        - inventory_changes
         - inventory_log_id
         - updated_at
+        - reservation_id
+        - reservation_expires_at
+        - all_items_reserved
       properties:
         updated_products:
           type: array
@@ -225,21 +241,24 @@ steps:
             type: object
             required:
               - product_id
-              - sku
-              - previous_quantity
-              - new_quantity
-              - reserved
+              - name
+              - previous_stock
+              - new_stock
+              - quantity_reserved
+              - reservation_id
             properties:
               product_id:
                 type: string
-              sku:
+              name:
                 type: string
-              previous_quantity:
+              previous_stock:
                 type: integer
-              new_quantity:
+              new_stock:
                 type: integer
-              reserved:
+              quantity_reserved:
                 type: integer
+              reservation_id:
+                type: string
         total_items_reserved:
           type: integer
         inventory_changes:
@@ -248,6 +267,12 @@ steps:
           type: string
         updated_at:
           type: string
+        reservation_id:
+          type: string
+        reservation_expires_at:
+          type: string
+        all_items_reserved:
+          type: boolean
     handler:
       callable: Ecommerce::StepHandlers::UpdateInventoryHandler
       initialization:
@@ -272,26 +297,31 @@ steps:
         - order_id
         - order_number
         - status
+        - total_amount
+        - customer_email
+        - created_at
+        - estimated_delivery
         - items
-        - item_count
         - subtotal
         - tax
         - shipping
-        - total
-        - total_amount
-        - customer_email
-        - payment_id
-        - transaction_id
-        - authorization_code
-        - inventory_log_id
-        - estimated_delivery
-        - created_at
+        - payment
+        - inventory
+        - estimated_shipping_days
       properties:
         order_id:
           type: string
         order_number:
           type: string
+        status:
+          type: string
+        total_amount:
+          type: number
         customer_email:
+          type: string
+        created_at:
+          type: string
+        estimated_delivery:
           type: string
         items:
           type: array
@@ -314,36 +344,32 @@ steps:
                 type: number
               line_total:
                 type: number
-        item_count:
-          type: integer
         subtotal:
           type: number
         tax:
           type: number
         shipping:
           type: number
-        total:
-          type: number
-        total_amount:
-          type: number
-        payment_id:
-          type: string
-        transaction_id:
-          type: string
-        authorization_code:
-          type: string
-        updated_products:
-          type: array
-        inventory_log_id:
-          type: string
-        status:
-          type: string
-          enum:
-            - confirmed
-        created_at:
-          type: string
-        estimated_delivery:
-          type: string
+        payment:
+          type: object
+          properties:
+            payment_id:
+              type: string
+            transaction_id:
+              type: string
+            amount_charged:
+              type: number
+            status:
+              type: string
+        inventory:
+          type: object
+          properties:
+            inventory_log_id:
+              type: string
+        shipping_address:
+          type: object
+        estimated_shipping_days:
+          type: integer
     handler:
       callable: Ecommerce::StepHandlers::CreateOrderHandler
       initialization:
@@ -365,14 +391,18 @@ steps:
     result_schema:
       type: object
       required:
-        - message_id
-        - status
         - email_sent
         - recipient
-        - subject
-        - template
-        - channel
+        - email_type
         - sent_at
+        - message_id
+        - order_id
+        - notifications_sent
+        - email_subject
+        - email_body_preview
+        - total_channels
+        - all_delivered
+        - confirmation_sent_at
       properties:
         email_sent:
           type: boolean
@@ -380,23 +410,23 @@ steps:
           type: string
         email_type:
           type: string
+        sent_at:
+          type: string
         message_id:
           type: string
-        subject:
+        order_id:
           type: string
-        body_preview:
+        notifications_sent:
+          type: array
+        email_subject:
           type: string
-        channel:
+        email_body_preview:
           type: string
-          enum:
-            - email
-        template:
-          type: string
-        status:
-          type: string
-          enum:
-            - sent
-        sent_at:
+        total_channels:
+          type: integer
+        all_delivered:
+          type: boolean
+        confirmation_sent_at:
           type: string
     handler:
       callable: Ecommerce::StepHandlers::SendConfirmationHandler

@@ -108,14 +108,15 @@ steps:
     result_schema:
       type: object
       required:
+        - validated_items
         - item_count
         - subtotal
-        - tax_rate
         - tax
+        - tax_rate
         - shipping
         - total
-        - validated_at
-        - validated_items
+        - free_shipping
+        - validation_warnings
       properties:
         validated_items:
           type: array
@@ -124,20 +125,17 @@ steps:
             required:
               - sku
               - name
+              - price
               - quantity
-              - unit_price
-              - line_total
             properties:
               sku:
                 type: string
               name:
                 type: string
+              price:
+                type: number
               quantity:
                 type: integer
-              unit_price:
-                type: number
-              line_total:
-                type: number
         item_count:
           type: integer
         subtotal:
@@ -150,8 +148,12 @@ steps:
           type: number
         total:
           type: number
-        validated_at:
-          type: string
+        free_shipping:
+          type: boolean
+        validation_warnings:
+          type: array
+          items:
+            type: string
     handler:
       callable: Ecommerce.StepHandlers.ValidateCartHandler
       initialization:
@@ -177,31 +179,41 @@ steps:
         - status
         - amount_charged
         - currency
-        - payment_method_type
-        - authorization_code
-        - processed_at
+        - payment_method
+        - auth_code
+        - processing_fee
+        - net_amount
+        - card_last_four
+        - gateway
+        - authorized_at
       properties:
         payment_id:
           type: string
         transaction_id:
           type: string
-        authorization_code:
+        status:
           type: string
+          enum:
+            - succeeded
         amount_charged:
           type: number
         currency:
           type: string
           enum:
             - USD
-        payment_method_type:
+        payment_method:
           type: string
-        gateway_response:
+        auth_code:
           type: string
-        status:
+        processing_fee:
+          type: number
+        net_amount:
+          type: number
+        card_last_four:
           type: string
-          enum:
-            - completed
-        processed_at:
+        gateway:
+          type: string
+        authorized_at:
           type: string
     handler:
       callable: Ecommerce.StepHandlers.ProcessPaymentHandler
@@ -228,36 +240,46 @@ steps:
         - total_items_reserved
         - inventory_log_id
         - updated_at
+        - reservation_expires_at
+        - all_items_available
       properties:
         updated_products:
           type: array
           items:
             type: object
             required:
-              - product_id
               - sku
-              - previous_quantity
-              - new_quantity
-              - reserved
+              - name
+              - previous_stock
+              - new_stock
+              - quantity_reserved
+              - reservation_id
+              - warehouse
             properties:
-              product_id:
-                type: string
               sku:
                 type: string
-              previous_quantity:
+              name:
+                type: string
+              previous_stock:
                 type: integer
-              new_quantity:
+              new_stock:
                 type: integer
-              reserved:
+              quantity_reserved:
                 type: integer
+              reservation_id:
+                type: string
+              warehouse:
+                type: string
         total_items_reserved:
           type: integer
-        inventory_changes:
-          type: array
         inventory_log_id:
           type: string
         updated_at:
           type: string
+        reservation_expires_at:
+          type: string
+        all_items_available:
+          type: boolean
     handler:
       callable: Ecommerce.StepHandlers.UpdateInventoryHandler
       initialization:
@@ -282,26 +304,32 @@ steps:
         - order_id
         - order_number
         - status
+        - total_amount
+        - customer_email
+        - created_at
+        - estimated_delivery
         - items
-        - item_count
         - subtotal
         - tax
         - shipping
-        - total
-        - total_amount
-        - customer_email
-        - payment_id
         - transaction_id
-        - authorization_code
-        - inventory_log_id
-        - estimated_delivery
-        - created_at
+        - inventory_reservations
       properties:
         order_id:
-          type: string
+          type: integer
         order_number:
           type: string
+        status:
+          type: string
+          enum:
+            - confirmed
+        total_amount:
+          type: number
         customer_email:
+          type: string
+        created_at:
+          type: string
+        estimated_delivery:
           type: string
         items:
           type: array
@@ -310,50 +338,27 @@ steps:
             required:
               - sku
               - name
+              - price
               - quantity
-              - unit_price
-              - line_total
             properties:
               sku:
                 type: string
               name:
                 type: string
+              price:
+                type: number
               quantity:
                 type: integer
-              unit_price:
-                type: number
-              line_total:
-                type: number
-        item_count:
-          type: integer
         subtotal:
           type: number
         tax:
           type: number
         shipping:
           type: number
-        total:
-          type: number
-        total_amount:
-          type: number
-        payment_id:
-          type: string
         transaction_id:
           type: string
-        authorization_code:
-          type: string
-        updated_products:
-          type: array
-        inventory_log_id:
-          type: string
-        status:
-          type: string
-          enum:
-            - confirmed
-        created_at:
-          type: string
-        estimated_delivery:
-          type: string
+        inventory_reservations:
+          type: integer
     handler:
       callable: Ecommerce.StepHandlers.CreateOrderHandler
       initialization:
@@ -375,38 +380,65 @@ steps:
     result_schema:
       type: object
       required:
-        - message_id
-        - status
-        - email_sent
+        - email_id
         - recipient
         - subject
-        - template
-        - channel
+        - status
         - sent_at
+        - template
+        - template_data
+        - provider
       properties:
-        email_sent:
-          type: boolean
+        email_id:
+          type: string
         recipient:
           type: string
-        email_type:
-          type: string
-        message_id:
-          type: string
         subject:
-          type: string
-        body_preview:
-          type: string
-        channel:
-          type: string
-          enum:
-            - email
-        template:
           type: string
         status:
           type: string
           enum:
             - sent
         sent_at:
+          type: string
+        template:
+          type: string
+        template_data:
+          type: object
+          required:
+            - customer_name
+            - order_number
+            - total_amount
+            - estimated_delivery
+            - items
+          properties:
+            customer_name:
+              type: string
+            order_number:
+              type: string
+            total_amount:
+              type: number
+            estimated_delivery:
+              type: string
+            items:
+              type: array
+              items:
+                type: object
+                required:
+                  - sku
+                  - name
+                  - price
+                  - quantity
+                properties:
+                  sku:
+                    type: string
+                  name:
+                    type: string
+                  price:
+                    type: number
+                  quantity:
+                    type: integer
+        provider:
           type: string
     handler:
       callable: Ecommerce.StepHandlers.SendConfirmationHandler

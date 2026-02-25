@@ -64,6 +64,9 @@ input_schema:
       type: boolean
       default: true
       description: "Whether manager approval is required"
+    order_ref:
+      type: string
+      description: "Order reference for the refund"
     customer_email:
       type: string
       description: "Customer email address for notifications"
@@ -79,10 +82,23 @@ steps:
     result_schema:
       type: object
       required:
-        - request_id
+        - request_validated
         - ticket_id
-        - eligible
-        - amount
+        - customer_id
+        - ticket_status
+        - customer_tier
+        - original_purchase_date
+        - payment_id
+        - validation_timestamp
+        - namespace
+        - validation_id
+        - order_ref
+        - refund_amount
+        - reason
+        - order_data
+        - refund_percentage
+        - is_partial_refund
+        - is_valid
         - validated_at
       properties:
         request_validated:
@@ -103,19 +119,21 @@ steps:
           type: string
         namespace:
           type: string
-        request_id:
+        validation_id:
           type: string
         order_ref:
           type: string
-        amount:
+        refund_amount:
           type: number
         reason:
           type: string
-        customer_email:
-          type: string
-        validation_hash:
-          type: string
-        eligible:
+        order_data:
+          type: object
+        refund_percentage:
+          type: number
+        is_partial_refund:
+          type: boolean
+        is_valid:
           type: boolean
         validated_at:
           type: string
@@ -134,10 +152,24 @@ steps:
     result_schema:
       type: object
       required:
-        - request_id
+        - policy_checked
         - policy_compliant
+        - customer_tier
+        - refund_window_days
+        - days_since_purchase
+        - within_refund_window
         - requires_approval
-        - policy_id
+        - max_allowed_amount
+        - policy_checked_at
+        - namespace
+        - check_id
+        - policy_passed
+        - violations
+        - warnings
+        - auto_approve
+        - requires_manager_approval
+        - approval_level
+        - applied_policy
         - checked_at
       properties:
         policy_checked:
@@ -160,26 +192,26 @@ steps:
           type: string
         namespace:
           type: string
-        policy_id:
+        check_id:
           type: string
-        request_id:
-          type: string
-        approval_path:
-          type: string
-          enum:
-            - auto
-            - manager
-            - director
-        requires_review:
+        policy_passed:
           type: boolean
-        amount_tier:
-          type: string
-        policy_version:
-          type: string
-        rules_applied:
+        violations:
           type: array
           items:
             type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        auto_approve:
+          type: boolean
+        requires_manager_approval:
+          type: boolean
+        approval_level:
+          type: string
+        applied_policy:
+          type: object
         checked_at:
           type: string
     handler:
@@ -198,9 +230,17 @@ steps:
     result_schema:
       type: object
       required:
-        - request_id
-        - approved
+        - approval_obtained
+        - approval_required
+        - auto_approved
+        - approval_id
         - approved_at
+        - namespace
+        - approved
+        - reason
+        - decision_type
+        - decided_by
+        - decided_at
       properties:
         approval_obtained:
           type: boolean
@@ -218,18 +258,30 @@ steps:
           type: string
         namespace:
           type: string
-        request_id:
-          type: string
         approved:
           type: boolean
-        approver:
+        reason:
           type: string
-        approval_path:
+        denial_reason:
           type: string
-        approval_note:
+        approval_level:
           type: string
-        amount_approved:
-          type: number
+        decision_type:
+          type: string
+        decided_by:
+          type: string
+        manager:
+          type: object
+        requesting_agent:
+          type: string
+        priority:
+          type: string
+        conditions:
+          type: array
+          items:
+            type: string
+        decided_at:
+          type: string
     handler:
       callable: CustomerSuccess::StepHandlers::GetManagerApprovalHandler
     dependencies:
@@ -245,10 +297,25 @@ steps:
     result_schema:
       type: object
       required:
-        - request_id
-        - refund_id
-        - status
+        - task_delegated
+        - target_namespace
+        - target_workflow
+        - delegated_task_id
+        - delegated_task_status
+        - delegation_timestamp
+        - correlation_id
+        - namespace
+        - execution_id
+        - executed
+        - refund_transaction_id
         - amount_refunded
+        - order_ref
+        - customer_id
+        - payment_method
+        - steps_executed
+        - total_steps
+        - all_steps_completed
+        - conditions_applied
         - executed_at
       properties:
         task_delegated:
@@ -267,27 +334,30 @@ steps:
           type: string
         namespace:
           type: string
-        refund_id:
+        execution_id:
           type: string
-        transaction_ref:
-          type: string
-        request_id:
-          type: string
-        order_ref:
+        executed:
+          type: boolean
+        refund_transaction_id:
           type: string
         amount_refunded:
           type: number
-        currency:
+        order_ref:
           type: string
-        refund_method:
+        customer_id:
           type: string
-        estimated_arrival:
+        payment_method:
           type: string
-        status:
-          type: string
-          enum:
-            - completed
-            - processing
+        steps_executed:
+          type: array
+        total_steps:
+          type: integer
+        all_steps_completed:
+          type: boolean
+        conditions_applied:
+          type: array
+          items:
+            type: string
         executed_at:
           type: string
     handler:
@@ -306,11 +376,23 @@ steps:
     result_schema:
       type: object
       required:
-        - ticket_id
-        - request_id
         - ticket_updated
+        - ticket_id
+        - previous_status
         - new_status
-        - resolved_at
+        - resolution_note
+        - updated_at
+        - refund_completed
+        - delegated_task_id
+        - namespace
+        - update_id
+        - ticket_status
+        - resolution_category
+        - timeline
+        - internal_notes
+        - customer_facing_message
+        - satisfaction_survey_scheduled
+        - follow_up_required
       properties:
         ticket_updated:
           type: boolean
@@ -330,22 +412,22 @@ steps:
           type: string
         namespace:
           type: string
-        request_id:
+        update_id:
           type: string
-        resolution:
-          type: string
-        customer_notified:
-          type: boolean
-        notification_channel:
-          type: string
-        refund_id:
-          type: string
-        amount_refunded:
-          type: number
         ticket_status:
           type: string
-        resolved_at:
+        resolution_category:
           type: string
+        timeline:
+          type: array
+        internal_notes:
+          type: string
+        customer_facing_message:
+          type: string
+        satisfaction_survey_scheduled:
+          type: boolean
+        follow_up_required:
+          type: boolean
     handler:
       callable: CustomerSuccess::StepHandlers::UpdateTicketStatusHandler
     dependencies:

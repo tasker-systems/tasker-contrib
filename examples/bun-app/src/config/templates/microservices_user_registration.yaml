@@ -80,8 +80,14 @@ steps:
       required:
         - user_id
         - email
+        - name
+        - plan
+        - phone
+        - source
         - status
         - created_at
+        - api_key
+        - auth_provider
       properties:
         user_id:
           type: string
@@ -92,26 +98,16 @@ steps:
         plan:
           type: string
         phone:
-          type: string
+          type: "null"
         source:
           type: string
         status:
           type: string
-        internal_id:
-          type: string
-        username:
-          type: string
-        full_name:
-          type: string
-        referral_code:
-          type: string
-        verification_token:
-          type: string
-        email_verified:
-          type: boolean
-        account_status:
-          type: string
         created_at:
+          type: string
+        api_key:
+          type: string
+        auth_provider:
           type: string
     handler:
       callable: Microservices.StepHandlers.CreateUserHandler
@@ -134,11 +130,9 @@ steps:
     result_schema:
       type: object
       required:
-        - billing_id
         - user_id
         - plan
         - status
-        - created_at
       properties:
         billing_id:
           type: string
@@ -146,10 +140,6 @@ steps:
           type: string
         plan:
           type: string
-          enum:
-            - free
-            - pro
-            - enterprise
         price:
           type: number
         currency:
@@ -162,25 +152,13 @@ steps:
             type: string
         status:
           type: string
-        billing_required:
-          type: boolean
         next_billing_date:
           type: string
-        subscription_id:
-          type: string
-        user_internal_id:
-          type: string
-        pricing:
-          type: object
-        limits:
-          type: object
-        billing_status:
-          type: string
-        trial_end:
-          type: string
-        payment_method_required:
-          type: boolean
         created_at:
+          type: string
+        billing_required:
+          type: boolean
+        message:
           type: string
     handler:
       callable: Microservices.StepHandlers.SetupBillingHandler
@@ -205,8 +183,13 @@ steps:
       required:
         - preferences_id
         - user_id
+        - plan
+        - preferences
+        - defaults_applied
+        - customizations
         - status
         - created_at
+        - updated_at
       properties:
         preferences_id:
           type: string
@@ -216,22 +199,13 @@ steps:
           type: string
         preferences:
           type: object
+          additionalProperties: true
         defaults_applied:
           type: integer
         customizations:
           type: integer
         status:
           type: string
-        user_internal_id:
-          type: string
-        notifications:
-          type: object
-        ui_settings:
-          type: object
-        feature_flags:
-          type: object
-        onboarding_completed:
-          type: boolean
         created_at:
           type: string
         updated_at:
@@ -258,11 +232,14 @@ steps:
     result_schema:
       type: object
       required:
-        - sequence_id
         - user_id
+        - plan
+        - channels_used
         - messages_sent
+        - welcome_sequence_id
         - status
         - sent_at
+        - recipient
       properties:
         user_id:
           type: string
@@ -278,26 +255,9 @@ steps:
           type: string
         status:
           type: string
-        messages_sent_details:
-          type: array
-          items:
-            type: object
-            required:
-              - channel
-              - template
-              - status
-            properties:
-              channel:
-                type: string
-              template:
-                type: string
-              status:
-                type: string
-        total_messages:
-          type: integer
-        sequence_id:
-          type: string
         sent_at:
+          type: string
+        recipient:
           type: string
     handler:
       callable: Microservices.StepHandlers.SendWelcomeHandler
@@ -324,8 +284,11 @@ steps:
       required:
         - user_id
         - status
-        - registration_complete
-        - activated_at
+        - plan
+        - registration_summary
+        - activation_timestamp
+        - all_services_coordinated
+        - services_completed
       properties:
         user_id:
           type: string
@@ -335,6 +298,7 @@ steps:
           type: string
         registration_summary:
           type: object
+          additionalProperties: true
         activation_timestamp:
           type: string
         all_services_coordinated:
@@ -343,24 +307,6 @@ steps:
           type: array
           items:
             type: string
-        internal_id:
-          type: string
-        email:
-          type: string
-        account_status:
-          type: string
-        billing_id:
-          type: string
-        subscription_id:
-          type: string
-        onboarding_status:
-          type: string
-        welcome_messages_sent:
-          type: integer
-        registration_complete:
-          type: boolean
-        activated_at:
-          type: string
     handler:
       callable: Microservices.StepHandlers.UpdateStatusHandler
       initialization:

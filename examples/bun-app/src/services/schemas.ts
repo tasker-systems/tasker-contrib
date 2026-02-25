@@ -86,7 +86,7 @@ export const EcommerceProcessPaymentResultSchema = z
   .object({
     payment_id: z.string(),
     transaction_id: z.string(),
-    status: z.literal("completed"),
+    status: z.literal("succeeded"),
     amount_charged: z.number(),
     currency: z.literal("USD"),
     payment_method: z.string(),

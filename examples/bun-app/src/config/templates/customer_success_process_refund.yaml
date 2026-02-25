@@ -83,11 +83,15 @@ steps:
     result_schema:
       type: object
       required:
-        - request_id
+        - request_validated
         - ticket_id
-        - eligible
-        - amount
-        - validated_at
+        - customer_id
+        - ticket_status
+        - customer_tier
+        - original_purchase_date
+        - payment_id
+        - validation_timestamp
+        - namespace
       properties:
         request_validated:
           type: boolean
@@ -107,22 +111,6 @@ steps:
           type: string
         namespace:
           type: string
-        request_id:
-          type: string
-        order_ref:
-          type: string
-        amount:
-          type: number
-        reason:
-          type: string
-        customer_email:
-          type: string
-        validation_hash:
-          type: string
-        eligible:
-          type: boolean
-        validated_at:
-          type: string
     handler:
       callable: CustomerSuccess.StepHandlers.ValidateRefundRequestHandler
       initialization:
@@ -141,11 +129,16 @@ steps:
     result_schema:
       type: object
       required:
-        - request_id
+        - policy_checked
         - policy_compliant
+        - customer_tier
+        - refund_window_days
+        - days_since_purchase
+        - within_refund_window
         - requires_approval
-        - policy_id
-        - checked_at
+        - max_allowed_amount
+        - policy_checked_at
+        - namespace
       properties:
         policy_checked:
           type: boolean
@@ -167,28 +160,6 @@ steps:
           type: string
         namespace:
           type: string
-        policy_id:
-          type: string
-        request_id:
-          type: string
-        approval_path:
-          type: string
-          enum:
-            - auto
-            - manager
-            - director
-        requires_review:
-          type: boolean
-        amount_tier:
-          type: string
-        policy_version:
-          type: string
-        rules_applied:
-          type: array
-          items:
-            type: string
-        checked_at:
-          type: string
     handler:
       callable: CustomerSuccess.StepHandlers.CheckRefundEligibilityHandler
       initialization:
@@ -208,9 +179,12 @@ steps:
     result_schema:
       type: object
       required:
-        - request_id
-        - approved
+        - approval_obtained
+        - approval_required
+        - auto_approved
+        - manager_notes
         - approved_at
+        - namespace
       properties:
         approval_obtained:
           type: boolean
@@ -219,27 +193,19 @@ steps:
         auto_approved:
           type: boolean
         approval_id:
-          type: string
+          type:
+            - string
+            - "null"
         manager_id:
-          type: string
+          type:
+            - string
+            - "null"
         manager_notes:
           type: string
         approved_at:
           type: string
         namespace:
           type: string
-        request_id:
-          type: string
-        approved:
-          type: boolean
-        approver:
-          type: string
-        approval_path:
-          type: string
-        approval_note:
-          type: string
-        amount_approved:
-          type: number
     handler:
       callable: CustomerSuccess.StepHandlers.CalculateRefundAmountHandler
       initialization:
@@ -259,11 +225,14 @@ steps:
     result_schema:
       type: object
       required:
-        - request_id
-        - refund_id
-        - status
-        - amount_refunded
-        - executed_at
+        - task_delegated
+        - target_namespace
+        - target_workflow
+        - delegated_task_id
+        - delegated_task_status
+        - delegation_timestamp
+        - correlation_id
+        - namespace
       properties:
         task_delegated:
           type: boolean
@@ -280,29 +249,6 @@ steps:
         correlation_id:
           type: string
         namespace:
-          type: string
-        refund_id:
-          type: string
-        transaction_ref:
-          type: string
-        request_id:
-          type: string
-        order_ref:
-          type: string
-        amount_refunded:
-          type: number
-        currency:
-          type: string
-        refund_method:
-          type: string
-        estimated_arrival:
-          type: string
-        status:
-          type: string
-          enum:
-            - completed
-            - processing
-        executed_at:
           type: string
     handler:
       callable: CustomerSuccess.StepHandlers.NotifyCustomerSuccessHandler
@@ -323,11 +269,15 @@ steps:
     result_schema:
       type: object
       required:
-        - ticket_id
-        - request_id
         - ticket_updated
+        - ticket_id
+        - previous_status
         - new_status
-        - resolved_at
+        - resolution_note
+        - updated_at
+        - refund_completed
+        - delegated_task_id
+        - namespace
       properties:
         ticket_updated:
           type: boolean
@@ -346,22 +296,6 @@ steps:
         delegated_task_id:
           type: string
         namespace:
-          type: string
-        request_id:
-          type: string
-        resolution:
-          type: string
-        customer_notified:
-          type: boolean
-        notification_channel:
-          type: string
-        refund_id:
-          type: string
-        amount_refunded:
-          type: number
-        ticket_status:
-          type: string
-        resolved_at:
           type: string
     handler:
       callable: CustomerSuccess.StepHandlers.UpdateCrmRecordHandler
