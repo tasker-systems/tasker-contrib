@@ -1,6 +1,6 @@
 """{{ name | pascal_case }} decision step handler for Tasker workflow routing."""
 
-from tasker_core.step_handler.functional import Decision, decision_handler, depends_on, inputs
+from tasker_core.step_handler.functional import Decision, decision_handler, inputs
 
 
 @decision_handler("{{ name | snake_case }}")

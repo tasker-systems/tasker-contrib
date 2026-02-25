@@ -10,7 +10,7 @@
 import { defineHandler } from '@tasker-systems/tasker';
 import { z } from 'zod';
 import { CartItemSchema } from '../services/schemas';
-import type { PaymentInfo } from '../services/schemas';
+import type { CartItem, PaymentInfo } from '../services/schemas';
 import * as svc from '../services/ecommerce';
 
 export const ValidateCartHandler = defineHandler(

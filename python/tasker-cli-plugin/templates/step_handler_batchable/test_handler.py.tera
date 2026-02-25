@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 import pytest
 from {{ module_name }}.{{ name | snake_case }}_handler import (
     {{ name | snake_case }}_analyzer,
-    {{ name | snake_case }}_worker,
     {{ name | snake_case }}_convergence,
+    {{ name | snake_case }}_worker,
 )
 
 

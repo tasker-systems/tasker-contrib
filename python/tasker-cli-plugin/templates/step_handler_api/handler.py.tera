@@ -1,6 +1,6 @@
 """{{ name | pascal_case }} API step handler for Tasker workflow processing."""
 
-from tasker_core.step_handler.functional import api_handler, depends_on, inputs
+from tasker_core.step_handler.functional import api_handler, inputs
 
 
 @api_handler("{{ name | snake_case }}", base_url="{{ base_url }}")

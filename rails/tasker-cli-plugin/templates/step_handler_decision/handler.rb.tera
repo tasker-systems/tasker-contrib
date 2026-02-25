@@ -13,10 +13,11 @@ module {{ module_name }}
   #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
   include TaskerCore::StepHandler::Functional
 
-  {{ name | pascal_case }}Handler = decision_handler '{{ name | snake_case }}',
+  {{ name | pascal_case }}Handler = decision_handler(
+    '{{ name | snake_case }}',
     depends_on: {},
-    inputs: [:route_key] do |route_key:, context:|
-
+    inputs: [:route_key]
+  ) do |route_key:, _context:|
     # TODO: Implement your routing logic here
     route = route_key || 'default'
 

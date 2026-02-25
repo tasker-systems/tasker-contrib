@@ -100,6 +100,9 @@ const SCHEMA_REGISTRY: TemplateMapping[] = [
     inputSchema: UserRegistrationInputSchema,
     stepSchemas: {
       create_user_account: MicroservicesCreateUserResultSchema,
+      // Only checks the "active" variant; the "skipped" variant
+      // (MicroservicesSetupBillingSkippedResultSchema) is not compared since
+      // z.union comparison is not yet supported by this tool.
       setup_billing_profile: MicroservicesSetupBillingActiveResultSchema,
       initialize_preferences: MicroservicesInitPreferencesResultSchema,
       send_welcome_sequence: MicroservicesSendWelcomeResultSchema,
@@ -327,13 +330,6 @@ const TEMPLATES_DIR = resolve(
   "config",
   "templates",
 );
-
-function getSchemaName(zodSchema: ZodTypeAny): string {
-  // Attempt to derive a readable name; fall back to "ZodSchema"
-  const desc = zodSchema.description;
-  if (desc) return desc;
-  return "ZodSchema";
-}
 
 function checkTemplate(mapping: TemplateMapping): SchemaComparisonResult[] {
   const yamlPath = resolve(TEMPLATES_DIR, mapping.yamlFile);

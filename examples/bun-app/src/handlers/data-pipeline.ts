@@ -9,6 +9,7 @@
 
 import { defineHandler } from '@tasker-systems/tasker';
 import { DateRangeSchema } from '../services/schemas';
+import type { DateRange } from '../services/schemas';
 import * as svc from '../services/data-pipeline';
 
 // ---------------------------------------------------------------------------

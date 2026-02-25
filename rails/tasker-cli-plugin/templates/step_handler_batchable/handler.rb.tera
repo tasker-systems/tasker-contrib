@@ -27,10 +27,11 @@ module {{ module_name }}
   #       callable: {{ module_name }}::{{ name | pascal_case }}ConvergenceHandler
   include TaskerCore::StepHandler::Functional
 
-  {{ name | pascal_case }}AnalyzerHandler = batch_analyzer '{{ name | snake_case }}_analyzer',
+  {{ name | pascal_case }}AnalyzerHandler = batch_analyzer(
+    '{{ name | snake_case }}_analyzer',
     worker_template: '{{ name | snake_case }}_batch',
-    inputs: [:total_items] do |total_items:, context:|
-
+    inputs: [:total_items]
+  ) do |total_items:, _context:|
     # TODO: Determine total items from your data source
     count = total_items&.to_i || 1000
     batch_size = 200
@@ -38,7 +39,7 @@ module {{ module_name }}
     BatchConfig.new(total_items: count, batch_size: batch_size)
   end
 
-  {{ name | pascal_case }}WorkerHandler = batch_worker '{{ name | snake_case }}_worker' do |batch_context:, context:|
+  {{ name | pascal_case }}WorkerHandler = batch_worker '{{ name | snake_case }}_worker' do |batch_context:, _context:|
     # TODO: Process items in the batch range
     cursor = batch_context&.dig(:cursor_config)
     items_processed = (cursor[:end_cursor] || 0) - (cursor[:start_cursor] || 0)
@@ -55,7 +56,7 @@ module {{ module_name }}
     total_processed = 0
     worker_count = 0
 
-    context.dependency_results.each do |dep_name, _|
+    context.dependency_results.each_key do |dep_name|
       next unless dep_name.start_with?('{{ name | snake_case }}_batch_')
 
       result = context.get_dependency_result(dep_name)
