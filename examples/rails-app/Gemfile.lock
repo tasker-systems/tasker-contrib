@@ -1,3 +1,47 @@
+PATH
+  remote: ../../../tasker-core/workers/ruby
+  specs:
+    tasker-rb (0.1.7)
+      activesupport (~> 8.0)
+      concurrent-ruby (~> 1.3.5)
+      concurrent-ruby-ext (~> 1.3.5)
+      csv (~> 3.3)
+      dotenv (~> 2.8)
+      dry-events (~> 1.1)
+      dry-struct (~> 1.8)
+      dry-types (~> 1.8)
+      dry-validation (~> 1.10)
+      faraday (~> 2.12.2)
+      json-schema (~> 2.4, >= 2.4.0)
+      logger (~> 1.6)
+      rb_sys (~> 0.9.39)
+    tasker-rb (0.1.7-arm64-darwin)
+      activesupport (~> 8.0)
+      concurrent-ruby (~> 1.3.5)
+      concurrent-ruby-ext (~> 1.3.5)
+      csv (~> 3.3)
+      dotenv (~> 2.8)
+      dry-events (~> 1.1)
+      dry-struct (~> 1.8)
+      dry-types (~> 1.8)
+      dry-validation (~> 1.10)
+      faraday (~> 2.12.2)
+      json-schema (~> 2.4, >= 2.4.0)
+      logger (~> 1.6)
+    tasker-rb (0.1.7-x86_64-linux)
+      activesupport (~> 8.0)
+      concurrent-ruby (~> 1.3.5)
+      concurrent-ruby-ext (~> 1.3.5)
+      csv (~> 3.3)
+      dotenv (~> 2.8)
+      dry-events (~> 1.1)
+      dry-struct (~> 1.8)
+      dry-types (~> 1.8)
+      dry-validation (~> 1.10)
+      faraday (~> 2.12.2)
+      json-schema (~> 2.4, >= 2.4.0)
+      logger (~> 1.6)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -314,46 +358,6 @@ GEM
     ruby-progressbar (1.13.0)
     securerandom (0.4.1)
     stringio (3.2.0)
-    tasker-rb (0.1.7)
-      activesupport (~> 8.0)
-      concurrent-ruby (~> 1.3.5)
-      concurrent-ruby-ext (~> 1.3.5)
-      csv (~> 3.3)
-      dotenv (~> 2.8)
-      dry-events (~> 1.1)
-      dry-struct (~> 1.8)
-      dry-types (~> 1.8)
-      dry-validation (~> 1.10)
-      faraday (~> 2.12.2)
-      json-schema (~> 2.4, >= 2.4.0)
-      logger (~> 1.6)
-      rb_sys (~> 0.9.39)
-    tasker-rb (0.1.7-arm64-darwin)
-      activesupport (~> 8.0)
-      concurrent-ruby (~> 1.3.5)
-      concurrent-ruby-ext (~> 1.3.5)
-      csv (~> 3.3)
-      dotenv (~> 2.8)
-      dry-events (~> 1.1)
-      dry-struct (~> 1.8)
-      dry-types (~> 1.8)
-      dry-validation (~> 1.10)
-      faraday (~> 2.12.2)
-      json-schema (~> 2.4, >= 2.4.0)
-      logger (~> 1.6)
-    tasker-rb (0.1.7-x86_64-linux)
-      activesupport (~> 8.0)
-      concurrent-ruby (~> 1.3.5)
-      concurrent-ruby-ext (~> 1.3.5)
-      csv (~> 3.3)
-      dotenv (~> 2.8)
-      dry-events (~> 1.1)
-      dry-struct (~> 1.8)
-      dry-types (~> 1.8)
-      dry-validation (~> 1.10)
-      faraday (~> 2.12.2)
-      json-schema (~> 2.4, >= 2.4.0)
-      logger (~> 1.6)
     thor (1.5.0)
     timeout (0.6.0)
     tsort (0.2.0)
@@ -392,7 +396,7 @@ DEPENDENCIES
   rspec-rails (~> 7.0)
   rubocop (~> 1.84)
   rubocop-rspec (~> 3.9)
-  tasker-rb (~> 0.1.7)
+  tasker-rb!
 
 CHECKSUMS
   action_text-trix (2.1.16) sha256=f645a2c21821b8449fd1d6770708f4031c91a2eedf9ef476e9be93c64e703a8a
@@ -508,9 +512,9 @@ CHECKSUMS
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33
   securerandom (0.4.1) sha256=cc5193d414a4341b6e225f0cb4446aceca8e50d5e1888743fac16987638ea0b1
   stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
-  tasker-rb (0.1.7) sha256=04545843f2e5e0b68ca3cbe115e10d74f3be2447f663a55568865d781f086cf2
-  tasker-rb (0.1.7-arm64-darwin) sha256=7586b35fc81e4a4288e3dabe959b8f5a210d1599905ccdcff28a978a1a4a9ce2
-  tasker-rb (0.1.7-x86_64-linux) sha256=70df36be9a5afbe70ca1ce6891e15cdba26f63e367d942eea7f3422df6148f2e
+  tasker-rb (0.1.7)
+  tasker-rb (0.1.7-arm64-darwin)
+  tasker-rb (0.1.7-x86_64-linux)
   thor (1.5.0) sha256=e3a9e55fe857e44859ce104a84675ab6e8cd59c650a49106a05f55f136425e73
   timeout (0.6.0) sha256=6d722ad619f96ee383a0c557ec6eb8c4ecb08af3af62098a0be5057bf00de1af
   tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f

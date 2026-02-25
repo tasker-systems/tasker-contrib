@@ -12,6 +12,33 @@ require 'dry-types'
 # Services return Dry::Struct instances constructed from these result types.
 # All result struct attributes are optional and omittable (via ResultStruct)
 # so that construction works gracefully even when some keys are absent.
+#
+# == A note on structural vs business validation
+#
+# Dry::Struct provides type coercion (e.g. a string "42" coerced to Integer)
+# but all attributes here are declared optional and omittable, so missing
+# fields silently become nil. Required-field checks live in explicit
+# validate! methods that handlers call before delegating to services.
+#
+# For production code, consider Dry::Validation contracts as an alternative
+# to manual validate! methods. Contracts can express both structural
+# requirements and business rules declaratively:
+#
+#   class RefundRequestContract < Dry::Validation::Contract
+#     params do
+#       required(:ticket_id).filled(:string)
+#       required(:refund_amount).filled(:float, gt?: 0)
+#       optional(:refund_reason).filled(:string)
+#     end
+#
+#     rule(:refund_amount) do
+#       key.failure('exceeds maximum single refund limit') if value > 10_000
+#     end
+#   end
+#
+# See https://dry-rb.org/gems/dry-validation for details. Contracts
+# integrate naturally with Dry::Struct and can replace both the validate!
+# pattern and some service-level business checks with a single declaration.
 module Types
   include Dry.Types()
 
@@ -240,15 +267,18 @@ module Types
       attribute :quantity, Types::Integer
       attribute :unit_price, Types::Float
       attribute :line_total, Types::Float
+      attribute :available, Types::Bool
+      attribute :validated_at, Types::String
     end
 
     # Inner struct for inventory update records per product.
     class UpdatedProduct < Types::ResultStruct
       attribute :product_id, Types::String
-      attribute :sku, Types::String
-      attribute :previous_quantity, Types::Integer
-      attribute :new_quantity, Types::Integer
-      attribute :reserved, Types::Integer
+      attribute :name, Types::String
+      attribute :previous_stock, Types::Integer
+      attribute :new_stock, Types::Integer
+      attribute :quantity_reserved, Types::Integer
+      attribute :reservation_id, Types::String
     end
 
     class ValidateCartResult < Types::ResultStruct
@@ -368,20 +398,15 @@ module Types
 
     # Inner struct for individual sales records.
     class SalesRecord < Types::ResultStruct
-      attribute :category, Types::String
-      attribute :date, Types::String
+      attribute :sale_id, Types::String
       attribute :product, Types::String
-      attribute :quantity, Types::Integer
       attribute :region, Types::String
-      attribute :total, Types::Float
+      attribute :quantity, Types::Integer
       attribute :unit_price, Types::Float
-    end
-
-    # Inner struct for customer tier breakdown counts.
-    class TierBreakdown < Types::ResultStruct
-      attribute :gold, Types::Integer
-      attribute :premium, Types::Integer
-      attribute :standard, Types::Integer
+      attribute :discount_rate, Types::Float
+      attribute :revenue, Types::Float
+      attribute :sale_date, Types::String
+      attribute :channel, Types::String
     end
 
     # Inner struct for business health score details.
@@ -389,16 +414,14 @@ module Types
       attribute :score, Types::Integer
       attribute :max_score, Types::Integer
       attribute :rating, Types::String
-      attribute :details, Types::String
     end
 
     # Inner struct for individual business insights.
     class Insight < Types::ResultStruct
-      attribute :type, Types::String
+      attribute :category, Types::String
       attribute :severity, Types::String
-      attribute :metric, Types::String
-      attribute :message, Types::String
-      attribute :recommendation, Types::String
+      attribute :finding, Types::String
+      attribute :impact, Types::String
     end
 
     class ExtractSalesResult < Types::ResultStruct
@@ -433,7 +456,7 @@ module Types
       attribute :records, Types::Array
       attribute :total_customers, Types::Integer
       attribute :total_lifetime_value, Types::Float
-      attribute :tier_breakdown, TierBreakdown
+      attribute :tier_breakdown, Types::Hash
       attribute :avg_lifetime_value, Types::Float
       attribute :average_lifetime_value, Types::Float
       attribute :segment_distribution, Types::Hash
@@ -538,11 +561,28 @@ module Types
   # ---------------------------------------------------------------------------
 
   module Microservices
-    # Inner struct for welcome sequence message details.
+    # Inner struct for welcome sequence message/notification details.
     class MessageDetail < Types::ResultStruct
       attribute :channel, Types::String
+      attribute :type, Types::String
       attribute :status, Types::String
+      attribute :sent_at, Types::String
+      attribute :message_id, Types::String
+      # Email-specific
+      attribute :recipient, Types::String
+      attribute :subject, Types::String
       attribute :template, Types::String
+      # Push-specific
+      attribute :device_token, Types::String
+      attribute :title, Types::String
+      attribute :body, Types::String
+      # Slack-specific
+      attribute :webhook_id, Types::String
+      attribute :channel_name, Types::String
+      attribute :message, Types::String
+      # In-app-specific
+      attribute :notification_id, Types::String
+      attribute :action_url, Types::String
     end
 
     class CreateUserResult < Types::ResultStruct
@@ -700,10 +740,28 @@ module Types
     end
 
     # Inner struct for refund execution step records.
+    # Each step has a :step name, :status, :completed_at, and varying
+    # fields depending on the step type.
     class ExecutionStep < Types::ResultStruct
       attribute :step, Types::String
       attribute :status, Types::String
-      attribute :timestamp, Types::String
+      attribute :completed_at, Types::String
+      # initiate_refund
+      attribute :transaction_id, Types::String
+      attribute :amount, Types::Float
+      attribute :payment_method, Types::String
+      # update_order
+      attribute :order_ref, Types::String
+      attribute :new_status, Types::String
+      # create_return_label
+      attribute :return_label, Types::String
+      attribute :carrier, Types::String
+      # credit_account
+      attribute :customer_id, Types::String
+      attribute :credit_amount, Types::Float
+      attribute :estimated_arrival, Types::String
+      # adjust_loyalty_points
+      attribute :points_deducted, Types::Integer
     end
 
     class ExecuteRefundResult < Types::ResultStruct
@@ -731,9 +789,9 @@ module Types
 
     # Inner struct for ticket timeline entries.
     class TimelineEntry < Types::ResultStruct
-      attribute :action, Types::String
+      attribute :event, Types::String
       attribute :timestamp, Types::String
-      attribute :details, Types::String
+      attribute :result, Types::String
     end
 
     class UpdateTicketResult < Types::ResultStruct
@@ -762,12 +820,36 @@ module Types
   # ---------------------------------------------------------------------------
 
   module Payments
-    # Inner struct for ledger entries in payment records.
-    class LedgerEntry < Types::ResultStruct
-      attribute :type, Types::String
+    # Inner struct for record update entries in payment records.
+    # Each entry has a :system, :record_id, and varying fields
+    # depending on the record type (ledger, transaction, revenue, fee, reconciliation).
+    class RecordUpdateEntry < Types::ResultStruct
+      attribute :system, Types::String
+      attribute :record_id, Types::String
       attribute :amount, Types::Float
+      attribute :status, Types::String
+      attribute :updated_at, Types::String
+      # Ledger-specific
+      attribute :entry_type, Types::String
+      attribute :debit_account, Types::String
+      attribute :credit_account, Types::String
       attribute :currency, Types::String
-      attribute :timestamp, Types::String
+      attribute :reference, Types::String
+      # Transaction-specific
+      attribute :payment_id, Types::String
+      attribute :type, Types::String
+      attribute :running_balance, Types::Float
+      # Revenue-specific
+      attribute :adjustment_type, Types::String
+      attribute :period, Types::String
+      attribute :impact, Types::String
+      # Fee-specific
+      attribute :fee_type, Types::String
+      attribute :gateway, Types::String
+      attribute :recoverable, Types::Bool
+      # Reconciliation-specific
+      attribute :gateway_ref, Types::String
+      attribute :expected_settlement_date, Types::String
     end
 
     class ValidateEligibilityResult < Types::ResultStruct
@@ -826,7 +908,7 @@ module Types
       attribute :updated_at, Types::String
       attribute :namespace, Types::String
       attribute :record_update_id, Types::String
-      attribute :records_updated_details, Types::Array.of(LedgerEntry)
+      attribute :records_updated_details, Types::Array.of(RecordUpdateEntry)
       attribute :total_records, Types::Integer
       attribute :all_successful, Types::Bool
       attribute :ledger_entry_id, Types::String

@@ -8,6 +8,7 @@
  */
 
 import { defineHandler, PermanentError } from '@tasker-systems/tasker';
+import { ValidatePaymentEligibilityInputSchema } from '../services/schemas';
 import * as svc from '../services/payments';
 
 export const ProcessRefundPaymentHandler = defineHandler(
@@ -19,20 +20,19 @@ export const ProcessRefundPaymentHandler = defineHandler(
     },
   },
   async ({ paymentId, refundAmount }) => {
-    const missingFields: string[] = [];
-    if (!paymentId) missingFields.push('payment_id');
-    if (!refundAmount) missingFields.push('refund_amount');
+    const parsed = ValidatePaymentEligibilityInputSchema.safeParse({
+      paymentId,
+      refundAmount,
+    });
 
-    if (missingFields.length > 0) {
+    if (!parsed.success) {
+      const fields = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
       throw new PermanentError(
-        `Missing required fields for payment validation: ${missingFields.join(', ')}`,
+        `Input validation failed: ${fields} — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
       );
     }
 
-    return svc.validateEligibility({
-      paymentId: paymentId as string,
-      refundAmount: refundAmount as number,
-    });
+    return svc.validateEligibility(parsed.data);
   },
 );
 

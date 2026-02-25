@@ -8,13 +8,16 @@
  */
 
 import { defineHandler } from '@tasker-systems/tasker';
-import type { CartItem, PaymentInfo } from '../services/types';
+import { z } from 'zod';
+import { CartItemSchema } from '../services/schemas';
+import type { PaymentInfo } from '../services/types';
 import * as svc from '../services/ecommerce';
 
 export const ValidateCartHandler = defineHandler(
   'Ecommerce.StepHandlers.ValidateCartHandler',
   { inputs: { cartItems: 'cart_items' } },
-  async ({ cartItems }) => svc.validateCartItems(cartItems as CartItem[] | undefined),
+  async ({ cartItems }) =>
+    svc.validateCartItems(z.array(CartItemSchema).optional().parse(cartItems)),
 );
 
 export const ProcessPaymentHandler = defineHandler(

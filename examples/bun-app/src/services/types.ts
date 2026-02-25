@@ -4,6 +4,40 @@
  * Input types describe what flows into service functions.
  * Result types describe what each service function returns — the contract
  * that downstream steps read via dependency injection.
+ *
+ * ## A note on runtime validation
+ *
+ * TypeScript interfaces are erased at compile time — they provide no runtime
+ * guarantees that incoming data matches the declared shape. In this example
+ * app, first-step handlers perform manual field-presence checks
+ * (e.g. `if (!ticketId) missingFields.push('ticket_id')`) to catch missing
+ * inputs early. Downstream steps generally trust upstream results.
+ *
+ * For production code, consider a runtime validation library that can derive
+ * validators from schemas or type declarations:
+ *
+ * - **Zod** (https://zod.dev) — schema-first, excellent inference, most popular
+ * - **Valibot** (https://valibot.dev) — similar API to Zod, smaller bundle
+ * - **ArkType** (https://arktype.io) — TypeScript-native syntax, fast runtime
+ *
+ * These replace manual `if (!field)` guards with declarative schemas that
+ * provide both compile-time types AND runtime validation from a single source
+ * of truth:
+ *
+ * ```ts
+ * import { z } from 'zod';
+ *
+ * const ValidateRefundRequestInput = z.object({
+ *   ticketId: z.string(),
+ *   customerId: z.string(),
+ *   refundAmount: z.number().positive(),
+ *   refundReason: z.string().optional(),
+ * });
+ * type ValidateRefundRequestInput = z.infer<typeof ValidateRefundRequestInput>;
+ *
+ * // In handler: throws ZodError with structured field-level details on bad input
+ * const input = ValidateRefundRequestInput.parse(context);
+ * ```
  */
 
 // ---------------------------------------------------------------------------

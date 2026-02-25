@@ -8,7 +8,7 @@
  */
 
 import { defineHandler } from '@tasker-systems/tasker';
-import type { DateRange } from '../services/types';
+import { DateRangeSchema } from '../services/schemas';
 import * as svc from '../services/data-pipeline';
 
 // ---------------------------------------------------------------------------
@@ -21,7 +21,7 @@ export const ExtractSalesDataHandler = defineHandler(
   async ({ sources, dateRange }) =>
     svc.extractSalesData(
       sources as string[] | undefined,
-      dateRange as DateRange | undefined,
+      DateRangeSchema.optional().parse(dateRange),
     ),
 );
 

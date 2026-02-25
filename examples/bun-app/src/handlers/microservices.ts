@@ -11,26 +11,28 @@
  */
 
 import { defineHandler, PermanentError } from '@tasker-systems/tasker';
+import { CreateUserAccountInputSchema } from '../services/schemas';
 import * as svc from '../services/microservices';
 
 export const CreateUserHandler = defineHandler(
   'Microservices.StepHandlers.CreateUserHandler',
   { inputs: { email: 'email', username: 'username', plan: 'plan', metadata: 'metadata' } },
   async ({ email, username, plan, metadata }) => {
-    if (!email) {
-      throw new PermanentError('Email is required but was not provided');
-    }
-
-    if (!username) {
-      throw new PermanentError('Username is required but was not provided');
-    }
-
-    return svc.createUserAccount({
-      email: email as string,
-      username: username as string,
-      plan: plan as string | undefined,
-      metadata: metadata as Record<string, unknown> | undefined,
+    const parsed = CreateUserAccountInputSchema.safeParse({
+      email,
+      username,
+      plan: plan || undefined,
+      metadata: metadata || undefined,
     });
+
+    if (!parsed.success) {
+      const fields = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
+      throw new PermanentError(
+        `Input validation failed: ${fields} — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
+      );
+    }
+
+    return svc.createUserAccount(parsed.data);
   },
 );
 

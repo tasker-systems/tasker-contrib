@@ -263,24 +263,21 @@ def transform_sales(
     by_region: dict[str, dict[str, Any]] = {}
 
     for record in records:
-        cat = record["category"]
-        region = record["region"]
-
-        if cat not in by_category:
-            by_category[cat] = {"revenue": 0.0, "quantity": 0, "transaction_count": 0}
-        by_category[cat]["revenue"] = round(
-            by_category[cat]["revenue"] + record["revenue"], 2
+        if record.category not in by_category:
+            by_category[record.category] = {"revenue": 0.0, "quantity": 0, "transaction_count": 0}
+        by_category[record.category]["revenue"] = round(
+            by_category[record.category]["revenue"] + record.revenue, 2
         )
-        by_category[cat]["quantity"] += record["quantity"]
-        by_category[cat]["transaction_count"] += 1
+        by_category[record.category]["quantity"] += record.quantity
+        by_category[record.category]["transaction_count"] += 1
 
-        if region not in by_region:
-            by_region[region] = {"revenue": 0.0, "quantity": 0, "transaction_count": 0}
-        by_region[region]["revenue"] = round(
-            by_region[region]["revenue"] + record["revenue"], 2
+        if record.region not in by_region:
+            by_region[record.region] = {"revenue": 0.0, "quantity": 0, "transaction_count": 0}
+        by_region[record.region]["revenue"] = round(
+            by_region[record.region]["revenue"] + record.revenue, 2
         )
-        by_region[region]["quantity"] += record["quantity"]
-        by_region[region]["transaction_count"] += 1
+        by_region[record.region]["quantity"] += record.quantity
+        by_region[record.region]["transaction_count"] += 1
 
     for summary in by_category.values():
         summary["avg_revenue"] = (
@@ -301,7 +298,7 @@ def transform_sales(
         if by_category
         else None
     )
-    total_revenue = round(sum(r["revenue"] for r in records), 2)
+    total_revenue = round(sum(r.revenue for r in records), 2)
 
     return PipelineTransformSalesResult(
         record_count=len(records),

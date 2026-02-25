@@ -7,6 +7,26 @@ that downstream steps read via dependency injection.
 Uses Pydantic BaseModel for both inputs and results so that the functional
 handler DSL can inject fully typed models via ``@inputs(Model)`` and
 ``@depends_on(name=("step", ResultModel))``.
+
+A note on structural vs business validation
+--------------------------------------------
+This module demonstrates two levels of structural validation:
+
+1. **Schema-derived types** (e.g. ``CustomerSuccessProcessRefundInput``) use
+   non-optional Pydantic fields — Pydantic raises ``ValidationError``
+   automatically if required fields are missing or the wrong type.
+
+2. **Hand-written input types** (e.g. ``ValidateRefundRequestInput``) use
+   ``@model_validator(mode='after')`` with explicit ``check_required_fields``
+   because these types accept flexible input shapes (aliased field names,
+   multiple optional sources for the same value). The validator runs at
+   construction time and raises ``PermanentError`` for missing fields.
+
+For production code, some of these manual validators could be replaced with
+Pydantic's declarative ``Field`` constraints (``gt=0``, ``min_length=1``) or
+custom field validators (``@field_validator``), keeping the ``@model_validator``
+only for cross-field rules like "at least one of customer_id or customer_email
+must be present". See https://docs.pydantic.dev/latest/concepts/validators/.
 """
 
 from __future__ import annotations
@@ -254,11 +274,12 @@ class EcommerceCartItem(BaseModel):
 
 class EcommerceUpdatedProduct(BaseModel):
     """An inventory-updated product record."""
-    product_id: str
-    sku: str
-    previous_quantity: int
-    new_quantity: int
-    reserved: int
+    product_id: str | None = None
+    name: str | None = None
+    quantity_reserved: int
+    reservation_id: str
+    warehouse: str
+    status: str
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +332,7 @@ class EcommerceCreateOrderResult(BaseModel):
     payment_id: str
     transaction_id: str
     authorization_code: str
-    updated_products: list[dict[str, Any]] | None = None
+    updated_products: list[EcommerceUpdatedProduct] | None = None
     inventory_log_id: str
     status: str
     created_at: str
@@ -338,26 +359,29 @@ class EcommerceSendConfirmationResult(BaseModel):
 
 class PipelineDateRange(BaseModel):
     """A start/end date range."""
-    start_date: str
-    end_date: str
+    start: str
+    end: str
 
 
 class PipelineSalesRecord(BaseModel):
     """A single extracted sales record."""
-    date: str
-    product: str
+    record_id: str
     category: str
+    region: str
     quantity: int
     unit_price: float
-    total: float
-    region: str
+    revenue: float
+    timestamp: str
 
 
 class PipelineTierBreakdown(BaseModel):
-    """Customer tier counts."""
-    gold: int | None = None
-    premium: int | None = None
-    standard: int | None = None
+    """Category-based breakdown counts (dynamic keys from source data)."""
+    model_config = {"extra": "allow"}
+    electronics: int | None = None
+    clothing: int | None = None
+    food: int | None = None
+    home: int | None = None
+    sports: int | None = None
 
 
 class PipelineHealthScore(BaseModel):
@@ -370,11 +394,13 @@ class PipelineHealthScore(BaseModel):
 
 class PipelineInsight(BaseModel):
     """A single generated insight."""
-    type: str
-    severity: str
-    metric: str
-    message: str
-    recommendation: str
+    category: str
+    finding: str | None = None
+    insight: str | None = None
+    metric: float | int | None = None
+    recommendation: str | None = None
+    action: str | None = None
+    priority: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -709,10 +735,11 @@ class CustomerSuccessUpdateTicketResult(BaseModel):
 
 class PaymentsLedgerEntry(BaseModel):
     """A single ledger entry in a payment record update."""
+    entry_id: str
     type: str
+    account: str
     amount: float
-    currency: str
-    timestamp: str
+    reference: str
 
 
 # ---------------------------------------------------------------------------

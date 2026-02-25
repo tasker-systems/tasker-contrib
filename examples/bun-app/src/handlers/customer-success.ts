@@ -9,6 +9,7 @@
  */
 
 import { defineHandler, PermanentError } from '@tasker-systems/tasker';
+import { ValidateRefundRequestInputSchema } from '../services/schemas';
 import * as svc from '../services/customer-success';
 
 export const ValidateRefundRequestHandler = defineHandler(
@@ -22,23 +23,21 @@ export const ValidateRefundRequestHandler = defineHandler(
     },
   },
   async ({ ticketId, customerId, refundAmount, refundReason }) => {
-    const missingFields: string[] = [];
-    if (!ticketId) missingFields.push('ticket_id');
-    if (!customerId) missingFields.push('customer_id');
-    if (!refundAmount) missingFields.push('refund_amount');
+    const parsed = ValidateRefundRequestInputSchema.safeParse({
+      ticketId,
+      customerId,
+      refundAmount,
+      refundReason: refundReason || 'customer_request',
+    });
 
-    if (missingFields.length > 0) {
+    if (!parsed.success) {
+      const fields = parsed.error.issues.map((i) => i.path.join('.')).join(', ');
       throw new PermanentError(
-        `Missing required fields for refund validation: ${missingFields.join(', ')}`,
+        `Input validation failed: ${fields} — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
       );
     }
 
-    return svc.validateRefundRequest({
-      ticketId: ticketId as string,
-      customerId: customerId as string,
-      refundAmount: refundAmount as number,
-      refundReason: (refundReason as string) || 'customer_request',
-    });
+    return svc.validateRefundRequest(parsed.data);
   },
 );
 
