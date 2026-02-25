@@ -15,7 +15,7 @@ import type {
   CustomerSuccessApproveRefundResult,
   CustomerSuccessExecuteRefundResult,
   CustomerSuccessUpdateTicketResult,
-} from './types';
+} from './schemas';
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -16,7 +16,7 @@ import type {
   EcommerceUpdateInventoryResult,
   EcommerceCreateOrderResult,
   EcommerceSendConfirmationResult,
-} from './types';
+} from './schemas';
 
 export type { CartItem, PaymentInfo };
 

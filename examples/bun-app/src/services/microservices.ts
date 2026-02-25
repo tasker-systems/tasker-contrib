@@ -22,7 +22,7 @@ import type {
   MicroservicesInitPreferencesResult,
   MicroservicesSendWelcomeResult,
   MicroservicesUpdateStatusResult,
-} from './types';
+} from './schemas';
 
 // ---------------------------------------------------------------------------
 // Constants

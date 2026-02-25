@@ -1,14 +1,15 @@
 /**
- * Zod runtime validation schemas for all service types.
+ * Zod schemas and types for all service modules.
  *
- * These schemas provide runtime validation matching the TypeScript interfaces
- * in types.ts. Use .parse() for strict validation or .safeParse() for
- * error-safe validation.
+ * Single source of truth: each schema defines both runtime validation and
+ * the corresponding TypeScript type via z.infer<>. Handlers use schemas
+ * for input validation (.parse() / .safeParse()), services use the inferred
+ * types as lightweight contracts.
  *
- * Schema naming convention: InterfaceName + "Schema"
- *   EcommerceValidateCartResult → EcommerceValidateCartResultSchema
- *
- * Types are re-exported via z.infer for drop-in replacement of types.ts imports.
+ * Naming convention: TypeName + "Schema" for the validator object,
+ * plain TypeName for the inferred type.
+ *   EcommerceValidateCartResultSchema → z.object({...}).passthrough()
+ *   EcommerceValidateCartResult       → z.infer<typeof ...>
  */
 
 import { z } from "zod";

@@ -14,7 +14,7 @@ import type {
   PaymentsProcessGatewayResult,
   PaymentsUpdateRecordsResult,
   PaymentsNotifyCustomerResult,
-} from './types';
+} from './schemas';
 
 // ---------------------------------------------------------------------------
 // Service functions

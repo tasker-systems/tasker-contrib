@@ -21,7 +21,7 @@ import type {
   PipelineTransformCustomersResult,
   PipelineAggregateMetricsResult,
   PipelineGenerateInsightsResult,
-} from './types';
+} from './schemas';
 
 export type { DataRecord, DateRange, WarehouseRecord, CustomerRecord };
 
