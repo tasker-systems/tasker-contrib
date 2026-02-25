@@ -1,9 +1,9 @@
-import { Hono } from 'hono';
-import { logger } from 'hono/logger';
-import { ordersRoute } from './routes/orders';
-import { analyticsRoute } from './routes/analytics';
-import { servicesRoute } from './routes/services';
-import { complianceRoute } from './routes/compliance';
+import { Hono } from "hono";
+import { logger } from "hono/logger";
+import { analyticsRoute } from "./routes/analytics";
+import { complianceRoute } from "./routes/compliance";
+import { ordersRoute } from "./routes/orders";
+import { servicesRoute } from "./routes/services";
 
 /**
  * Create and configure the Hono application with all routes.
@@ -12,19 +12,21 @@ import { complianceRoute } from './routes/compliance';
  * and use `app.request()` without starting a server.
  */
 export function createApp(): Hono {
-  const app = new Hono();
+	const app = new Hono();
 
-  // Middleware
-  app.use('*', logger());
+	// Middleware
+	app.use("*", logger());
 
-  // Health check
-  app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+	// Health check
+	app.get("/health", (c) =>
+		c.json({ status: "ok", timestamp: new Date().toISOString() }),
+	);
 
-  // Mount routes
-  app.route('/orders', ordersRoute);
-  app.route('/analytics/jobs', analyticsRoute);
-  app.route('/services/requests', servicesRoute);
-  app.route('/compliance/checks', complianceRoute);
+	// Mount routes
+	app.route("/orders", ordersRoute);
+	app.route("/analytics/jobs", analyticsRoute);
+	app.route("/services/requests", servicesRoute);
+	app.route("/compliance/checks", complianceRoute);
 
-  return app;
+	return app;
 }
