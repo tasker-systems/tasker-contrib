@@ -77,6 +77,58 @@ steps:
   # EXTRACT PHASE - 3 parallel steps (no dependencies)
   - name: extract_sales_data
     description: "Extract sales records from database"
+    result_schema:
+      type: object
+      required:
+        - records
+        - extracted_at
+        - source
+        - total_amount
+        - date_range
+        - record_count
+        - extraction_sources
+        - schema_version
+      properties:
+        records:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - value
+              - category
+              - timestamp
+            properties:
+              id:
+                type: string
+              value:
+                type: number
+              category:
+                type: string
+              timestamp:
+                type: string
+        extracted_at:
+          type: string
+        source:
+          type: string
+        total_amount:
+          type: number
+        date_range:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+            end:
+              type: string
+        record_count:
+          type: integer
+        extraction_sources:
+          type: integer
+        schema_version:
+          type: string
     handler:
       callable: DataPipeline.StepHandlers.ExtractSalesDataHandler
       initialization:
@@ -94,6 +146,58 @@ steps:
 
   - name: extract_inventory_data
     description: "Extract inventory records from warehouse system"
+    result_schema:
+      type: object
+      required:
+        - records
+        - extracted_at
+        - source
+        - total_quantity
+        - warehouses
+        - products_tracked
+        - record_count
+        - warehouse_count
+        - include_archived
+      properties:
+        records:
+          type: array
+          items:
+            type: object
+            required:
+              - warehouse_id
+              - total_skus
+              - total_units
+              - low_stock_skus
+              - out_of_stock_skus
+            properties:
+              warehouse_id:
+                type: string
+              total_skus:
+                type: integer
+              total_units:
+                type: integer
+              low_stock_skus:
+                type: integer
+              out_of_stock_skus:
+                type: integer
+        extracted_at:
+          type: string
+        source:
+          type: string
+        total_quantity:
+          type: integer
+        warehouses:
+          type: array
+          items:
+            type: string
+        products_tracked:
+          type: integer
+        record_count:
+          type: integer
+        warehouse_count:
+          type: integer
+        include_archived:
+          description: "Whether archived items were included"
     handler:
       callable: DataPipeline.StepHandlers.ExtractInventoryDataHandler
       initialization:
@@ -111,6 +215,77 @@ steps:
 
   - name: extract_customer_data
     description: "Extract customer records from CRM"
+    result_schema:
+      type: object
+      required:
+        - records
+        - extracted_at
+        - source
+        - total_customers
+        - total_lifetime_value
+        - tier_breakdown
+        - avg_lifetime_value
+        - active_customers
+        - new_customers_in_period
+        - churn_count
+        - region_breakdown
+        - date_range
+      properties:
+        records:
+          type: array
+          items:
+            type: object
+            required:
+              - customer_id
+              - name
+              - tier
+              - lifetime_value
+              - join_date
+            properties:
+              customer_id:
+                type: string
+              name:
+                type: string
+              tier:
+                type: string
+              lifetime_value:
+                type: number
+              join_date:
+                type: string
+        extracted_at:
+          type: string
+        source:
+          type: string
+        total_customers:
+          type: integer
+        total_lifetime_value:
+          type: number
+        tier_breakdown:
+          type: object
+          additionalProperties:
+            type: integer
+        avg_lifetime_value:
+          type: number
+        active_customers:
+          type: integer
+        new_customers_in_period:
+          type: integer
+        churn_count:
+          type: integer
+        region_breakdown:
+          type: object
+          additionalProperties:
+            type: integer
+        date_range:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+            end:
+              type: string
     handler:
       callable: DataPipeline.StepHandlers.ExtractCustomerDataHandler
       initialization:
@@ -129,6 +304,63 @@ steps:
   # TRANSFORM PHASE - 3 sequential steps (each depends on its extract)
   - name: transform_sales
     description: "Transform sales data for analytics"
+    result_schema:
+      type: object
+      required:
+        - record_count
+        - daily_sales
+        - product_sales
+        - total_revenue
+        - transformation_type
+        - source
+        - unique_categories
+        - avg_transaction_value
+        - transformed_at
+      properties:
+        record_count:
+          type: integer
+        daily_sales:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - total_amount
+              - order_count
+              - avg_order_value
+            properties:
+              total_amount:
+                type: number
+              order_count:
+                type: integer
+              avg_order_value:
+                type: number
+        product_sales:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - total_quantity
+              - total_revenue
+              - order_count
+            properties:
+              total_quantity:
+                type: integer
+              total_revenue:
+                type: number
+              order_count:
+                type: integer
+        total_revenue:
+          type: number
+        transformation_type:
+          type: string
+        source:
+          type: string
+        unique_categories:
+          type: integer
+        avg_transaction_value:
+          type: number
+        transformed_at:
+          type: string
     handler:
       callable: DataPipeline.StepHandlers.TransformSalesHandler
       initialization:
@@ -147,6 +379,60 @@ steps:
 
   - name: transform_inventory
     description: "Transform inventory data for analytics"
+    result_schema:
+      type: object
+      required:
+        - record_count
+        - warehouse_summary
+        - product_inventory
+        - total_quantity_on_hand
+        - reorder_alerts
+        - transformation_type
+        - source
+        - transformed_at
+      properties:
+        record_count:
+          type: integer
+        warehouse_summary:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - total_quantity
+              - product_count
+              - reorder_alerts
+            properties:
+              total_quantity:
+                type: integer
+              product_count:
+                type: integer
+              reorder_alerts:
+                type: integer
+        product_inventory:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - total_quantity
+              - warehouse_count
+              - needs_reorder
+            properties:
+              total_quantity:
+                type: integer
+              warehouse_count:
+                type: integer
+              needs_reorder:
+                type: boolean
+        total_quantity_on_hand:
+          type: integer
+        reorder_alerts:
+          type: integer
+        transformation_type:
+          type: string
+        source:
+          type: string
+        transformed_at:
+          type: string
     handler:
       callable: DataPipeline.StepHandlers.TransformInventoryHandler
       initialization:
@@ -165,6 +451,61 @@ steps:
 
   - name: transform_customers
     description: "Transform customer data for analytics"
+    result_schema:
+      type: object
+      required:
+        - record_count
+        - tier_analysis
+        - value_segments
+        - total_lifetime_value
+        - avg_customer_value
+        - transformation_type
+        - source
+        - region_distribution
+        - transformed_at
+      properties:
+        record_count:
+          type: integer
+        tier_analysis:
+          type: object
+          additionalProperties:
+            type: object
+            required:
+              - customer_count
+              - total_lifetime_value
+              - avg_lifetime_value
+            properties:
+              customer_count:
+                type: integer
+              total_lifetime_value:
+                type: number
+              avg_lifetime_value:
+                type: number
+        value_segments:
+          type: object
+          required:
+            - high_value
+            - medium_value
+            - low_value
+          properties:
+            high_value:
+              type: integer
+            medium_value:
+              type: integer
+            low_value:
+              type: integer
+        total_lifetime_value:
+          type: number
+        avg_customer_value:
+          type: number
+        transformation_type:
+          type: string
+        source:
+          type: string
+        region_distribution:
+          description: "Region breakdown passed through from extraction"
+        transformed_at:
+          type: string
     handler:
       callable: DataPipeline.StepHandlers.TransformCustomersHandler
       initialization:
@@ -184,6 +525,43 @@ steps:
   # AGGREGATE PHASE - 1 step (depends on all 3 transforms - DAG convergence)
   - name: aggregate_metrics
     description: "Aggregate metrics from all transformed sources"
+    result_schema:
+      type: object
+      required:
+        - total_revenue
+        - total_inventory_quantity
+        - total_customers
+        - total_customer_lifetime_value
+        - sales_transactions
+        - inventory_reorder_alerts
+        - revenue_per_customer
+        - inventory_turnover_indicator
+        - aggregation_complete
+        - sources_included
+        - aggregated_at
+      properties:
+        total_revenue:
+          type: number
+        total_inventory_quantity:
+          type: integer
+        total_customers:
+          type: integer
+        total_customer_lifetime_value:
+          type: number
+        sales_transactions:
+          type: integer
+        inventory_reorder_alerts:
+          type: integer
+        revenue_per_customer:
+          type: number
+        inventory_turnover_indicator:
+          type: number
+        aggregation_complete:
+          type: boolean
+        sources_included:
+          type: integer
+        aggregated_at:
+          type: string
     handler:
       callable: DataPipeline.StepHandlers.AggregateMetricsHandler
       initialization:
@@ -205,6 +583,52 @@ steps:
   # INSIGHTS PHASE - 1 step (depends on aggregation)
   - name: generate_insights
     description: "Generate business insights from aggregated data"
+    result_schema:
+      type: object
+      required:
+        - insights
+        - health_score
+        - total_metrics_analyzed
+        - pipeline_complete
+        - generated_at
+      properties:
+        insights:
+          type: array
+          items:
+            type: object
+            required:
+              - category
+              - finding
+              - metric
+              - recommendation
+            properties:
+              category:
+                type: string
+              finding:
+                type: string
+              metric:
+                type: number
+              recommendation:
+                type: string
+        health_score:
+          type: object
+          required:
+            - score
+            - max_score
+            - rating
+          properties:
+            score:
+              type: integer
+            max_score:
+              type: integer
+            rating:
+              type: string
+        total_metrics_analyzed:
+          type: integer
+        pipeline_complete:
+          type: boolean
+        generated_at:
+          type: string
     handler:
       callable: DataPipeline.StepHandlers.GenerateInsightsHandler
       initialization:

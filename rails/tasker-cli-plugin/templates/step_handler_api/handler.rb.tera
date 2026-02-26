@@ -14,10 +14,11 @@ module {{ module_name }}
   #     callable: {{ module_name }}::{{ name | pascal_case }}Handler
   include TaskerCore::StepHandler::Functional
 
-  {{ name | pascal_case }}Handler = api_handler '{{ name | snake_case }}',
+  {{ name | pascal_case }}Handler = api_handler(
+    '{{ name | snake_case }}',
     base_url: '{{ base_url }}',
-    inputs: [:endpoint] do |endpoint:, api:, context:|
-
+    inputs: [:endpoint]
+  ) do |endpoint:, api:, _context:|
     path = endpoint || '/resource'
 
     response = api.get(path)

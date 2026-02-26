@@ -11,6 +11,8 @@
 //! 3. **team_scaling_payments_update_records**: Update payment records
 //! 4. **team_scaling_payments_notify_customer**: Send refund notification to customer
 
+use crate::types::payments::*;
+use chrono::Datelike;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use tracing::info;
@@ -20,42 +22,30 @@ use uuid::Uuid;
 // Step 1: Validate Payment Eligibility
 // ============================================================================
 
-/// Validates that the payment is eligible for a refund by checking the original
-/// transaction status, payment method, and refund windows.
-///
-/// Context keys (aligned with source): payment_id, refund_amount
-/// Output keys (aligned with source): payment_validated, payment_id, original_amount,
-///   refund_amount, payment_method, gateway_provider, eligibility_status,
-///   validation_timestamp, namespace
+/// Validates that the payment is eligible for a refund.
 pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
-    // Source reads: payment_id, refund_amount from task context
-    let payment_id = context.get("payment_id")
-        .and_then(|v| v.as_str())
-        .ok_or("Missing payment_id in context")?;
+    let input: ProcessRefundInput = serde_json::from_value(context.clone())
+        .map_err(|e| format!("Invalid process refund input: {}", e))?;
 
-    let refund_amount = context.get("refund_amount")
-        .and_then(|v| v.as_f64())
-        .ok_or("Missing or invalid refund_amount")?;
+    let payment_id = &input.payment_id;
+    let refund_amount = input.refund_amount;
 
-    // Also read app-specific context fields
-    let payment_method = context.get("payment_method")
+    let payment_method = context
+        .get("payment_method")
         .and_then(|v| v.as_str())
         .unwrap_or("credit_card");
 
-    let customer_email = context.get("customer_email")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown@example.com");
+    let customer_email = input.customer_email.as_deref().unwrap_or("unknown@example.com");
 
-    let order_id = context.get("order_id")
+    let order_ref = context
+        .get("order_id")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
-    // Validate refund amount
     if refund_amount <= 0.0 {
         return Err("Refund amount must be positive".to_string());
     }
 
-    // Simulate validation scenarios (aligned with source)
     if payment_id.contains("pay_test_insufficient") {
         return Err("Insufficient funds available for refund".to_string());
     }
@@ -66,7 +56,6 @@ pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
         return Err("Payment is not eligible for refund: past refund window".to_string());
     }
 
-    // Check if payment method supports refunds
     let refund_supported = match payment_method {
         "credit_card" | "debit_card" | "bank_transfer" => true,
         "gift_card" => refund_amount <= 500.0,
@@ -81,10 +70,8 @@ pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
         ));
     }
 
-    // Simulate original transaction lookup
     let original_amount = refund_amount + 1000.0;
 
-    // Check refund does not exceed original transaction
     if refund_amount > original_amount {
         return Err(format!(
             "Refund ${:.2} exceeds original transaction amount ${:.2}",
@@ -99,123 +86,116 @@ pub fn validate_payment_eligibility(context: &Value) -> Result<Value, String> {
         payment_id, refund_amount, payment_method
     );
 
-    // Output keys aligned with source: payment_validated, payment_id, original_amount,
-    // refund_amount, payment_method, gateway_provider, eligibility_status,
-    // validation_timestamp, namespace
-    Ok(json!({
-        "payment_validated": true,
-        "payment_id": payment_id,
-        "original_amount": original_amount,
-        "refund_amount": refund_amount,
-        "payment_method": payment_method,
-        "gateway_provider": "MockPaymentGateway",
-        "eligibility_status": "eligible",
-        "validation_timestamp": now,
-        "namespace": "payments_rs",
-        "customer_email": customer_email,
-        "order_id": order_id,
-        "is_partial_refund": refund_amount < original_amount
-    }))
+    let result = ValidatePaymentEligibilityResult {
+        payment_id: payment_id.to_string(),
+        order_ref: order_ref.to_string(),
+        eligible: true,
+        refund_amount,
+        validated_at: now.clone(),
+        amount: Some(refund_amount),
+        customer_email: Some(customer_email.to_string()),
+        eligibility_id: None,
+        eligibility_status: Some("eligible".to_string()),
+        fraud_flagged: Some(false),
+        fraud_score: Some(0.0),
+        gateway_provider: Some("MockPaymentGateway".to_string()),
+        namespace: Some("payments_rs".to_string()),
+        original_amount: Some(original_amount),
+        payment_method: Some(payment_method.to_string()),
+        payment_validated: Some(true),
+        reason: None,
+        refund_percentage: Some(((refund_amount / original_amount) * 10000.0).round() / 100.0),
+        validation_timestamp: Some(now),
+        within_refund_window: Some(true),
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }
 
 // ============================================================================
 // Step 2: Process Gateway Refund
 // ============================================================================
 
-/// Processes the refund through the payment gateway. Simulates interaction
-/// with a payment processor and returns the refund transaction details.
-///
-/// Dependency reads (aligned with source):
-///   validate_payment_eligibility -> full result (payment_validated), payment_id, refund_amount
-/// Output keys (aligned with source): refund_processed, refund_id, payment_id, refund_amount,
-///   refund_status, gateway_transaction_id, gateway_provider, processed_at,
-///   estimated_arrival, namespace
-pub fn process_gateway_refund(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let eligibility = dependency_results.get("validate_payment_eligibility")
-        .ok_or("Missing validate_payment_eligibility dependency")?;
+/// Processes the refund through the payment gateway.
+pub fn process_gateway_refund(
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
+    let eligibility: ValidatePaymentEligibilityResult = dependency_results
+        .get("validate_payment_eligibility")
+        .ok_or("Missing validate_payment_eligibility dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize eligibility result: {}", e))
+        })?;
 
-    // Source checks payment_validated from dependency result
-    let payment_validated = eligibility.get("payment_validated")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    if !payment_validated {
+    if !eligibility.payment_validated.unwrap_or(false) {
         return Err("Payment validation must be completed before processing refund".to_string());
     }
 
-    // Source reads: payment_id, refund_amount from validate_payment_eligibility
-    let payment_id = eligibility.get("payment_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    let refund_amount = eligibility.get("refund_amount")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-
-    // Also read app-specific fields
-    let payment_method = eligibility.get("payment_method")
-        .and_then(|v| v.as_str())
+    let payment_method = eligibility
+        .payment_method
+        .as_deref()
         .unwrap_or("credit_card");
 
-    let order_id = eligibility.get("order_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    // Simulate gateway scenarios (aligned with source)
-    if payment_id.contains("pay_test_gateway_timeout") {
+    if eligibility.payment_id.contains("pay_test_gateway_timeout") {
         return Err("Gateway timeout, will retry".to_string());
     }
-    if payment_id.contains("pay_test_gateway_error") {
+    if eligibility.payment_id.contains("pay_test_gateway_error") {
         return Err("Gateway refund failed: Gateway error".to_string());
     }
 
-    // Generate refund transaction
-    let refund_id = format!("rfnd_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
-    let gateway_transaction_id = format!("gtx_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
-    let gateway_reference = format!("GW-{}", &Uuid::new_v4().to_string().replace('-', "")[..8].to_uppercase());
+    let refund_id = format!(
+        "rfnd_{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..12]
+    );
+    let gateway_transaction_id =
+        format!("gtx_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let gateway_txn_id = gateway_transaction_id.clone();
 
-    // Simulate processing time based on payment method
-    let (estimated_days, gateway_name) = match payment_method {
-        "credit_card" => (5, "stripe"),
-        "debit_card" => (3, "stripe"),
-        "bank_transfer" => (7, "ach_processor"),
-        "gift_card" => (1, "internal"),
-        _ => (5, "default_gateway"),
+    let estimated_days: i64 = match payment_method {
+        "credit_card" => 5,
+        "debit_card" => 3,
+        "bank_transfer" => 7,
+        "gift_card" => 1,
+        _ => 5,
     };
 
     let now = chrono::Utc::now();
     let estimated_arrival = (now + chrono::Duration::days(estimated_days)).to_rfc3339();
 
-    // Calculate gateway fee (simulated)
-    let gateway_fee = (refund_amount * 0.003 * 100.0).round() / 100.0;
-    let net_refund = ((refund_amount - gateway_fee) * 100.0).round() / 100.0;
-
     info!(
-        "Gateway refund processed: refund_id={}, payment_id={}, amount=${:.2}, via {}",
-        refund_id, payment_id, refund_amount, gateway_name
+        "Gateway refund processed: refund_id={}, payment_id={}, amount=${:.2}",
+        refund_id, eligibility.payment_id, eligibility.refund_amount
     );
 
-    // Output keys aligned with source: refund_processed, refund_id, payment_id, refund_amount,
-    // refund_status, gateway_transaction_id, gateway_provider, processed_at,
-    // estimated_arrival, namespace
-    Ok(json!({
-        "refund_processed": true,
-        "refund_id": refund_id,
-        "payment_id": payment_id,
-        "refund_amount": refund_amount,
-        "refund_status": "processed",
-        "gateway_transaction_id": gateway_transaction_id,
-        "gateway_provider": "MockPaymentGateway",
-        "processed_at": now.to_rfc3339(),
-        "estimated_arrival": estimated_arrival,
-        "namespace": "payments_rs",
-        "gateway_reference": gateway_reference,
-        "order_id": order_id,
-        "gateway_fee": gateway_fee,
-        "net_refund_amount": net_refund,
-        "payment_method": payment_method,
-        "estimated_business_days": estimated_days
-    }))
+    let result = ProcessGatewayRefundResult {
+        refund_id,
+        payment_id: eligibility.payment_id,
+        amount_processed: eligibility.refund_amount,
+        gateway_status: "approved".to_string(),
+        processed_at: now.to_rfc3339(),
+        authorization_code: Some(format!(
+            "AUTH{}",
+            &Uuid::new_v4().to_string().replace('-', "")[..6].to_uppercase()
+        )),
+        currency: Some("USD".to_string()),
+        estimated_arrival: Some(estimated_arrival),
+        gateway: None,
+        gateway_provider: Some("MockPaymentGateway".to_string()),
+        gateway_transaction_id: Some(gateway_transaction_id),
+        gateway_txn_id: Some(gateway_txn_id),
+        namespace: Some("payments_rs".to_string()),
+        order_ref: Some(eligibility.order_ref),
+        processor_message: Some("Refund approved".to_string()),
+        processor_response_code: Some("00".to_string()),
+        refund_amount: Some(eligibility.refund_amount),
+        refund_processed: Some(true),
+        refund_status: Some("processed".to_string()),
+        settlement_batch: None,
+        settlement_id: None,
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }
 
 // ============================================================================
@@ -223,135 +203,122 @@ pub fn process_gateway_refund(dependency_results: &HashMap<String, Value>) -> Re
 // ============================================================================
 
 /// Updates internal payment records with the refund transaction details.
-/// Creates an audit trail entry and adjusts the account balance.
-///
-/// Dependency reads (aligned with source):
-///   process_gateway_refund -> full result (refund_processed), payment_id, refund_id
-/// Output keys (aligned with source): records_updated, payment_id, refund_id, record_id,
-///   payment_status, refund_status, history_entries_created, updated_at, namespace
-pub fn update_payment_records(dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let gateway_result = dependency_results.get("process_gateway_refund")
-        .ok_or("Missing process_gateway_refund dependency")?;
+pub fn update_payment_records(
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
+    let gateway: ProcessGatewayRefundResult = dependency_results
+        .get("process_gateway_refund")
+        .ok_or("Missing process_gateway_refund dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize gateway result: {}", e))
+        })?;
 
-    let eligibility = dependency_results.get("validate_payment_eligibility")
-        .ok_or("Missing validate_payment_eligibility dependency")?;
+    let eligibility: ValidatePaymentEligibilityResult = dependency_results
+        .get("validate_payment_eligibility")
+        .ok_or("Missing validate_payment_eligibility dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize eligibility result: {}", e))
+        })?;
 
-    // Source checks refund_processed from dependency result
-    let refund_processed = gateway_result.get("refund_processed")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    if !refund_processed {
+    if !gateway.refund_processed.unwrap_or(false) {
         return Err("Gateway refund must be completed before updating records".to_string());
     }
 
-    // Source reads: payment_id, refund_id from process_gateway_refund
-    let payment_id = gateway_result.get("payment_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    let refund_id = gateway_result.get("refund_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    // Also read app-specific fields
-    let order_id = eligibility.get("order_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let customer_email = eligibility.get("customer_email").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let original_amount = eligibility.get("original_amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let refund_amount = gateway_result.get("refund_amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let refund_txn_id = gateway_result.get("gateway_transaction_id").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let gateway_ref = gateway_result.get("gateway_reference").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let is_partial = eligibility.get("is_partial_refund").and_then(|v| v.as_bool()).unwrap_or(false);
-
-    // Simulate record lock scenario (aligned with source)
-    if payment_id.contains("pay_test_record_lock") {
+    if gateway.payment_id.contains("pay_test_record_lock") {
         return Err("Payment record locked, will retry".to_string());
     }
 
+    let refund_amount = gateway.refund_amount.unwrap_or(0.0);
     let record_id = format!("rec_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
-    let audit_id = format!("aud_{}", &Uuid::new_v4().to_string().replace('-', "")[..8]);
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Calculate new balance
-    let remaining_balance = ((original_amount - refund_amount) * 100.0).round() / 100.0;
-
-    // Create audit trail
-    let audit_entry = json!({
-        "audit_id": audit_id,
-        "action": "refund_processed",
-        "order_id": order_id,
-        "refund_transaction_id": refund_txn_id,
-        "gateway_reference": gateway_ref,
-        "amount": refund_amount,
-        "performed_by": "system",
-        "timestamp": &now
-    });
+    let ledger_entries = vec![
+        UpdatePaymentRecordsResultLedgerEntries {
+            r#type: "debit".to_string(),
+            amount: refund_amount,
+            currency: "USD".to_string(),
+            timestamp: now.clone(),
+        },
+        UpdatePaymentRecordsResultLedgerEntries {
+            r#type: "credit".to_string(),
+            amount: refund_amount,
+            currency: "USD".to_string(),
+            timestamp: now.clone(),
+        },
+    ];
 
     info!(
         "Payment records updated: payment_id={}, refund_id={}, record_id={}",
-        payment_id, refund_id, record_id
+        gateway.payment_id, gateway.refund_id, record_id
     );
 
-    // Output keys aligned with source: records_updated, payment_id, refund_id, record_id,
-    // payment_status, refund_status, history_entries_created, updated_at, namespace
-    Ok(json!({
-        "records_updated": true,
-        "payment_id": payment_id,
-        "refund_id": refund_id,
-        "record_id": record_id,
-        "payment_status": "refunded",
-        "refund_status": "completed",
-        "history_entries_created": 2,
-        "updated_at": now,
-        "namespace": "payments_rs",
-        "order_id": order_id,
-        "customer_email": customer_email,
-        "original_amount": original_amount,
-        "refund_amount": refund_amount,
-        "remaining_balance": remaining_balance,
-        "is_partial_refund": is_partial,
-        "audit_entry": audit_entry
-    }))
+    let result = UpdatePaymentRecordsResult {
+        record_id,
+        payment_id: gateway.payment_id,
+        records_updated: true,
+        recorded_at: now.clone(),
+        refund_id: Some(gateway.refund_id),
+        refund_status: Some("completed".to_string()),
+        payment_status: Some("refunded".to_string()),
+        history_entries_created: Some(2),
+        amount_recorded: Some(refund_amount),
+        fiscal_period: Some({
+            let month = chrono::Utc::now().month();
+            let quarter = (month - 1) / 3 + 1;
+            format!("{}-Q{}", chrono::Utc::now().format("%Y"), quarter)
+        }),
+        gateway_txn_id: gateway.gateway_txn_id,
+        journal_id: Some(format!(
+            "jrn_{}",
+            &Uuid::new_v4().to_string().replace('-', "")[..8]
+        )),
+        ledger_entries: Some(ledger_entries),
+        namespace: Some("payments_rs".to_string()),
+        order_ref: Some(eligibility.order_ref),
+        reconciliation_status: Some("reconciled".to_string()),
+        updated_at: Some(now),
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }
 
 // ============================================================================
 // Step 4: Notify Customer
 // ============================================================================
 
-/// Sends a refund notification to the customer with complete details
-/// about the refund amount, expected timeline, and reference numbers.
-///
-/// Dependency reads (aligned with source):
-///   process_gateway_refund -> full result (refund_processed), refund_id, refund_amount
-/// Context reads (aligned with source): customer_email
-/// Output keys (aligned with source): notification_sent, customer_email, message_id,
-///   notification_type, sent_at, delivery_status, refund_id, refund_amount, namespace
-pub fn notify_customer(context: &Value, dependency_results: &HashMap<String, Value>) -> Result<Value, String> {
-    let gateway_result = dependency_results.get("process_gateway_refund")
-        .ok_or("Missing process_gateway_refund dependency")?;
+/// Sends a refund notification to the customer.
+pub fn notify_customer(
+    context: &Value,
+    dependency_results: &HashMap<String, Value>,
+) -> Result<Value, String> {
+    let gateway: ProcessGatewayRefundResult = dependency_results
+        .get("process_gateway_refund")
+        .ok_or("Missing process_gateway_refund dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize gateway result: {}", e))
+        })?;
 
-    let eligibility = dependency_results.get("validate_payment_eligibility")
-        .ok_or("Missing validate_payment_eligibility dependency")?;
+    let eligibility: ValidatePaymentEligibilityResult = dependency_results
+        .get("validate_payment_eligibility")
+        .ok_or("Missing validate_payment_eligibility dependency".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("Failed to deserialize eligibility result: {}", e))
+        })?;
 
-    let records_result = dependency_results.get("update_payment_records")
-        .ok_or("Missing update_payment_records dependency")?;
-
-    // Source checks refund_processed from process_gateway_refund
-    let refund_processed = gateway_result.get("refund_processed")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    if !refund_processed {
+    if !gateway.refund_processed.unwrap_or(false) {
         return Err("Refund must be processed before sending notification".to_string());
     }
 
-    // Source reads: customer_email from task context
-    let customer_email = context.get("customer_email")
+    let customer_email = context
+        .get("customer_email")
         .and_then(|v| v.as_str())
-        .or_else(|| eligibility.get("customer_email").and_then(|v| v.as_str()))
+        .or(eligibility.customer_email.as_deref())
         .unwrap_or("unknown@example.com");
 
-    // Simulate notification scenarios (aligned with source)
     if customer_email.contains("@test_bounce") {
         return Err("Customer email bounced".to_string());
     }
@@ -359,69 +326,51 @@ pub fn notify_customer(context: &Value, dependency_results: &HashMap<String, Val
         return Err("Email service rate limited, will retry".to_string());
     }
 
-    // Source reads: refund_id, refund_amount from process_gateway_refund
-    let refund_id = gateway_result.get("refund_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    let refund_amount = gateway_result.get("refund_amount")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-
-    // Also read app-specific fields
-    let order_id = eligibility.get("order_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    let estimated_days = gateway_result.get("estimated_business_days")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(5);
-
-    let refund_txn_id = gateway_result.get("gateway_transaction_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
-
-    let payment_method = gateway_result.get("payment_method")
-        .and_then(|v| v.as_str())
-        .unwrap_or("credit_card");
-
-    let is_partial = records_result.get("is_partial_refund")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let refund_amount = gateway.refund_amount.unwrap_or(0.0);
+    let order_ref = &eligibility.order_ref;
 
     let message_id = format!("msg_{}", &Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let notification_id = format!(
+        "notif_{}",
+        &Uuid::new_v4().to_string().replace('-', "")[..12]
+    );
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Build customer-friendly notification
-    let refund_type = if is_partial { "partial" } else { "full" };
-    let subject = format!("Your {} refund of ${:.2} for order {} has been processed", refund_type, refund_amount, order_id);
-    let body = format!(
-        "We have processed a {} refund of ${:.2} to your {}. \
-         You should see the refund in approximately {} business days. \
-         Reference number: {}",
-        refund_type, refund_amount, payment_method, estimated_days, refund_txn_id
+    let subject = format!(
+        "Your refund of ${:.2} for order {} has been processed",
+        refund_amount, order_ref
     );
 
     info!(
         "Customer notification sent: message_id={}, customer_email={}, refund_id={}",
-        message_id, customer_email, refund_id
+        message_id, customer_email, gateway.refund_id
     );
 
-    // Output keys aligned with source: notification_sent, customer_email, message_id,
-    // notification_type, sent_at, delivery_status, refund_id, refund_amount, namespace
-    Ok(json!({
-        "notification_sent": true,
-        "customer_email": customer_email,
-        "message_id": message_id,
-        "notification_type": "refund_confirmation",
-        "sent_at": now,
-        "delivery_status": "delivered",
-        "refund_id": refund_id,
-        "refund_amount": refund_amount,
-        "namespace": "payments_rs",
-        "subject": subject,
-        "body": body,
-        "order_id": order_id,
-        "estimated_completion_days": estimated_days
-    }))
+    let result = NotifyCustomerResult {
+        notification_id,
+        message_id,
+        status: "sent".to_string(),
+        sent_at: now,
+        body_preview: Some(format!(
+            "Your refund of ${:.2} has been processed and will arrive within 5 business days.",
+            refund_amount
+        )),
+        channel: Some("email".to_string()),
+        customer_email: Some(customer_email.to_string()),
+        delivery_status: Some("delivered".to_string()),
+        namespace: Some("payments_rs".to_string()),
+        notification_sent: Some(true),
+        notification_type: Some("refund_confirmation".to_string()),
+        recipient: Some(customer_email.to_string()),
+        references: Some(json!({
+            "refund_id": gateway.refund_id,
+            "order_ref": order_ref
+        })),
+        refund_amount: Some(refund_amount),
+        refund_id: Some(gateway.refund_id),
+        subject: Some(subject),
+        template: Some("refund_notification_v2".to_string()),
+    };
+
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize result: {}", e))
 }

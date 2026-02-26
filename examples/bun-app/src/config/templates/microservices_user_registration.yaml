@@ -75,6 +75,40 @@ steps:
   # SEQUENTIAL PHASE - User creation must complete first
   - name: create_user_account
     description: "Create user account in user service with idempotency"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - email
+        - name
+        - plan
+        - phone
+        - source
+        - status
+        - created_at
+        - api_key
+        - auth_provider
+      properties:
+        user_id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        plan:
+          type: string
+        phone:
+          type: "null"
+        source:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+        api_key:
+          type: string
+        auth_provider:
+          type: string
     handler:
       callable: Microservices.StepHandlers.CreateUserHandler
       initialization:
@@ -93,6 +127,39 @@ steps:
   # PARALLEL PHASE - Billing and preferences run concurrently after user creation
   - name: setup_billing_profile
     description: "Setup billing profile in billing service"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - plan
+        - status
+      properties:
+        billing_id:
+          type: string
+        user_id:
+          type: string
+        plan:
+          type: string
+        price:
+          type: number
+        currency:
+          type: string
+        billing_cycle:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        next_billing_date:
+          type: string
+        created_at:
+          type: string
+        billing_required:
+          type: boolean
+        message:
+          type: string
     handler:
       callable: Microservices.StepHandlers.SetupBillingHandler
       initialization:
@@ -111,6 +178,38 @@ steps:
 
   - name: initialize_preferences
     description: "Initialize user preferences in preferences service"
+    result_schema:
+      type: object
+      required:
+        - preferences_id
+        - user_id
+        - plan
+        - preferences
+        - defaults_applied
+        - customizations
+        - status
+        - created_at
+        - updated_at
+      properties:
+        preferences_id:
+          type: string
+        user_id:
+          type: string
+        plan:
+          type: string
+        preferences:
+          type: object
+          additionalProperties: true
+        defaults_applied:
+          type: integer
+        customizations:
+          type: integer
+        status:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
     handler:
       callable: Microservices.StepHandlers.InitPreferencesHandler
       initialization:
@@ -130,6 +229,36 @@ steps:
   # COORDINATION PHASE - Welcome sequence waits for both billing and preferences
   - name: send_welcome_sequence
     description: "Send welcome emails via notification service"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - plan
+        - channels_used
+        - messages_sent
+        - welcome_sequence_id
+        - status
+        - sent_at
+        - recipient
+      properties:
+        user_id:
+          type: string
+        plan:
+          type: string
+        channels_used:
+          type: array
+          items:
+            type: string
+        messages_sent:
+          type: integer
+        welcome_sequence_id:
+          type: string
+        status:
+          type: string
+        sent_at:
+          type: string
+        recipient:
+          type: string
     handler:
       callable: Microservices.StepHandlers.SendWelcomeHandler
       initialization:
@@ -150,6 +279,34 @@ steps:
   # COMPLETION PHASE - Final status update after welcome sequence
   - name: update_user_status
     description: "Update user status to active in user service"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - status
+        - plan
+        - registration_summary
+        - activation_timestamp
+        - all_services_coordinated
+        - services_completed
+      properties:
+        user_id:
+          type: string
+        status:
+          type: string
+        plan:
+          type: string
+        registration_summary:
+          type: object
+          additionalProperties: true
+        activation_timestamp:
+          type: string
+        all_services_coordinated:
+          type: boolean
+        services_completed:
+          type: array
+          items:
+            type: string
     handler:
       callable: Microservices.StepHandlers.UpdateStatusHandler
       initialization:

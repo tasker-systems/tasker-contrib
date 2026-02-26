@@ -7,22 +7,32 @@
  * Thin DSL wrappers that delegate to ../services/data-pipeline for business logic.
  */
 
-import { defineHandler } from '@tasker-systems/tasker';
-import type { DateRange } from '../services/types';
-import * as svc from '../services/data-pipeline';
+import { defineHandler } from "@tasker-systems/tasker";
+import * as svc from "../services/data-pipeline";
+import type {
+	DateRange,
+	PipelineAggregateMetricsResult,
+	PipelineExtractCustomerResult,
+	PipelineExtractInventoryResult,
+	PipelineExtractSalesResult,
+	PipelineTransformCustomersResult,
+	PipelineTransformInventoryResult,
+	PipelineTransformSalesResult,
+} from "../services/schemas";
+import { DateRangeSchema } from "../services/schemas";
 
 // ---------------------------------------------------------------------------
 // Step 1: ExtractSalesData (parallel with steps 2 and 3)
 // ---------------------------------------------------------------------------
 
 export const ExtractSalesDataHandler = defineHandler(
-  'DataPipeline.StepHandlers.ExtractSalesDataHandler',
-  { inputs: { sources: 'sources', dateRange: 'date_range' } },
-  async ({ sources, dateRange }) =>
-    svc.extractSalesData(
-      sources as string[] | undefined,
-      dateRange as DateRange | undefined,
-    ),
+	"DataPipeline.StepHandlers.ExtractSalesDataHandler",
+	{ inputs: { sources: "sources", dateRange: "date_range" } },
+	async ({ sources, dateRange }) =>
+		svc.extractSalesData(
+			sources as string[] | undefined,
+			DateRangeSchema.optional().parse(dateRange),
+		),
 );
 
 // ---------------------------------------------------------------------------
@@ -30,12 +40,10 @@ export const ExtractSalesDataHandler = defineHandler(
 // ---------------------------------------------------------------------------
 
 export const ExtractInventoryDataHandler = defineHandler(
-  'DataPipeline.StepHandlers.ExtractInventoryDataHandler',
-  { inputs: { parameters: 'parameters' } },
-  async ({ parameters }) =>
-    svc.extractInventoryData(
-      parameters as Record<string, unknown> | undefined,
-    ),
+	"DataPipeline.StepHandlers.ExtractInventoryDataHandler",
+	{ inputs: { parameters: "parameters" } },
+	async ({ parameters }) =>
+		svc.extractInventoryData(parameters as Record<string, unknown> | undefined),
 );
 
 // ---------------------------------------------------------------------------
@@ -43,10 +51,10 @@ export const ExtractInventoryDataHandler = defineHandler(
 // ---------------------------------------------------------------------------
 
 export const ExtractCustomerDataHandler = defineHandler(
-  'DataPipeline.StepHandlers.ExtractCustomerDataHandler',
-  { inputs: { dateRange: 'date_range' } },
-  async ({ dateRange }) =>
-    svc.extractCustomerData(dateRange as DateRange | undefined),
+	"DataPipeline.StepHandlers.ExtractCustomerDataHandler",
+	{ inputs: { dateRange: "date_range" } },
+	async ({ dateRange }) =>
+		svc.extractCustomerData(dateRange as DateRange | undefined),
 );
 
 // ---------------------------------------------------------------------------
@@ -54,10 +62,10 @@ export const ExtractCustomerDataHandler = defineHandler(
 // ---------------------------------------------------------------------------
 
 export const TransformSalesHandler = defineHandler(
-  'DataPipeline.StepHandlers.TransformSalesHandler',
-  { depends: { extractResults: 'extract_sales_data' } },
-  async ({ extractResults }) =>
-    svc.transformSales(extractResults as Record<string, unknown>),
+	"DataPipeline.StepHandlers.TransformSalesHandler",
+	{ depends: { extractResults: "extract_sales_data" } },
+	async ({ extractResults }) =>
+		svc.transformSales(extractResults as PipelineExtractSalesResult),
 );
 
 // ---------------------------------------------------------------------------
@@ -65,10 +73,10 @@ export const TransformSalesHandler = defineHandler(
 // ---------------------------------------------------------------------------
 
 export const TransformInventoryHandler = defineHandler(
-  'DataPipeline.StepHandlers.TransformInventoryHandler',
-  { depends: { extractResults: 'extract_inventory_data' } },
-  async ({ extractResults }) =>
-    svc.transformInventory(extractResults as Record<string, unknown>),
+	"DataPipeline.StepHandlers.TransformInventoryHandler",
+	{ depends: { extractResults: "extract_inventory_data" } },
+	async ({ extractResults }) =>
+		svc.transformInventory(extractResults as PipelineExtractInventoryResult),
 );
 
 // ---------------------------------------------------------------------------
@@ -76,10 +84,10 @@ export const TransformInventoryHandler = defineHandler(
 // ---------------------------------------------------------------------------
 
 export const TransformCustomerHandler = defineHandler(
-  'DataPipeline.StepHandlers.TransformCustomersHandler',
-  { depends: { extractResults: 'extract_customer_data' } },
-  async ({ extractResults }) =>
-    svc.transformCustomers(extractResults as Record<string, unknown>),
+	"DataPipeline.StepHandlers.TransformCustomersHandler",
+	{ depends: { extractResults: "extract_customer_data" } },
+	async ({ extractResults }) =>
+		svc.transformCustomers(extractResults as PipelineExtractCustomerResult),
 );
 
 // ---------------------------------------------------------------------------
@@ -87,20 +95,20 @@ export const TransformCustomerHandler = defineHandler(
 // ---------------------------------------------------------------------------
 
 export const AggregateDataHandler = defineHandler(
-  'DataPipeline.StepHandlers.AggregateMetricsHandler',
-  {
-    depends: {
-      salesData: 'transform_sales',
-      inventoryData: 'transform_inventory',
-      customerData: 'transform_customers',
-    },
-  },
-  async ({ salesData, inventoryData, customerData }) =>
-    svc.aggregateMetrics(
-      salesData as Record<string, unknown> | undefined,
-      inventoryData as Record<string, unknown> | undefined,
-      customerData as Record<string, unknown> | undefined,
-    ),
+	"DataPipeline.StepHandlers.AggregateMetricsHandler",
+	{
+		depends: {
+			salesData: "transform_sales",
+			inventoryData: "transform_inventory",
+			customerData: "transform_customers",
+		},
+	},
+	async ({ salesData, inventoryData, customerData }) =>
+		svc.aggregateMetrics(
+			salesData as PipelineTransformSalesResult | undefined,
+			inventoryData as PipelineTransformInventoryResult | undefined,
+			customerData as PipelineTransformCustomersResult | undefined,
+		),
 );
 
 // ---------------------------------------------------------------------------
@@ -108,8 +116,8 @@ export const AggregateDataHandler = defineHandler(
 // ---------------------------------------------------------------------------
 
 export const GenerateInsightsHandler = defineHandler(
-  'DataPipeline.StepHandlers.GenerateInsightsHandler',
-  { depends: { metrics: 'aggregate_metrics' } },
-  async ({ metrics }) =>
-    svc.generateInsights(metrics as Record<string, unknown>),
+	"DataPipeline.StepHandlers.GenerateInsightsHandler",
+	{ depends: { metrics: "aggregate_metrics" } },
+	async ({ metrics }) =>
+		svc.generateInsights(metrics as PipelineAggregateMetricsResult),
 );

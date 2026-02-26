@@ -95,6 +95,65 @@ input_schema:
 steps:
   - name: validate_cart
     description: "Validate cart items, check availability, calculate totals (subtotal, tax, shipping)"
+    result_schema:
+      type: object
+      required:
+        - validated_items
+        - item_count
+        - subtotal
+        - tax
+        - tax_rate
+        - shipping
+        - total
+        - free_shipping
+        - validation_id
+        - validated_at
+      properties:
+        validated_items:
+          type: array
+          items:
+            type: object
+            required:
+              - sku
+              - name
+              - quantity
+              - unit_price
+              - line_total
+              - available
+              - validated_at
+            properties:
+              sku:
+                type: string
+              name:
+                type: string
+              quantity:
+                type: integer
+              unit_price:
+                type: number
+              line_total:
+                type: number
+              available:
+                type: boolean
+              validated_at:
+                type: string
+        item_count:
+          type: integer
+        subtotal:
+          type: number
+        tax:
+          type: number
+        tax_rate:
+          type: number
+        shipping:
+          type: number
+        total:
+          type: number
+        free_shipping:
+          type: boolean
+        validation_id:
+          type: string
+        validated_at:
+          type: string
     handler:
       callable: Ecommerce::StepHandlers::ValidateCartHandler
       initialization:
@@ -112,6 +171,40 @@ steps:
 
   - name: process_payment
     description: "Process customer payment using mock payment service"
+    result_schema:
+      type: object
+      required:
+        - payment_id
+        - transaction_id
+        - authorization_code
+        - amount_charged
+        - currency
+        - payment_method_type
+        - last_four
+        - status
+        - gateway_response_code
+        - processed_at
+      properties:
+        payment_id:
+          type: string
+        transaction_id:
+          type: string
+        authorization_code:
+          type: string
+        amount_charged:
+          type: number
+        currency:
+          type: string
+        payment_method_type:
+          type: string
+        last_four:
+          type: string
+        status:
+          type: string
+        gateway_response_code:
+          type: string
+        processed_at:
+          type: string
     handler:
       callable: Ecommerce::StepHandlers::ProcessPaymentHandler
       initialization:
@@ -130,6 +223,56 @@ steps:
 
   - name: update_inventory
     description: "Reserve inventory for order items using mock inventory service"
+    result_schema:
+      type: object
+      required:
+        - updated_products
+        - total_items_reserved
+        - inventory_changes
+        - inventory_log_id
+        - updated_at
+        - reservation_id
+        - reservation_expires_at
+        - all_items_reserved
+      properties:
+        updated_products:
+          type: array
+          items:
+            type: object
+            required:
+              - product_id
+              - name
+              - previous_stock
+              - new_stock
+              - quantity_reserved
+              - reservation_id
+            properties:
+              product_id:
+                type: string
+              name:
+                type: string
+              previous_stock:
+                type: integer
+              new_stock:
+                type: integer
+              quantity_reserved:
+                type: integer
+              reservation_id:
+                type: string
+        total_items_reserved:
+          type: integer
+        inventory_changes:
+          type: array
+        inventory_log_id:
+          type: string
+        updated_at:
+          type: string
+        reservation_id:
+          type: string
+        reservation_expires_at:
+          type: string
+        all_items_reserved:
+          type: boolean
     handler:
       callable: Ecommerce::StepHandlers::UpdateInventoryHandler
       initialization:
@@ -148,6 +291,85 @@ steps:
 
   - name: create_order
     description: "Create order record with customer, payment, and inventory details"
+    result_schema:
+      type: object
+      required:
+        - order_id
+        - order_number
+        - status
+        - total_amount
+        - customer_email
+        - created_at
+        - estimated_delivery
+        - items
+        - subtotal
+        - tax
+        - shipping
+        - payment
+        - inventory
+        - estimated_shipping_days
+      properties:
+        order_id:
+          type: string
+        order_number:
+          type: string
+        status:
+          type: string
+        total_amount:
+          type: number
+        customer_email:
+          type: string
+        created_at:
+          type: string
+        estimated_delivery:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - sku
+              - name
+              - quantity
+              - unit_price
+              - line_total
+            properties:
+              sku:
+                type: string
+              name:
+                type: string
+              quantity:
+                type: integer
+              unit_price:
+                type: number
+              line_total:
+                type: number
+        subtotal:
+          type: number
+        tax:
+          type: number
+        shipping:
+          type: number
+        payment:
+          type: object
+          properties:
+            payment_id:
+              type: string
+            transaction_id:
+              type: string
+            amount_charged:
+              type: number
+            status:
+              type: string
+        inventory:
+          type: object
+          properties:
+            inventory_log_id:
+              type: string
+        shipping_address:
+          type: object
+        estimated_shipping_days:
+          type: integer
     handler:
       callable: Ecommerce::StepHandlers::CreateOrderHandler
       initialization:
@@ -166,6 +388,46 @@ steps:
 
   - name: send_confirmation
     description: "Send order confirmation email to customer using mock email service"
+    result_schema:
+      type: object
+      required:
+        - email_sent
+        - recipient
+        - email_type
+        - sent_at
+        - message_id
+        - order_id
+        - notifications_sent
+        - email_subject
+        - email_body_preview
+        - total_channels
+        - all_delivered
+        - confirmation_sent_at
+      properties:
+        email_sent:
+          type: boolean
+        recipient:
+          type: string
+        email_type:
+          type: string
+        sent_at:
+          type: string
+        message_id:
+          type: string
+        order_id:
+          type: string
+        notifications_sent:
+          type: array
+        email_subject:
+          type: string
+        email_body_preview:
+          type: string
+        total_channels:
+          type: integer
+        all_delivered:
+          type: boolean
+        confirmation_sent_at:
+          type: string
     handler:
       callable: Ecommerce::StepHandlers::SendConfirmationHandler
       initialization:

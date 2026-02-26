@@ -1,8 +1,8 @@
 """E-commerce business logic.
 
 Pure functions that validate carts, process payments, manage inventory,
-create orders, and send confirmations. No Tasker types — just plain
-dicts in, typed models out.
+create orders, and send confirmations. Typed models in and out — dict-to-model
+conversion happens at the boundary (validate_cart_items).
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from typing import Any
 from tasker_core.errors import PermanentError, RetryableError
 
 from .types import (
+    EcommerceCartItem,
     EcommerceCreateOrderResult,
     EcommerceProcessPaymentResult,
     EcommerceSendConfirmationResult,
@@ -42,11 +43,16 @@ ERROR_TOKENS = {"tok_test_gateway_error", "tok_test_timeout"}
 def validate_cart_items(
     cart_items: list[dict[str, Any]] | None,
 ) -> EcommerceValidateCartResult:
-    """Validate cart items and calculate order totals."""
+    """Validate cart items and calculate order totals.
+
+    This is the boundary function — raw dicts from task context are validated
+    and converted to EcommerceCartItem models here. Downstream functions
+    receive typed models only.
+    """
     if not cart_items or not isinstance(cart_items, list):
         raise PermanentError("Cart is empty or items field is missing")
 
-    validated_items: list[dict[str, Any]] = []
+    validated_items: list[EcommerceCartItem] = []
     subtotal = 0.0
 
     for idx, item in enumerate(cart_items):
@@ -67,13 +73,13 @@ def validate_cart_items(
         line_total = round(quantity * unit_price, 2)
         subtotal += line_total
         validated_items.append(
-            {
-                "sku": sku,
-                "name": name,
-                "quantity": quantity,
-                "unit_price": unit_price,
-                "line_total": line_total,
-            }
+            EcommerceCartItem(
+                sku=sku,
+                name=name,
+                quantity=quantity,
+                unit_price=unit_price,
+                line_total=line_total,
+            )
         )
 
     subtotal = round(subtotal, 2)
@@ -126,7 +132,7 @@ def process_payment(
 
 
 def update_inventory(
-    validated_items: list[dict[str, Any]],
+    validated_items: list[EcommerceCartItem],
 ) -> EcommerceUpdateInventoryResult:
     """Create inventory reservations for validated cart items."""
     updated_products: list[dict[str, Any]] = []
@@ -135,14 +141,13 @@ def update_inventory(
 
     for item in validated_items:
         reservation_id = f"res_{uuid.uuid4().hex[:12]}"
-        quantity = item["quantity"]
-        total_items_reserved += quantity
+        total_items_reserved += item.quantity
 
         updated_products.append(
             {
-                "product_id": item.get("sku"),
-                "name": item.get("name"),
-                "quantity_reserved": quantity,
+                "product_id": item.sku,
+                "name": item.name,
+                "quantity_reserved": item.quantity,
                 "reservation_id": reservation_id,
                 "warehouse": "WH-EAST-01",
                 "status": "reserved",
@@ -151,9 +156,9 @@ def update_inventory(
 
         inventory_changes.append(
             {
-                "product_id": item.get("sku"),
+                "product_id": item.sku,
                 "change_type": "reservation",
-                "quantity": -quantity,
+                "quantity": -item.quantity,
                 "reason": "order_checkout",
                 "reservation_id": reservation_id,
                 "inventory_log_id": f"log_{uuid.uuid4().hex[:6]}",

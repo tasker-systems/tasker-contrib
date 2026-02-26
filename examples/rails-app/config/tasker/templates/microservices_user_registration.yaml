@@ -67,6 +67,45 @@ steps:
   # SEQUENTIAL PHASE - User creation must complete first
   - name: create_user_account
     description: "Create user account in user service with idempotency"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - username
+        - email
+        - name
+        - plan
+        - referral_valid
+        - status
+        - account_status
+        - email_verified
+        - verification_token
+        - created_at
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        plan:
+          type: string
+        referral_code:
+          type: string
+        referral_valid:
+          type: boolean
+        status:
+          type: string
+        account_status:
+          type: string
+        email_verified:
+          type: boolean
+        verification_token:
+          type: string
+        created_at:
+          type: string
     handler:
       callable: Microservices::StepHandlers::CreateUserAccountHandler
     dependencies: []
@@ -80,6 +119,62 @@ steps:
   # PARALLEL PHASE - Billing and preferences run concurrently after user creation
   - name: setup_billing_profile
     description: "Setup billing profile in billing service"
+    result_schema:
+      type: object
+      required:
+        - billing_id
+        - subscription_id
+        - user_id
+        - plan
+        - billing_cycle
+        - monthly_price
+        - annual_price
+        - currency
+        - features
+        - trial_days
+        - payment_method_required
+        - next_billing_date
+        - price
+        - status
+        - billing_status
+        - created_at
+      properties:
+        billing_id:
+          type: string
+        subscription_id:
+          type: string
+        user_id:
+          type: string
+        plan:
+          type: string
+        billing_cycle:
+          type: string
+        monthly_price:
+          type: number
+        annual_price:
+          type: number
+        currency:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        trial_days:
+          type: integer
+        trial_end_date:
+          type: string
+        payment_method_required:
+          type: boolean
+        next_billing_date:
+          type: string
+        price:
+          type: number
+        status:
+          type: string
+        billing_status:
+          type: string
+        created_at:
+          type: string
     handler:
       callable: Microservices::StepHandlers::SetupBillingProfileHandler
     dependencies:
@@ -93,6 +188,46 @@ steps:
 
   - name: initialize_preferences
     description: "Initialize user preferences in preferences service"
+    result_schema:
+      type: object
+      required:
+        - preferences_id
+        - user_id
+        - plan
+        - preferences
+        - defaults_applied
+        - customizations
+        - status
+        - created_at
+        - updated_at
+        - feature_flags
+        - quotas
+        - initialized_at
+      properties:
+        preferences_id:
+          type: string
+        user_id:
+          type: string
+        plan:
+          type: string
+        preferences:
+          type: object
+        defaults_applied:
+          type: integer
+        customizations:
+          type: integer
+        status:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        feature_flags:
+          type: object
+        quotas:
+          type: object
+        initialized_at:
+          type: string
     handler:
       callable: Microservices::StepHandlers::InitializePreferencesHandler
     dependencies:
@@ -107,6 +242,54 @@ steps:
   # COORDINATION PHASE - Welcome sequence waits for both billing and preferences
   - name: send_welcome_sequence
     description: "Send welcome emails via notification service"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - plan
+        - channels_used
+        - messages_sent
+        - welcome_sequence_id
+        - status
+        - sent_at
+        - sequence_id
+        - email
+        - notifications_sent
+        - total_notifications
+        - all_delivered
+        - drip_campaign
+        - welcome_sequence_completed_at
+      properties:
+        user_id:
+          type: string
+        plan:
+          type: string
+        channels_used:
+          type: array
+          items:
+            type: string
+        messages_sent:
+          type: integer
+        welcome_sequence_id:
+          type: string
+        status:
+          type: string
+        sent_at:
+          type: string
+        sequence_id:
+          type: string
+        email:
+          type: string
+        notifications_sent:
+          type: array
+        total_notifications:
+          type: integer
+        all_delivered:
+          type: boolean
+        drip_campaign:
+          type: object
+        welcome_sequence_completed_at:
+          type: string
     handler:
       callable: Microservices::StepHandlers::SendWelcomeSequenceHandler
     dependencies:
@@ -122,6 +305,53 @@ steps:
   # COMPLETION PHASE - Final status update after welcome sequence
   - name: update_user_status
     description: "Update user status to active in user service"
+    result_schema:
+      type: object
+      required:
+        - user_id
+        - status
+        - plan
+        - registration_summary
+        - activation_timestamp
+        - all_services_coordinated
+        - services_completed
+        - registration_complete
+        - registration_steps
+        - onboarding_score
+        - profile_summary
+        - next_steps
+        - activated_at
+      properties:
+        user_id:
+          type: string
+        status:
+          type: string
+        plan:
+          type: string
+        registration_summary:
+          type: object
+        activation_timestamp:
+          type: string
+        all_services_coordinated:
+          type: boolean
+        services_completed:
+          type: array
+          items:
+            type: string
+        registration_complete:
+          type: boolean
+        registration_steps:
+          type: object
+        onboarding_score:
+          type: integer
+        profile_summary:
+          type: object
+        next_steps:
+          type: array
+          items:
+            type: string
+        activated_at:
+          type: string
     handler:
       callable: Microservices::StepHandlers::UpdateUserStatusHandler
     dependencies:

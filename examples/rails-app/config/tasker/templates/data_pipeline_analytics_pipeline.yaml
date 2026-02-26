@@ -54,6 +54,9 @@ input_schema:
     pipeline_id:
       type: string
       description: "Unique pipeline execution identifier"
+    source:
+      type: string
+      description: "Source system to extract data from"
     date_range:
       type: object
       properties:
@@ -63,10 +66,83 @@ input_schema:
         end_date:
           type: string
           format: date
+    granularity:
+      type: string
+      description: "Data granularity (daily, weekly, monthly)"
+    filters:
+      type: object
+      description: "Optional filters for data extraction"
 steps:
   # EXTRACT PHASE - 3 parallel steps (no dependencies)
   - name: extract_sales_data
     description: "Extract sales records from database"
+    result_schema:
+      type: object
+      required:
+        - source
+        - extraction_id
+        - date_range
+        - record_count
+        - records
+        - total_amount
+        - total_revenue
+        - extracted_at
+      properties:
+        source:
+          type: string
+        extraction_id:
+          type: string
+        date_range:
+          type: object
+          required:
+            - start_date
+            - end_date
+          properties:
+            start_date:
+              type: string
+            end_date:
+              type: string
+        record_count:
+          type: integer
+        records:
+          type: array
+          items:
+            type: object
+            required:
+              - sale_id
+              - product
+              - region
+              - quantity
+              - unit_price
+              - discount_rate
+              - revenue
+              - sale_date
+              - channel
+            properties:
+              sale_id:
+                type: string
+              product:
+                type: string
+              region:
+                type: string
+              quantity:
+                type: integer
+              unit_price:
+                type: number
+              discount_rate:
+                type: number
+              revenue:
+                type: number
+              sale_date:
+                type: string
+              channel:
+                type: string
+        total_amount:
+          type: number
+        total_revenue:
+          type: number
+        extracted_at:
+          type: string
     handler:
       callable: DataPipeline::StepHandlers::ExtractSalesDataHandler
     dependencies: []
@@ -79,6 +155,47 @@ steps:
 
   - name: extract_inventory_data
     description: "Extract inventory records from warehouse system"
+    result_schema:
+      type: object
+      required:
+        - source
+        - extraction_id
+        - record_count
+        - records
+        - total_quantity
+        - warehouses
+        - products_tracked
+        - total_inventory_value
+        - items_needing_reorder
+        - warehouses_covered
+        - extracted_at
+      properties:
+        source:
+          type: string
+        extraction_id:
+          type: string
+        record_count:
+          type: integer
+        records:
+          type: array
+        total_quantity:
+          type: integer
+        warehouses:
+          type: array
+          items:
+            type: string
+        products_tracked:
+          type: integer
+        total_inventory_value:
+          type: number
+        items_needing_reorder:
+          type: integer
+        warehouses_covered:
+          type: array
+          items:
+            type: string
+        extracted_at:
+          type: string
     handler:
       callable: DataPipeline::StepHandlers::ExtractInventoryDataHandler
     dependencies: []
@@ -91,6 +208,46 @@ steps:
 
   - name: extract_customer_data
     description: "Extract customer records from CRM"
+    result_schema:
+      type: object
+      required:
+        - source
+        - extraction_id
+        - record_count
+        - records
+        - total_customers
+        - total_lifetime_value
+        - tier_breakdown
+        - avg_lifetime_value
+        - average_lifetime_value
+        - segment_distribution
+        - engagement_rate
+        - extracted_at
+      properties:
+        source:
+          type: string
+        extraction_id:
+          type: string
+        record_count:
+          type: integer
+        records:
+          type: array
+        total_customers:
+          type: integer
+        total_lifetime_value:
+          type: number
+        tier_breakdown:
+          type: object
+        avg_lifetime_value:
+          type: number
+        average_lifetime_value:
+          type: number
+        segment_distribution:
+          type: object
+        engagement_rate:
+          type: number
+        extracted_at:
+          type: string
     handler:
       callable: DataPipeline::StepHandlers::ExtractCustomerDataHandler
     dependencies: []
@@ -104,6 +261,50 @@ steps:
   # TRANSFORM PHASE - 3 sequential steps (each depends on its extract)
   - name: transform_sales
     description: "Transform sales data for analytics"
+    result_schema:
+      type: object
+      required:
+        - record_count
+        - daily_sales
+        - product_sales
+        - total_revenue
+        - transformation_type
+        - source
+        - transform_id
+        - source_record_count
+        - product_metrics
+        - region_metrics
+        - channel_metrics
+        - transformed_at
+      properties:
+        record_count:
+          type: integer
+        daily_sales:
+          type: object
+        product_sales:
+          type: object
+        total_revenue:
+          type: number
+        transformation_type:
+          type: string
+        source:
+          type: string
+        transform_id:
+          type: string
+        source_record_count:
+          type: integer
+        product_metrics:
+          type: array
+        region_metrics:
+          type: array
+        channel_metrics:
+          type: array
+        top_product:
+          type: string
+        top_region:
+          type: string
+        transformed_at:
+          type: string
     handler:
       callable: DataPipeline::StepHandlers::TransformSalesHandler
     dependencies:
@@ -117,6 +318,52 @@ steps:
 
   - name: transform_inventory
     description: "Transform inventory data for analytics"
+    result_schema:
+      type: object
+      required:
+        - record_count
+        - warehouse_summary
+        - product_inventory
+        - total_quantity_on_hand
+        - reorder_alerts
+        - transformation_type
+        - source
+        - transform_id
+        - source_record_count
+        - category_metrics
+        - warehouse_metrics
+        - total_inventory_value
+        - total_skus
+        - transformed_at
+      properties:
+        record_count:
+          type: integer
+        warehouse_summary:
+          type: object
+        product_inventory:
+          type: object
+        total_quantity_on_hand:
+          type: integer
+        reorder_alerts:
+          type: integer
+        transformation_type:
+          type: string
+        source:
+          type: string
+        transform_id:
+          type: string
+        source_record_count:
+          type: integer
+        category_metrics:
+          type: array
+        warehouse_metrics:
+          type: array
+        total_inventory_value:
+          type: number
+        total_skus:
+          type: integer
+        transformed_at:
+          type: string
     handler:
       callable: DataPipeline::StepHandlers::TransformInventoryHandler
     dependencies:
@@ -130,6 +377,61 @@ steps:
 
   - name: transform_customers
     description: "Transform customer data for analytics"
+    result_schema:
+      type: object
+      required:
+        - record_count
+        - tier_analysis
+        - value_segments
+        - total_lifetime_value
+        - avg_customer_value
+        - transformation_type
+        - source
+        - transform_id
+        - source_record_count
+        - segment_metrics
+        - tier_metrics
+        - channel_metrics
+        - region_metrics
+        - churn_risk_rate
+        - at_risk_customer_count
+        - overall_engagement_rate
+        - transformed_at
+      properties:
+        record_count:
+          type: integer
+        tier_analysis:
+          type: object
+        value_segments:
+          type: object
+        total_lifetime_value:
+          type: number
+        avg_customer_value:
+          type: number
+        transformation_type:
+          type: string
+        source:
+          type: string
+        transform_id:
+          type: string
+        source_record_count:
+          type: integer
+        segment_metrics:
+          type: array
+        tier_metrics:
+          type: array
+        channel_metrics:
+          type: array
+        region_metrics:
+          type: array
+        churn_risk_rate:
+          type: number
+        at_risk_customer_count:
+          type: integer
+        overall_engagement_rate:
+          type: number
+        transformed_at:
+          type: string
     handler:
       callable: DataPipeline::StepHandlers::TransformCustomersHandler
     dependencies:
@@ -144,6 +446,61 @@ steps:
   # AGGREGATE PHASE - 1 step (depends on all 3 transforms - DAG convergence)
   - name: aggregate_metrics
     description: "Aggregate metrics from all transformed sources"
+    result_schema:
+      type: object
+      required:
+        - total_revenue
+        - total_inventory_quantity
+        - total_customers
+        - total_customer_lifetime_value
+        - sales_transactions
+        - inventory_reorder_alerts
+        - revenue_per_customer
+        - inventory_turnover_indicator
+        - aggregation_complete
+        - sources_included
+        - aggregation_id
+        - summary
+        - health_scores
+        - highlights
+        - breakdowns
+        - data_sources
+        - aggregated_at
+      properties:
+        total_revenue:
+          type: number
+        total_inventory_quantity:
+          type: number
+        total_customers:
+          type: integer
+        total_customer_lifetime_value:
+          type: number
+        sales_transactions:
+          type: integer
+        inventory_reorder_alerts:
+          type: integer
+        revenue_per_customer:
+          type: number
+        inventory_turnover_indicator:
+          type: number
+        aggregation_complete:
+          type: boolean
+        sources_included:
+          type: integer
+        aggregation_id:
+          type: string
+        summary:
+          type: object
+        health_scores:
+          type: object
+        highlights:
+          type: object
+        breakdowns:
+          type: object
+        data_sources:
+          type: object
+        aggregated_at:
+          type: string
     handler:
       callable: DataPipeline::StepHandlers::AggregateMetricsHandler
     dependencies:
@@ -160,6 +517,79 @@ steps:
   # INSIGHTS PHASE - 1 step (depends on aggregation)
   - name: generate_insights
     description: "Generate business insights from aggregated data"
+    result_schema:
+      type: object
+      required:
+        - insights
+        - health_score
+        - total_metrics_analyzed
+        - pipeline_complete
+        - generated_at
+        - report_id
+        - business_health
+        - overall_score
+        - component_scores
+        - recommendations
+        - insight_count
+        - recommendation_count
+        - critical_items
+        - data_freshness
+      properties:
+        insights:
+          type: array
+          items:
+            type: object
+            required:
+              - category
+              - severity
+              - finding
+              - impact
+            properties:
+              category:
+                type: string
+              severity:
+                type: string
+              finding:
+                type: string
+              impact:
+                type: string
+        health_score:
+          type: object
+          required:
+            - score
+            - max_score
+            - rating
+          properties:
+            score:
+              type: integer
+            max_score:
+              type: integer
+            rating:
+              type: string
+        total_metrics_analyzed:
+          type: integer
+        pipeline_complete:
+          type: boolean
+        generated_at:
+          type: string
+        report_id:
+          type: string
+        business_health:
+          type: string
+        overall_score:
+          type: integer
+        component_scores:
+          type: object
+        recommendations:
+          type: array
+        insight_count:
+          type: integer
+        recommendation_count:
+          type: integer
+        critical_items:
+          type: integer
+        data_freshness:
+          type: string
     handler:
       callable: DataPipeline::StepHandlers::GenerateInsightsHandler
     dependencies:

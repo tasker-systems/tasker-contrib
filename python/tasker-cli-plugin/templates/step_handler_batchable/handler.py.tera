@@ -10,7 +10,6 @@ from tasker_core.step_handler.functional import (
     BatchConfig,
     batch_analyzer,
     batch_worker,
-    depends_on,
     inputs,
     step_handler,
 )

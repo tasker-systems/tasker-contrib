@@ -8,6 +8,7 @@ pub mod handler_registry;
 pub mod handlers;
 pub mod models;
 pub mod routes;
+pub mod types;
 
 use axum::{Extension, Router};
 use sqlx::PgPool;

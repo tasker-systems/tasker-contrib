@@ -46,19 +46,23 @@ input_schema:
     refund_amount:
       type: number
       minimum: 0
-      description: "Amount to refund in cents"
+      description: "Amount to refund"
     refund_reason:
       type: string
-      enum:
-        - customer_request
-        - fraud
-        - system_error
-        - chargeback
       description: "Reason for the refund"
+    reason:
+      type: string
+      description: "Alternative field name for refund reason"
     partial_refund:
       type: boolean
       default: false
       description: "Whether this is a partial refund"
+    currency:
+      type: string
+      description: "Currency code (USD, EUR, GBP, CAD, AUD)"
+    idempotency_key:
+      type: string
+      description: "Idempotency key for duplicate detection"
     customer_email:
       type: string
       description: "Customer email address for notification"
@@ -68,6 +72,85 @@ input_schema:
 steps:
   - name: validate_payment_eligibility
     description: "Check if payment can be refunded via gateway"
+    result_schema:
+      type: object
+      required:
+        - payment_validated
+        - payment_id
+        - original_amount
+        - refund_amount
+        - payment_method
+        - gateway_provider
+        - eligibility_status
+        - validation_timestamp
+        - namespace
+        - eligibility_id
+        - eligible
+        - currency
+        - reason
+        - original_payment
+        - refund_history
+        - idempotency_key
+        - is_duplicate
+        - within_refund_window
+        - validated_at
+      properties:
+        payment_validated:
+          type: boolean
+        payment_id:
+          type: string
+        original_amount:
+          type: number
+        refund_amount:
+          type: number
+        payment_method:
+          type: string
+        gateway_provider:
+          type: string
+        eligibility_status:
+          type: string
+        validation_timestamp:
+          type: string
+        namespace:
+          type: string
+        eligibility_id:
+          type: string
+        eligible:
+          type: boolean
+        currency:
+          type: string
+        reason:
+          type: string
+        original_payment:
+          type: object
+          properties:
+            amount:
+              type: number
+            date:
+              type: string
+            gateway:
+              type: string
+            status:
+              type: string
+            days_since_payment:
+              type: integer
+        refund_history:
+          type: object
+          properties:
+            previous_refund_total:
+              type: number
+            remaining_refundable:
+              type: number
+            refund_count:
+              type: integer
+        idempotency_key:
+          type: string
+        is_duplicate:
+          type: boolean
+        within_refund_window:
+          type: boolean
+        validated_at:
+          type: string
     handler:
       callable: Payments::StepHandlers::ValidatePaymentEligibilityHandler
     dependencies: []
@@ -80,6 +163,84 @@ steps:
 
   - name: process_gateway_refund
     description: "Execute refund through payment processor"
+    result_schema:
+      type: object
+      required:
+        - refund_processed
+        - refund_id
+        - payment_id
+        - refund_amount
+        - refund_status
+        - gateway_transaction_id
+        - gateway_provider
+        - processed_at
+        - estimated_arrival
+        - namespace
+        - gateway_request_id
+        - gateway
+        - gateway_fee
+        - net_refund_amount
+        - currency
+        - status
+        - idempotency_key
+        - processing_time_ms
+        - settlement
+        - gateway_response
+      properties:
+        refund_processed:
+          type: boolean
+        refund_id:
+          type: string
+        payment_id:
+          type: string
+        refund_amount:
+          type: number
+        refund_status:
+          type: string
+        gateway_transaction_id:
+          type: string
+        gateway_provider:
+          type: string
+        processed_at:
+          type: string
+        estimated_arrival:
+          type: string
+        namespace:
+          type: string
+        gateway_request_id:
+          type: string
+        gateway:
+          type: string
+        gateway_fee:
+          type: number
+        net_refund_amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+        idempotency_key:
+          type: string
+        processing_time_ms:
+          type: integer
+        settlement:
+          type: object
+          properties:
+            estimated_days:
+              type: integer
+            estimated_date:
+              type: string
+            method:
+              type: string
+        gateway_response:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            raw_response_id:
+              type: string
     handler:
       callable: Payments::StepHandlers::ProcessGatewayRefundHandler
     dependencies:
@@ -93,6 +254,64 @@ steps:
 
   - name: update_payment_records
     description: "Update internal payment status and history"
+    result_schema:
+      type: object
+      required:
+        - records_updated
+        - payment_id
+        - refund_id
+        - record_id
+        - payment_status
+        - refund_status
+        - history_entries_created
+        - updated_at
+        - namespace
+        - record_update_id
+        - records_updated_details
+        - total_records
+        - all_successful
+        - ledger_entry_id
+        - accounting_impact
+      properties:
+        records_updated:
+          type: boolean
+        payment_id:
+          type: string
+        refund_id:
+          type: string
+        record_id:
+          type: string
+        payment_status:
+          type: string
+        refund_status:
+          type: string
+        history_entries_created:
+          type: integer
+        updated_at:
+          type: string
+        namespace:
+          type: string
+        record_update_id:
+          type: string
+        records_updated_details:
+          type: array
+        total_records:
+          type: integer
+        all_successful:
+          type: boolean
+        ledger_entry_id:
+          type: string
+        accounting_impact:
+          type: object
+          properties:
+            gross_refund:
+              type: number
+            gateway_fee:
+              type: number
+            net_impact:
+              type: number
+            period:
+              type: string
     handler:
       callable: Payments::StepHandlers::UpdatePaymentRecordsHandler
     dependencies:
@@ -106,6 +325,73 @@ steps:
 
   - name: notify_customer
     description: "Send refund confirmation to customer"
+    result_schema:
+      type: object
+      required:
+        - notification_sent
+        - customer_email
+        - message_id
+        - notification_type
+        - sent_at
+        - delivery_status
+        - refund_id
+        - refund_amount
+        - namespace
+        - notification_id
+        - payment_id
+        - currency
+        - notifications
+        - total_notifications
+        - all_sent
+        - channels_used
+        - settlement_info
+        - notified_at
+      properties:
+        notification_sent:
+          type: boolean
+        customer_email:
+          type: string
+        message_id:
+          type: string
+        notification_type:
+          type: string
+        sent_at:
+          type: string
+        delivery_status:
+          type: string
+        refund_id:
+          type: string
+        refund_amount:
+          type: number
+        namespace:
+          type: string
+        notification_id:
+          type: string
+        payment_id:
+          type: string
+        currency:
+          type: string
+        notifications:
+          type: array
+        total_notifications:
+          type: integer
+        all_sent:
+          type: boolean
+        channels_used:
+          type: array
+          items:
+            type: string
+        settlement_info:
+          type: object
+          properties:
+            estimated_days:
+              type: integer
+            estimated_date:
+              type: string
+            method:
+              type: string
+        notified_at:
+          type: string
     handler:
       callable: Payments::StepHandlers::NotifyCustomerHandler
     dependencies:

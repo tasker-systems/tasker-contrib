@@ -72,6 +72,37 @@ input_schema:
 steps:
   - name: validate_payment_eligibility
     description: "Check if payment can be refunded via gateway"
+    result_schema:
+      type: object
+      required:
+        - payment_validated
+        - payment_id
+        - original_amount
+        - refund_amount
+        - payment_method
+        - gateway_provider
+        - eligibility_status
+        - validation_timestamp
+        - namespace
+      properties:
+        payment_validated:
+          type: boolean
+        payment_id:
+          type: string
+        original_amount:
+          type: number
+        refund_amount:
+          type: number
+        payment_method:
+          type: string
+        gateway_provider:
+          type: string
+        eligibility_status:
+          type: string
+        validation_timestamp:
+          type: string
+        namespace:
+          type: string
     handler:
       callable: Payments.StepHandlers.ProcessRefundPaymentHandler
       initialization:
@@ -87,6 +118,40 @@ steps:
 
   - name: process_gateway_refund
     description: "Execute refund through payment processor"
+    result_schema:
+      type: object
+      required:
+        - refund_processed
+        - refund_id
+        - payment_id
+        - refund_amount
+        - refund_status
+        - gateway_transaction_id
+        - gateway_provider
+        - processed_at
+        - estimated_arrival
+        - namespace
+      properties:
+        refund_processed:
+          type: boolean
+        refund_id:
+          type: string
+        payment_id:
+          type: string
+        refund_amount:
+          type: number
+        refund_status:
+          type: string
+        gateway_transaction_id:
+          type: string
+        gateway_provider:
+          type: string
+        processed_at:
+          type: string
+        estimated_arrival:
+          type: string
+        namespace:
+          type: string
     handler:
       callable: Payments.StepHandlers.UpdateLedgerHandler
       initialization:
@@ -103,6 +168,37 @@ steps:
 
   - name: update_payment_records
     description: "Update internal payment status and history"
+    result_schema:
+      type: object
+      required:
+        - records_updated
+        - payment_id
+        - refund_id
+        - record_id
+        - payment_status
+        - refund_status
+        - history_entries_created
+        - updated_at
+        - namespace
+      properties:
+        records_updated:
+          type: boolean
+        payment_id:
+          type: string
+        refund_id:
+          type: string
+        record_id:
+          type: string
+        payment_status:
+          type: string
+        refund_status:
+          type: string
+        history_entries_created:
+          type: integer
+        updated_at:
+          type: string
+        namespace:
+          type: string
     handler:
       callable: Payments.StepHandlers.ReconcileAccountHandler
       initialization:
@@ -119,6 +215,37 @@ steps:
 
   - name: notify_customer
     description: "Send refund confirmation to customer"
+    result_schema:
+      type: object
+      required:
+        - notification_sent
+        - customer_email
+        - message_id
+        - notification_type
+        - sent_at
+        - delivery_status
+        - refund_id
+        - refund_amount
+        - namespace
+      properties:
+        notification_sent:
+          type: boolean
+        customer_email:
+          type: string
+        message_id:
+          type: string
+        notification_type:
+          type: string
+        sent_at:
+          type: string
+        delivery_status:
+          type: string
+        refund_id:
+          type: string
+        refund_amount:
+          type: number
+        namespace:
+          type: string
     handler:
       callable: Payments.StepHandlers.GenerateRefundReceiptHandler
       initialization:

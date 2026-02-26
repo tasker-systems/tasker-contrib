@@ -1537,8 +1537,10 @@ dependencies = [
  "chrono",
  "dotenvy",
  "reqwest 0.12.28",
+ "schemars",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sqlx",
  "tasker-client",
  "tasker-shared",
@@ -5039,9 +5041,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tasker-client"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "160201ff532d33f54a6a457722b7102c21d31332602b28b416316d0e78c05913"
+checksum = "346a25c7045f076f2e621aca733b013e315f2087a473ec1f3d02060eba324a02"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5066,9 +5068,9 @@ dependencies = [
 
 [[package]]
 name = "tasker-pgmq"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5abe9c58652cedbe9dbbc110c4537b075747fa848f181b289937a458cdf55aa3"
+checksum = "48c92efbdbb7c6ab5532ff7e8de970a9cb642738d80af114a4b9033950fea5b3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5089,9 +5091,9 @@ dependencies = [
 
 [[package]]
 name = "tasker-shared"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20077e993752f8944dae927588c8c036f002ac60d44c758e931b0dfe86c88ab1"
+checksum = "f5608761d9156f9aa95e65107d4782bc69c640ffeedde9536fdefaff4c3898d5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5156,9 +5158,9 @@ dependencies = [
 
 [[package]]
 name = "tasker-worker"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7986d1b4f94a611a948081bfd669d1dbf4dda7a5255b101f25f6bdf251486bd"
+checksum = "fa68398572e1f347237380e2a4ff73ce845b0f07595eadee98d9713de742ab0a"
 dependencies = [
  "anyhow",
  "async-trait",
