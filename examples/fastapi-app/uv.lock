@@ -788,7 +788,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
-    { name = "tasker-py", directory = "../../../tasker-core/workers/python" },
+    { name = "tasker-py", specifier = ">=0.1.6" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 provides-extras = ["dev"]
@@ -801,8 +801,8 @@ dev = [
 
 [[package]]
 name = "tasker-py"
-version = "0.1.5"
-source = { directory = "../../../tasker-core/workers/python" }
+version = "0.1.6"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
@@ -810,33 +810,9 @@ dependencies = [
     { name = "pyee" },
     { name = "pyyaml" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.7,<2.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "pydantic-settings", specifier = ">=2.6.0" },
-    { name = "pyee", specifier = ">=12.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
-    { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
-    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.0" },
-]
-provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "maturin", specifier = ">=1.7,<2.0" },
-    { name = "mypy", specifier = ">=1.10.0" },
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.23.0" },
-    { name = "pytest-cov", specifier = ">=5.0.0" },
-    { name = "ruff", specifier = ">=0.8.0" },
-    { name = "types-pyyaml", specifier = ">=6.0.0" },
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2d/4c/566cbe95503ecc790b5aaec06aaf725818497c1a0b6c39d805dd3d0a0a73/tasker_py-0.1.6-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:b7a3b6922cac7f8a97aeeadb742dd00da4b9876b12f0dd07abfeeb04bf59044c", size = 11194145, upload-time = "2026-02-26T01:30:03.423Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/60/20ca70bea8ae29d071e85d2e1c2e8046012f9f6b5fa71220972c86a1ba8c/tasker_py-0.1.6-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:032641991ace3506985afbebbe27fb674ca5b2abafb1452e289485cb2a44a8f0", size = 12344485, upload-time = "2026-02-26T01:30:05.744Z" },
 ]
 
 [[package]]
