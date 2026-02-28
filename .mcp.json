@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "tasker": {
+      "command": "/Users/petetaylor/projects/tasker-systems/tasker-core/target/debug/tasker-mcp",
+      "env": {
+        "RUST_LOG": "tasker_mcp=info"
+      }
+    }
+  }
+}
