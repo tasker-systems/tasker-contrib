@@ -43,7 +43,7 @@ cd examples && docker-compose up -d && cd ..
 psql -h localhost -U tasker -c "CREATE DATABASE demo_brownfield;"
 
 # Set up the demo app
-cd demos/fastapi-brownfield
+cd demos/brownfield
 cp .env.template .env
 uv sync
 
@@ -78,7 +78,7 @@ curl -s http://localhost:8090/health
 ## Project Structure
 
 ```
-demos/fastapi-brownfield/
+demos/brownfield/
 ├── app/
 │   ├── main.py              # FastAPI app (vanilla, no Tasker)
 │   ├── database.py          # Async SQLAlchemy session

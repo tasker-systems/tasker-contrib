@@ -10,7 +10,7 @@ This script walks through taking a working FastAPI application and adding Tasker
 
 1. Ensure the demo app is running:
    ```bash
-   cd demos/fastapi-brownfield
+   cd demos/brownfield
    uv run uvicorn app.main:app --reload --port 8090
    ```
 
@@ -22,7 +22,7 @@ This script walks through taking a working FastAPI application and adding Tasker
      | python -m json.tool
    ```
 
-3. Open Claude Code in the `demos/fastapi-brownfield/` directory with the Tasker MCP server connected.
+3. Open Claude Code in the `demos/brownfield/` directory with the Tasker MCP server connected.
 
 4. Ensure the Tasker MCP tools are available (template_generate, template_validate, template_inspect, schema_inspect, schema_compare, handler_generate).
 
