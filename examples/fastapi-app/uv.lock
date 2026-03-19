@@ -788,7 +788,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
-    { name = "tasker-py", specifier = ">=0.1.6" },
+    { name = "tasker-py", specifier = ">=0.1.8" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 provides-extras = ["dev"]
@@ -801,7 +801,7 @@ dev = [
 
 [[package]]
 name = "tasker-py"
-version = "0.1.6"
+version = "0.1.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -811,8 +811,8 @@ dependencies = [
     { name = "pyyaml" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2d/4c/566cbe95503ecc790b5aaec06aaf725818497c1a0b6c39d805dd3d0a0a73/tasker_py-0.1.6-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:b7a3b6922cac7f8a97aeeadb742dd00da4b9876b12f0dd07abfeeb04bf59044c", size = 11194145, upload-time = "2026-02-26T01:30:03.423Z" },
-    { url = "https://files.pythonhosted.org/packages/a5/60/20ca70bea8ae29d071e85d2e1c2e8046012f9f6b5fa71220972c86a1ba8c/tasker_py-0.1.6-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:032641991ace3506985afbebbe27fb674ca5b2abafb1452e289485cb2a44a8f0", size = 12344485, upload-time = "2026-02-26T01:30:05.744Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/6f/22e2cdb9cdf57136d497b6dc39759f77bb7bbf8dc0572880f214317671fa/tasker_py-0.1.8-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:af3b040dcb581ac35b64f1424512c1fa96ff6c53ff54361967443ab811c4890a", size = 11154505, upload-time = "2026-03-19T01:08:19.883Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/3f/8f8b1ce51049f71eaf6deccd2fd761380c53866b9de41a2f209e88d3ccfe/tasker_py-0.1.8-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:7b42f1019a54abd85e49d07016c88f40a7fa98f8554e1b39be7d1370cf610abc", size = 12307050, upload-time = "2026-03-19T01:08:22.773Z" },
 ]
 
 [[package]]
