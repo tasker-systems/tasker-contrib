@@ -31,12 +31,31 @@ Tasker Contrib's CI has two concerns: validating CLI plugin templates and testin
 | `test-rust-templates` | `rust/tasker-cli-plugin/**` | Generates Rust templates, `rustfmt --check` |
 | `test-ops-templates` | `ops/tasker-cli-plugin/**` | Generates ops templates, YAML/TOML validation |
 | `docs` | `docs/**`, `*.md` | Markdown link checking |
+| `test-examples` | `examples/**` | Calls `test-examples.yml` (below) |
+| `ci-success` | always | **CI Success** — the one required check (below) |
+
+A change to `ci.yml` itself puts every job in scope, so a broken change-detection rule cannot
+quietly skip the checks it was meant to select.
+
+#### CI Success
+
+`CI Success` is the only check branch protection needs to require. It lists every job in `ci.yml`
+with the scope condition that makes it run, and passes only when each in-scope job **succeeded** and
+each out-of-scope job was **skipped**. A failure, a cancellation, or an in-scope job that was
+skipped (because a job it depends on was skipped or failed) fails it, and so does a failure of
+change detection itself. Its step summary shows the table of scope and result per job.
+
+When you add a job to `ci.yml`, add it to `ci-success`'s `needs` and to its `check` list with the
+same scope condition, or it will not be gated.
 
 ### 2. Test Examples (test-examples.yml)
 
 **Purpose**: Run integration tests for all four example apps against real Tasker infrastructure.
 
-**Triggers**: Push/PR to main when `examples/**` changes
+**Triggers**: called from `ci.yml` (job `test-examples`) when `examples/**`, this workflow or
+`ci.yml` changes, so its result reports under `CI Success`. It has no push or pull-request trigger
+of its own — a path-filtered workflow never reports on a PR outside its paths, so it could not be a
+required check. It can also be run by hand (`workflow_dispatch`).
 
 **Infrastructure**: `docker compose up -d` from `examples/` starts:
 - `tasker-postgres` (PostgreSQL 18 + PGMQ + app databases)
