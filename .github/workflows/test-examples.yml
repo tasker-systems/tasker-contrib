@@ -8,21 +8,12 @@
 
 name: Test Examples
 
+# Called from ci.yml when `examples/**`, this file or ci.yml changes, so its result reports under the
+# required `CI Success` check. It has no push/pull_request trigger of its own: a path-filtered
+# workflow never reports on a PR that does not touch its paths, so it could not be required.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'examples/**'
-      - '.github/workflows/test-examples.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'examples/**'
-      - '.github/workflows/test-examples.yml'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call:
+  workflow_dispatch:
 
 jobs:
   test-examples:
